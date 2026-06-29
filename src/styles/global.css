@@ -462,27 +462,14 @@ tr:hover td { background: var(--clr-brand-pale); }
 /* --- Canvas Editor --- */
 .editor-wrap {
   display: grid;
-  grid-template-columns: 160px 1fr 220px;
+  grid-template-columns: 180px 1fr 220px;
+  grid-template-rows: 1fr;
   height: calc(100vh - var(--header-h) - 120px);
   min-height: 500px;
   border: 1px solid var(--clr-border);
   border-radius: var(--r-lg);
   overflow: hidden;
   box-shadow: var(--shadow-md);
-  position: relative;
-  z-index: 0;
-}
-
-.editor-sidebar {
-  position: relative;
-  z-index: 2;
-}
-
-.editor-canvas-wrap {
-  position: relative;
-  z-index: 1;
-  overflow: hidden;
-  min-width: 0;
 }
 
 .editor-sidebar {
@@ -491,16 +478,16 @@ tr:hover td { background: var(--clr-brand-pale); }
   overflow-y: auto;
   overflow-x: hidden;
   padding: var(--sp-3) 0;
-  position: relative;
-  z-index: 2;
+  width: 180px;
+  flex-shrink: 0;
 }
 
 .editor-canvas-wrap {
   background: #F8F9FB;
   position: relative;
   overflow: hidden;
+  width: 100%;
   min-width: 0;
-  min-height: 0;
 }
 
 .editor-panel {
@@ -511,8 +498,9 @@ tr:hover td { background: var(--clr-brand-pale); }
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
+  width: 220px;
+  flex-shrink: 0;
 }
-
 .editor-toolbar {
   position: absolute;
   top: var(--sp-3);
