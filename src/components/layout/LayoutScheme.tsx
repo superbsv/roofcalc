@@ -5,6 +5,7 @@
 // ============================================
 
 import React, { useState, useRef, useCallback } from 'react';
+import { Point as ApiPoint } from '../../api/client';
 
 interface SheetPlacement {
   sheet_number: number;
@@ -24,7 +25,7 @@ interface SheetPlacement {
   offset_y?: number;
 }
 
-interface Point { x: number; y: number; }
+type Point = ApiPoint; // [number, number]
 
 interface CalcResult {
   profile_name: string;
@@ -90,8 +91,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
 
   // Полігон ската в SVG координатах
   const polyPath = polygonPoints.length >= 3
-    ? polygonPoints.map((p, i) =>
-        `${i === 0 ? 'M' : 'L'} ${tx(p.x * 1000)} ${ty(p.y * 1000)}`
+? polygonPoints.map((p, i) =>
+        `${i === 0 ? 'M' : 'L'} ${tx(p[0] * 1000)} ${ty(p[1] * 1000)}`
       ).join(' ') + ' Z'
     : `M ${tx(0)} ${ty(0)} L ${tx(W)} ${ty(0)} L ${tx(W)} ${ty(H)} L ${tx(0)} ${ty(H)} Z`;
 
