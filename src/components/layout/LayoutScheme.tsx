@@ -164,7 +164,11 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   const usefulWidth    = calcResult.placements[0]?.useful_width ?? 1100;
   const fullWidth      = calcResult.placements[0]?.full_width  ?? 1185;
   const baseLength     = calcResult.sheet_length_mm;
-  const eaveRidgeExtra = Math.max(0, baseLength - H);
+  // Визначаємо eaveRidgeExtra як різницю між довжиною листа і максимальною висотою полігону
+  const maxPolygonHeight = polygonPoints.length >= 3
+    ? Math.max(...polygonPoints.map((_, i) => getPolygonHeightAtX(polygonPoints[i][0], polygonPoints)))
+    : H;
+  const eaveRidgeExtra = Math.max(0, baseLength - maxPolygonHeight);
 
   const [placements, setPlacements]     = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
   const layoutOffsetRef                 = useRef(0);
