@@ -1,5 +1,5 @@
 // App.tsx — ArtBudTrading Roof Calculator
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './styles/global.css';
 import { AuthProvider, useAuth, LoginPage } from './components/auth/AuthContext';
 import ProjectsPage from './pages/ProjectsPage';
@@ -19,6 +19,20 @@ function Shell() {
   const { user, logout, loading } = useAuth();
   const [page, setPage] = useState<Page>({ type: 'projects' });
   const [productsOpen, setProductsOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Закриваємо сайдбар при зміні сторінки
+  const navigate = (p: Page) => {
+    setPage(p);
+    setSidebarOpen(false);
+  };
+
+  // Закриваємо сайдбар при ресайзі на десктоп
+  useEffect(() => {
+    const onResize = () => { if (window.innerWidth > 768) setSidebarOpen(false); };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   if (loading) return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}>
@@ -45,18 +59,30 @@ function Shell() {
     <div className="app-shell">
       {/* Header */}
       <header className="header">
-        <a href="/" className="header-logo" onClick={e => { e.preventDefault(); setPage({type:'projects'}); }}>
+        {/* Бургер — тільки мобільний */}
+        <button className="burger-btn" onClick={() => setSidebarOpen(v => !v)} aria-label="Меню">
+          <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            {sidebarOpen
+              ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+              : <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+            }
+          </svg>
+        </button>
+
+        <a href="/" className="header-logo" onClick={e => { e.preventDefault(); navigate({type:'projects'}); }}>
           <div className="header-logo-icon">🏠</div>
           <span>ArtBudTrading</span>
         </a>
+
         <nav className="header-nav">
-          <a href="/" className={page.type==='projects'?'active':''} onClick={e=>{e.preventDefault();setPage({type:'projects'});}}>
+          <a href="/" className={page.type==='projects'?'active':''} onClick={e=>{e.preventDefault();navigate({type:'projects'});}}>
             Проекти
           </a>
           {page.type==='project' && (
             <a href="/" className="active" onClick={e=>e.preventDefault()}>← Поточний проект</a>
           )}
         </nav>
+
         <div className="header-right">
           <div className="header-user">
             <div className="header-avatar">{initials}</div>
@@ -71,10 +97,15 @@ function Shell() {
         </div>
       </header>
 
-      {/* Sidebar */}
-      <aside className="sidebar">
+      {/* Overlay для закриття сайдбару */}
+      <div
+        className={`sidebar-overlay${sidebarOpen?' open':''}`}
+        onClick={() => setSidebarOpen(false)}
+      />
 
-        {/* Проекти */}
+      {/* Sidebar */}
+      <aside className={`sidebar${sidebarOpen?' open':''}`}>
+
         <div className="sidebar-section">
           <div className="sidebar-title">Навігація</div>
           {navItem('Мої проекти',
@@ -82,11 +113,10 @@ function Shell() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"/>
             </svg>,
             page.type==='projects',
-            () => setPage({type:'projects'})
+            () => navigate({type:'projects'})
           )}
         </div>
 
-        {/* Поточний проект */}
         {page.type==='project' && (
           <div className="sidebar-section">
             <div className="sidebar-title">Проект</div>
@@ -99,15 +129,13 @@ function Shell() {
           </div>
         )}
 
-        {/* Адмін розділи */}
         {user.role === 'admin' && (
           <div className="sidebar-section">
             <div className="sidebar-title">Адмін</div>
 
-            {/* Продукція з підменю */}
             <div
               className={`sidebar-item${page.type==='products'?' active':''}`}
-              onClick={() => { setProductsOpen(!productsOpen); setPage({type:'products'}); }}
+              onClick={() => { setProductsOpen(!productsOpen); navigate({type:'products'}); }}
             >
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/>
@@ -118,27 +146,20 @@ function Shell() {
 
             {productsOpen && (
               <div style={{paddingLeft:'16px'}}>
-                <div
-                  className={`sidebar-item${page.type==='products'&&(page as any).category==='tile'?' active':''}`}
-                  onClick={() => setPage({type:'products', category:'tile'})}
-                  style={{fontSize:'.85rem'}}
-                >
-                  🏠 Металочерепиця
-                </div>
-                <div
-                  className={`sidebar-item${page.type==='products'&&(page as any).category==='profile'?' active':''}`}
-                  onClick={() => setPage({type:'products', category:'profile'})}
-                  style={{fontSize:'.85rem'}}
-                >
-                  📋 Профнастил
-                </div>
-                <div
-                  className={`sidebar-item${page.type==='products'&&(page as any).category==='falts'?' active':''}`}
-                  onClick={() => setPage({type:'products', category:'falts'})}
-                  style={{fontSize:'.85rem'}}
-                >
-                  🔧 Фальцева покрівля
-                </div>
+                {[
+                  {cat:'tile' as const,   label:'🏠 Металочерепиця'},
+                  {cat:'profile' as const,label:'📋 Профнастил'},
+                  {cat:'falts' as const,  label:'🔧 Фальцева покрівля'},
+                ].map(({cat, label}) => (
+                  <div
+                    key={cat}
+                    className={`sidebar-item${page.type==='products'&&(page as any).category===cat?' active':''}`}
+                    onClick={() => navigate({type:'products', category:cat})}
+                    style={{fontSize:'.85rem'}}
+                  >
+                    {label}
+                  </div>
+                ))}
               </div>
             )}
 
@@ -147,7 +168,7 @@ function Shell() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
               </svg>,
               page.type==='clients',
-              () => setPage({type:'clients'})
+              () => navigate({type:'clients'})
             )}
 
             {navItem('Користувачі',
@@ -155,7 +176,7 @@ function Shell() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
               </svg>,
               page.type==='users',
-              () => setPage({type:'users'})
+              () => navigate({type:'users'})
             )}
 
             {navItem('Налаштування',
@@ -164,12 +185,11 @@ function Shell() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
               </svg>,
               page.type==='settings',
-              () => setPage({type:'settings'})
+              () => navigate({type:'settings'})
             )}
           </div>
         )}
 
-        {/* Info */}
         <div style={{marginTop:'auto',padding:'16px 12px',borderTop:'1px solid var(--clr-border)',fontSize:'.7rem',color:'var(--clr-text-3)'}}>
           <div style={{marginBottom:'4px',fontWeight:500,color:'var(--clr-text-2)'}}>ArtBudTrading</div>
           <div>Калькулятор покрівлі v1.0</div>
@@ -182,7 +202,7 @@ function Shell() {
 
       {/* Main */}
       <main className="main-content">
-        {page.type==='projects' && <ProjectsPage onOpenProject={id => setPage({type:'project', id})} />}
+        {page.type==='projects' && <ProjectsPage onOpenProject={id => navigate({type:'project', id})} />}
         {page.type==='project' && <ProjectPage projectId={page.id} />}
         {page.type==='products' && <ProductsPage category={(page as any).category} />}
         {page.type==='users' && <AdminPage />}
