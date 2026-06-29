@@ -588,10 +588,7 @@ const [tplModal, setTplModal] = useState(false);
             </div>
           </div>
         </div>
-      )}
-    </div>   {/* ← це закриває editor-wrap */}
-  );
-}
+     )}
     </div>
   );
 }
