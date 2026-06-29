@@ -4,7 +4,7 @@
 // SVG схема розкладки листів
 // ============================================
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import { Point as ApiPoint } from '../../api/client';
 
 interface SheetPlacement {

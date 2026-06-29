@@ -108,7 +108,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
   const [coatingsInput, setCoatingsInput] = useState('');
   const [thicknessInput, setThicknessInput] = useState('');
 
-  useEffect(() => { loadMaterials(); }, [cat]);
+  useEffect(() => { loadMaterials(); }, [cat]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (category) setCat(category); }, [category]);
 
   const loadMaterials = async () => {

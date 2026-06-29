@@ -161,6 +161,7 @@ export default function ProjectPage({ projectId }: Props) {
   };
 
   // Матеріали по типу
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const materialsByType = {
     tile:    materials.filter(m => m.type === 'tile'),
     profile: materials.filter(m => m.type === 'profile'),

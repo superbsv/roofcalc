@@ -4,7 +4,7 @@
 // ============================================
 
 import React, { useEffect, useState } from 'react';
-import { User, MaterialProfile } from '../api/client';
+import { MaterialProfile } from '../api/client';
 
 const BASE = process.env.REACT_APP_API_URL || '/api';
 const tok  = () => localStorage.getItem('rc_token');
@@ -56,7 +56,7 @@ function UsersTab() {
   const [busy, setBusy]     = useState(false);
 
   const load = () => api('GET', '/admin/users').then(r => setUsers(r.users));
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openCreate = () => { setEditing(null); setForm({name:'',email:'',login:'',password:'',role:'manager',company:'',phone:'',is_active:1}); setShowForm(true); };
   const openEdit   = (u: any) => { setEditing(u); setForm({...u, password:''}); setShowForm(true); };
