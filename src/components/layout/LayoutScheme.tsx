@@ -15,9 +15,9 @@ interface SheetPlacement {
   full_width: number;
   useful_width: number;
   length: number;
-  intersect_area_m2: number;
-  full_area_m2: number;
-  waste_area_m2: number;
+  intersect_area_m2?: number;
+  full_area_m2?: number;
+  waste_area_m2?: number;
   // Ручне редагування
   manual_length?: number;
   offset_x?: number;
@@ -96,10 +96,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     : `M ${tx(0)} ${ty(0)} L ${tx(W)} ${ty(0)} L ${tx(W)} ${ty(H)} L ${tx(0)} ${ty(H)} Z`;
 
   // Колір листа залежно від відходу
-  const sheetColor = (p: SheetPlacement) => {
-    const wastePct = p.waste_area_m2 / p.full_area_m2 * 100;
+const sheetColor = (p: SheetPlacement) => {
+    const wastePct = (p.waste_area_m2 ?? 0) / (p.full_area_m2 ?? 1) * 100;
     if (wastePct > 50) return COLORS.waste;
-    if (p.intersect_area_m2 < p.full_area_m2 * 0.95) return COLORS.cut;
+    if ((p.intersect_area_m2 ?? 0) < (p.full_area_m2 ?? 1) * 0.95) return COLORS.cut;
     return COLORS.full;
   };
 
@@ -321,8 +321,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
           <tbody>
             {uniqueLengths.map(len => {
               const sheets = placements.filter(p => (p.manual_length ?? p.length) === len);
-              const usefulArea = sheets.reduce((s, p) => s + p.intersect_area_m2, 0);
-              const fullArea = sheets.reduce((s, p) => s + p.full_area_m2, 0);
+              const usefulArea = sheets.reduce((s, p) => s + (p.intersect_area_m2 ?? 0), 0);
+              const fullArea = sheets.reduce((s, p) => s + (p.full_area_m2 ?? 0), 0);
               return (
                 <tr key={len} style={{ borderTop: '1px solid #f3f4f6' }}>
                   <td style={{ padding: '8px 12px', fontWeight: 500 }}>{(len / 1000).toFixed(3)} м</td>
@@ -336,10 +336,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
               <td style={{ padding: '8px 12px' }}>Всього</td>
               <td style={{ padding: '8px 12px', textAlign: 'center' }}>{placements.length} шт</td>
               <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                {placements.reduce((s, p) => s + p.intersect_area_m2, 0).toFixed(3)} м²
+                {placements.reduce((s, p) => s + (p.intersect_area_m2 ?? 0), 0).toFixed(3)} м²
               </td>
               <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                {placements.reduce((s, p) => s + p.full_area_m2, 0).toFixed(3)} м²
+                {placements.reduce((s, p) => s + (p.full_area_m2 ?? 0), 0).toFixed(3)} м²
               </td>
             </tr>
           </tbody>
