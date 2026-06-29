@@ -24,7 +24,7 @@ interface SheetPlacement {
   deleted?: boolean;
 }
 
-type Point = ApiPoint;
+type Point = ApiPoint; // [number, number] — в мм
 
 interface CalcResult {
   profile_name: string;
@@ -43,7 +43,7 @@ interface CalcResult {
 
 interface Props {
   calcResult: CalcResult;
-  polygonPoints: Point[];
+  polygonPoints: Point[]; // в мм
   slopeName: string;
   onUpdate?: (placements: SheetPlacement[]) => void;
 }
@@ -69,35 +69,137 @@ const PADDING = 80;
 const SVG_W   = 900;
 const SVG_H   = 600;
 
+// ============================================
+// Висота полігону в заданій X позиції (мм)
+// ============================================
+function getPolygonHeightAtX(x: number, polygon: Point[]): number {
+  const ys: number[] = [];
+  const n = polygon.length;
+  for (let i = 0; i < n; i++) {
+    const [x1, y1] = polygon[i];
+    const [x2, y2] = polygon[(i + 1) % n];
+    if (x1 === x2) {
+      if (Math.abs(x1 - x) < 2) { ys.push(y1, y2); }
+      continue;
+    }
+    const xMin = Math.min(x1, x2), xMax = Math.max(x1, x2);
+    if (x >= xMin && x <= xMax) {
+      const t = (x - x1) / (x2 - x1);
+      ys.push(y1 + t * (y2 - y1));
+    }
+  }
+  if (ys.length < 2) return 0;
+  return Math.max(...ys) - Math.min(...ys);
+}
+
+// ============================================
+// Генерація розкладки з заданим зсувом
+// ============================================
+function generateLayout(
+  layoutOffset: number,   // мм — зсув першого листа від лівого краю ската
+  slopeWidth: number,     // мм
+  slopeHeight: number,    // мм
+  polygon: Point[],       // мм
+  usefulWidth: number,    // мм
+  fullWidth: number,      // мм
+  baseLength: number,     // мм (sheet_length_mm з calcResult)
+  eaveRidgeExtra: number, // мм = baseLength - slopeHeight
+): SheetPlacement[] {
+  const placements: SheetPlacement[] = [];
+  let sheetNum = 1;
+
+  // Перший стовпець може починатись до 0 (зліва за межею)
+  // Знаходимо перший col так що x < slopeWidth та x + usefulWidth > 0
+  const firstColIdx = Math.floor(-layoutOffset / usefulWidth);
+
+  for (let col = Math.max(0, firstColIdx); ; col++) {
+    const x = layoutOffset + col * usefulWidth;
+    if (x >= slopeWidth) break; // вийшли за правий край
+
+    // Розраховуємо висоту в цій колонці
+    const xLeft   = Math.max(0, x);
+    const xMid    = Math.max(0, x + usefulWidth / 2);
+    const xRight  = Math.min(slopeWidth, x + usefulWidth);
+    const hLeft   = getPolygonHeightAtX(xLeft, polygon);
+    const hMid    = getPolygonHeightAtX(xMid, polygon);
+    const hRight  = getPolygonHeightAtX(xRight, polygon);
+    const colH    = Math.max(hLeft, hMid, hRight);
+
+    const sheetLength = colH > 0
+      ? Math.max(1, Math.round(colH + eaveRidgeExtra))
+      : baseLength;
+
+    placements.push({
+      sheet_number: sheetNum++,
+      col_index:    col,
+      row_index:    0,
+      x:            Math.max(0, x),
+      y:            0,
+      full_width:   fullWidth,
+      useful_width: usefulWidth,
+      length:       sheetLength,
+    });
+  }
+
+  // Додаємо лист зліва якщо є пустий простір і layoutOffset > 0
+  if (layoutOffset > 0) {
+    const leftX = layoutOffset - usefulWidth;
+    const hLeft  = getPolygonHeightAtX(Math.max(0, leftX), polygon);
+    const hMid   = getPolygonHeightAtX(Math.max(0, leftX + usefulWidth/2), polygon);
+    const hRight = getPolygonHeightAtX(Math.min(slopeWidth, leftX + usefulWidth), polygon);
+    const colH   = Math.max(hLeft, hMid, hRight);
+    const sheetLength = colH > 0 ? Math.max(1, Math.round(colH + eaveRidgeExtra)) : baseLength;
+
+    if (leftX + usefulWidth > 0) {
+      placements.unshift({
+        sheet_number: 0, // тимчасово
+        col_index:    -1,
+        row_index:    0,
+        x:            Math.max(0, leftX),
+        y:            0,
+        full_width:   fullWidth,
+        useful_width: usefulWidth,
+        length:       sheetLength,
+      });
+    }
+  }
+
+  // Перенумеровуємо
+  placements.forEach((p, i) => { p.sheet_number = i + 1; });
+  return placements;
+}
+
+// ============================================
+// Компонент
+// ============================================
 export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onUpdate }: Props) {
+  const W = calcResult.slope_width_mm;
+  const H = calcResult.slope_height_mm;
+  const usefulWidth = calcResult.placements[0]?.useful_width ?? 1100;
+  const fullWidth   = calcResult.placements[0]?.full_width  ?? 1185;
+  const baseLength  = calcResult.sheet_length_mm;
+  const eaveRidgeExtra = Math.max(0, baseLength - H);
+
   const [placements, setPlacements] = useState<SheetPlacement[]>(
     calcResult.placements.map(p => ({ ...p }))
   );
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [zoom, setZoom]         = useState(1);
+  const [layoutOffset, setLayoutOffset] = useState(0); // глобальний зсув мм
+  const [selected, setSelected]         = useState<Set<number>>(new Set());
+  const [zoom, setZoom]                 = useState(1);
 
-  // Rubber-band selection
-  const [rubberBand, setRubberBand] = useState<{ x1:number; y1:number; x2:number; y2:number } | null>(null);
+  // Rubber-band
+  const [rubberBand, setRubberBand] = useState<{x1:number;y1:number;x2:number;y2:number}|null>(null);
   const svgRef     = useRef<SVGSVGElement>(null);
   const isDragging = useRef(false);
-  const dragStart  = useRef<{ x:number; y:number } | null>(null);
+  const dragStart  = useRef<{x:number;y:number}|null>(null);
 
   // Плаваюча панель
   const [panelPos, setPanelPos] = useState({ x: 20, y: 120 });
-  const panelDrag = useRef<{ startX:number; startY:number; startPX:number; startPY:number } | null>(null);
+  const panelDrag = useRef<{startX:number;startY:number;startPX:number;startPY:number}|null>(null);
 
-  const W = calcResult.slope_width_mm;
-  const H = calcResult.slope_height_mm;
   const scale = Math.min((SVG_W - PADDING*2) / W, (SVG_H - PADDING*2) / H) * zoom;
-
   const tx = (x: number) => PADDING + x * scale;
   const ty = (y: number) => PADDING + (H - y) * scale;
-
-  // SVG координати → світові мм
-  const svgToWorld = (svgX: number, svgY: number) => ({
-    wx: (svgX - PADDING) / scale,
-    wy: H - (svgY - PADDING) / scale,
-  });
 
   const polyPath = polygonPoints.length >= 3
     ? polygonPoints.map((p, i) => `${i===0?'M':'L'} ${tx(p[0])} ${ty(p[1])}`).join(' ') + ' Z'
@@ -114,107 +216,21 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   const visiblePlacements = placements.filter(p => !p.deleted);
   const hasSelection = selected.size > 0;
 
-  // ---- Отримати SVG координати з події миші ----
-  const getSvgPoint = (e: React.MouseEvent | MouseEvent) => {
-    const svg = svgRef.current;
-    if (!svg) return { x: 0, y: 0 };
-    const rect = svg.getBoundingClientRect();
-    const scaleF = SVG_W / rect.width; // viewBox scale
-    return {
-      x: (e.clientX - rect.left) * scaleF,
-      y: (e.clientY - rect.top) * scaleF,
-    };
-  };
+  // ============================================
+  // Зсув всієї розкладки — з перегенерацією
+  // ============================================
+  const shiftLayout = useCallback((deltaMm: number) => {
+    const newOffset = layoutOffset + deltaMm;
+    setLayoutOffset(newOffset);
+    const newPlacements = generateLayout(newOffset, W, H, polygonPoints, usefulWidth, fullWidth, baseLength, eaveRidgeExtra);
+    setPlacements(newPlacements);
+    onUpdate?.(newPlacements);
+    setSelected(new Set());
+  }, [layoutOffset, W, H, polygonPoints, usefulWidth, fullWidth, baseLength, eaveRidgeExtra, onUpdate]);
 
-  // ---- Mouse down на SVG ----
-  const onSvgMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    const pt = getSvgPoint(e);
-    dragStart.current = pt;
-    isDragging.current = false;
-  };
-
-  // ---- Mouse move на SVG ----
-  const onSvgMouseMove = (e: React.MouseEvent) => {
-    if (!dragStart.current) return;
-    const pt = getSvgPoint(e);
-    const dx = Math.abs(pt.x - dragStart.current.x);
-    const dy = Math.abs(pt.y - dragStart.current.y);
-    if (dx > 4 || dy > 4) {
-      isDragging.current = true;
-      setRubberBand({
-        x1: Math.min(dragStart.current.x, pt.x),
-        y1: Math.min(dragStart.current.y, pt.y),
-        x2: Math.max(dragStart.current.x, pt.x),
-        y2: Math.max(dragStart.current.y, pt.y),
-      });
-    }
-  };
-
-  // ---- Mouse up на SVG ----
-  const onSvgMouseUp = (e: React.MouseEvent) => {
-    if (!dragStart.current) return;
-
-    if (isDragging.current && rubberBand) {
-      // Rubber-band: виділити всі листи що перетинають прямокутник
-      const rb = rubberBand;
-      const worldX1 = svgToWorld(rb.x1, rb.y1);
-      const worldX2 = svgToWorld(rb.x2, rb.y2);
-      const minWX = Math.min(worldX1.wx, worldX2.wx);
-      const maxWX = Math.max(worldX1.wx, worldX2.wx);
-      const minWY = Math.min(worldX1.wy, worldX2.wy);
-      const maxWY = Math.max(worldX1.wy, worldX2.wy);
-
-      const inRect = visiblePlacements.filter(p => {
-        const length = p.manual_length ?? p.length;
-        const ox = p.offset_x ?? 0;
-        const oy = p.offset_y ?? 0;
-        const px1 = p.x + ox;
-        const py1 = oy;
-        const px2 = px1 + p.full_width;
-        const py2 = py1 + length;
-        return px1 < maxWX && px2 > minWX && py1 < maxWY && py2 > minWY;
-      }).map(p => p.sheet_number);
-
-      if (inRect.length > 0) {
-        setSelected(e.shiftKey
-          ? new Set([...selected, ...inRect])
-          : new Set(inRect));
-      }
-    }
-
-    dragStart.current = null;
-    isDragging.current = false;
-    setRubberBand(null);
-  };
-
-  // ---- Клік на лист ----
-  const handleSheetClick = (e: React.MouseEvent, num: number) => {
-    if (isDragging.current) return; // не клік а drag
-    e.stopPropagation();
-    if (e.shiftKey) {
-      setSelected(prev => {
-        const next = new Set(prev);
-        next.has(num) ? next.delete(num) : next.add(num);
-        return next;
-      });
-    } else {
-      setSelected(prev => prev.size===1 && prev.has(num) ? new Set() : new Set([num]));
-    }
-  };
-
-  // ---- Клік на фон SVG — зняти виділення ----
-  const onSvgClick = (e: React.MouseEvent) => {
-    if (isDragging.current) return;
-    if ((e.target as SVGElement).tagName === 'svg' || (e.target as SVGElement).tagName === 'rect') {
-      setSelected(new Set());
-    }
-  };
-
-  // ---- Виділити всі ----
-  const selectAll = () => setSelected(new Set(visiblePlacements.map(p => p.sheet_number)));
-
-  // ---- Оновити виділені ----
+  // ============================================
+  // Оновлення виділених листів (без перегенерації)
+  // ============================================
   const updateSelected = useCallback((fn: (p: SheetPlacement) => SheetPlacement) => {
     setPlacements(prev => {
       const updated = prev.map(p => selected.has(p.sheet_number) ? fn(p) : p);
@@ -223,6 +239,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     });
   }, [selected, onUpdate]);
 
+  // Індивідуальні переміщення виділених листів
   const moveLeft  = (mm: number) => updateSelected(p => ({ ...p, offset_x: (p.offset_x??0) - mm }));
   const moveRight = (mm: number) => updateSelected(p => ({ ...p, offset_x: (p.offset_x??0) + mm }));
   const moveUp    = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y??0) + mm }));
@@ -240,16 +257,94 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   };
 
   const resetSelected = () => updateSelected(p => ({ ...p, manual_length: undefined, offset_x: undefined, offset_y: undefined }));
+
   const resetAll = () => {
-    setPlacements(prev => {
-      const updated = prev.map(p => ({ ...p, manual_length: undefined, offset_x: undefined, offset_y: undefined, deleted: undefined }));
-      onUpdate?.(updated);
-      return updated;
-    });
+    setLayoutOffset(0);
+    const fresh = generateLayout(0, W, H, polygonPoints, usefulWidth, fullWidth, baseLength, eaveRidgeExtra);
+    // Відновлюємо з оригінальних даних
+    const orig = calcResult.placements.map(p => ({ ...p }));
+    setPlacements(orig);
+    onUpdate?.(orig);
     setSelected(new Set());
   };
 
-  // ---- Перетягування панелі ----
+  // ============================================
+  // SVG — rubber-band selection
+  // ============================================
+  const getSvgPoint = (e: React.MouseEvent | MouseEvent) => {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const rect = svg.getBoundingClientRect();
+    const f = SVG_W / rect.width;
+    return { x: (e.clientX - rect.left)*f, y: (e.clientY - rect.top)*f };
+  };
+
+  const svgToMm = (svgX: number, svgY: number) => ({
+    wx: (svgX - PADDING) / scale,
+    wy: H - (svgY - PADDING) / scale,
+  });
+
+  const onSvgMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    dragStart.current = getSvgPoint(e);
+    isDragging.current = false;
+  };
+
+  const onSvgMouseMove = (e: React.MouseEvent) => {
+    if (!dragStart.current) return;
+    const pt = getSvgPoint(e);
+    if (Math.abs(pt.x - dragStart.current.x) > 4 || Math.abs(pt.y - dragStart.current.y) > 4) {
+      isDragging.current = true;
+      setRubberBand({
+        x1: Math.min(dragStart.current.x, pt.x), y1: Math.min(dragStart.current.y, pt.y),
+        x2: Math.max(dragStart.current.x, pt.x), y2: Math.max(dragStart.current.y, pt.y),
+      });
+    }
+  };
+
+  const onSvgMouseUp = (e: React.MouseEvent) => {
+    if (!dragStart.current) return;
+    if (isDragging.current && rubberBand) {
+      const rb = rubberBand;
+      const w1 = svgToMm(rb.x1, rb.y1);
+      const w2 = svgToMm(rb.x2, rb.y2);
+      const minX = Math.min(w1.wx, w2.wx), maxX = Math.max(w1.wx, w2.wx);
+      const minY = Math.min(w1.wy, w2.wy), maxY = Math.max(w1.wy, w2.wy);
+      const inRect = visiblePlacements.filter(p => {
+        const len = p.manual_length ?? p.length;
+        const ox = p.offset_x ?? 0, oy = p.offset_y ?? 0;
+        return p.x + ox < maxX && p.x + ox + p.full_width > minX && oy < maxY && oy + len > minY;
+      }).map(p => p.sheet_number);
+      if (inRect.length > 0) {
+        setSelected(e.shiftKey ? new Set([...selected, ...inRect]) : new Set(inRect));
+      }
+    }
+    dragStart.current = null;
+    isDragging.current = false;
+    setRubberBand(null);
+  };
+
+  const handleSheetClick = (e: React.MouseEvent, num: number) => {
+    if (isDragging.current) return;
+    e.stopPropagation();
+    if (e.shiftKey) {
+      setSelected(prev => { const n = new Set(prev); n.has(num) ? n.delete(num) : n.add(num); return n; });
+    } else {
+      setSelected(prev => prev.size===1 && prev.has(num) ? new Set() : new Set([num]));
+    }
+  };
+
+  const onSvgClick = (e: React.MouseEvent) => {
+    if (isDragging.current) return;
+    const tag = (e.target as SVGElement).tagName;
+    if (tag === 'svg' || tag === 'rect') setSelected(new Set());
+  };
+
+  const selectAll = () => setSelected(new Set(visiblePlacements.map(p => p.sheet_number)));
+
+  // ============================================
+  // Перетягування панелі
+  // ============================================
   const onPanelMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).tagName === 'BUTTON') return;
     panelDrag.current = { startX: e.clientX, startY: e.clientY, startPX: panelPos.x, startPY: panelPos.y };
@@ -259,10 +354,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!panelDrag.current) return;
-      setPanelPos({
-        x: panelDrag.current.startPX + e.clientX - panelDrag.current.startX,
-        y: panelDrag.current.startPY + e.clientY - panelDrag.current.startY,
-      });
+      setPanelPos({ x: panelDrag.current.startPX + e.clientX - panelDrag.current.startX, y: panelDrag.current.startPY + e.clientY - panelDrag.current.startY });
     };
     const onUp = () => { panelDrag.current = null; };
     window.addEventListener('mousemove', onMove);
@@ -270,7 +362,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, []);
 
-  const uniqueLengths = Array.from(new Set(visiblePlacements.map(p => p.manual_length ?? p.length))).sort((a,b) => a-b);
+  const uniqueLengths = Array.from(new Set(visiblePlacements.map(p => p.manual_length ?? p.length))).sort((a,b)=>a-b);
 
   return (
     <div style={{ fontFamily:'system-ui, sans-serif', position:'relative' }}>
@@ -281,19 +373,17 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
           <h3 style={{ margin:0, fontSize:'1rem' }}>Схема розкладки — {slopeName}</h3>
           <div style={{ fontSize:'.8rem', color:'#6b7280', marginTop:'2px' }}>
             {calcResult.profile_name} · {visiblePlacements.length} листів · {calcResult.slope_area_m2.toFixed(2)} м²
+            {layoutOffset !== 0 && <span style={{ color:'#f59e0b' }}> · Зсув: {layoutOffset > 0 ? '+' : ''}{layoutOffset}мм</span>}
             {hasSelection && <span style={{ color:COLORS.selected, fontWeight:600 }}> · Виділено: {selected.size} шт</span>}
           </div>
         </div>
         <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
-          {/* Кнопка Виділити всі */}
-          <button onClick={selectAll}
-            style={{ padding:'6px 12px', background:'#7c3aed', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', fontWeight:600, fontSize:'.82rem' }}>
+          <button onClick={selectAll} style={{ padding:'6px 12px', background:COLORS.selected, color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', fontWeight:600, fontSize:'.82rem' }}>
             ☑ Виділити всі
           </button>
           {hasSelection && (
-            <button onClick={() => setSelected(new Set())}
-              style={{ padding:'6px 12px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'.82rem' }}>
-              ✕ Зняти виділення
+            <button onClick={() => setSelected(new Set())} style={{ padding:'6px 12px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'.82rem' }}>
+              ✕ Зняти
             </button>
           )}
           <button onClick={() => setZoom(z => Math.max(0.3, z-0.1))} style={zoomBtn}>−</button>
@@ -304,34 +394,46 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
         </div>
       </div>
 
+      {/* Підказка */}
       <div style={{ fontSize:'.8rem', color:'#9ca3af', marginBottom:'8px' }}>
-        💡 Клік на лист — виділити · Shift+клік — додати · Затисни мишу і тягни — виділити область · ☑ Виділити всі
+        💡 Клік — виділити · Shift+клік — додати · Тягни мишу — виділити область · Зсув розкладки: переміщує всі листи з перегенерацією
       </div>
 
-      {/* SVG схема */}
+      {/* Панель зсуву розкладки */}
+      <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'10px 14px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
+        <span style={{ fontSize:'.8rem', fontWeight:600, color:'#166534' }}>🔄 Зсув розкладки (з перегенерацією):</span>
+        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+          {STEPS.map(s => (
+            <React.Fragment key={s.mm}>
+              <button onClick={() => shiftLayout(-s.mm)} style={shiftBtn}>← {s.label}</button>
+              <button onClick={() => shiftLayout(+s.mm)} style={shiftBtn}>→ {s.label}</button>
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* SVG */}
       <div style={{ overflowX:'auto', overflowY:'auto', maxHeight:'580px', border:'1px solid #e5e7eb', borderRadius:'10px', background:COLORS.bg }}>
         <svg
           ref={svgRef}
           width={SVG_W*zoom} height={SVG_H*zoom}
           viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-          style={{ display:'block', cursor: isDragging.current ? 'crosshair' : 'default' }}
+          style={{ display:'block', cursor:'default' }}
           onMouseDown={onSvgMouseDown}
           onMouseMove={onSvgMouseMove}
           onMouseUp={onSvgMouseUp}
           onClick={onSvgClick}
         >
           <rect width={SVG_W} height={SVG_H} fill={COLORS.bg} />
-
-          {Array.from({ length: Math.ceil(W/1000)+1 }, (_,i) => i).map(i => (
-            <line key={`gx${i}`} x1={tx(i*1000)} y1={PADDING} x2={tx(i*1000)} y2={PADDING+H*scale} stroke={COLORS.grid} strokeWidth="0.5" />
+          {Array.from({length:Math.ceil(W/1000)+1},(_,i)=>i).map(i=>(
+            <line key={`gx${i}`} x1={tx(i*1000)} y1={PADDING} x2={tx(i*1000)} y2={PADDING+H*scale} stroke={COLORS.grid} strokeWidth="0.5"/>
           ))}
-          {Array.from({ length: Math.ceil(H/1000)+1 }, (_,i) => i).map(i => (
-            <line key={`gy${i}`} x1={PADDING} y1={ty(i*1000)} x2={PADDING+W*scale} y2={ty(i*1000)} stroke={COLORS.grid} strokeWidth="0.5" />
+          {Array.from({length:Math.ceil(H/1000)+1},(_,i)=>i).map(i=>(
+            <line key={`gy${i}`} x1={PADDING} y1={ty(i*1000)} x2={PADDING+W*scale} y2={ty(i*1000)} stroke={COLORS.grid} strokeWidth="0.5"/>
           ))}
-
           <defs>
             <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-              <path d="M0,0 L6,3 L0,6 Z" fill="#9ca3af" />
+              <path d="M0,0 L6,3 L0,6 Z" fill="#9ca3af"/>
             </marker>
           </defs>
 
@@ -339,64 +441,49 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
           <g>
             {visiblePlacements.map(p => {
               const length = p.manual_length ?? p.length;
-              const ox = p.offset_x ?? 0;
-              const oy = p.offset_y ?? 0;
+              const ox = p.offset_x ?? 0, oy = p.offset_y ?? 0;
               const isSel = selected.has(p.sheet_number);
-              const x1 = tx(p.x + ox);
-              const y1 = ty(oy);
-              const w  = p.full_width * scale;
-              const h  = length * scale;
+              const x1 = tx(p.x + ox), y1 = ty(oy);
+              const w = p.full_width * scale, h = length * scale;
               const color = sheetColor(p, isSel);
               return (
-                <g key={p.sheet_number} onClick={e => handleSheetClick(e, p.sheet_number)} style={{ cursor:'pointer' }}>
+                <g key={p.sheet_number} onClick={e=>handleSheetClick(e, p.sheet_number)} style={{cursor:'pointer'}}>
                   <rect x={x1} y={y1-h} width={w} height={h}
-                    fill={color} fillOpacity={isSel ? 0.45 : 0.25}
-                    stroke={color} strokeWidth={isSel ? 2.5 : 1} />
-                  {h > 20 && (
-                    <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
-                      fill={isSel ? COLORS.selected : COLORS.text}
-                      fontSize={Math.max(9, Math.min(13, h/4))} fontWeight="600">
-                      {(length/1000).toFixed(3)}
-                    </text>
-                  )}
-                  {h > 30 && w > 20 && (
-                    <text x={x1+w/2} y={y1-h/2+14} textAnchor="middle" dominantBaseline="middle"
-                      fill={isSel ? COLORS.selected : COLORS.text} fontSize={8} opacity={0.7}>
-                      №{p.sheet_number}
-                    </text>
-                  )}
+                    fill={color} fillOpacity={isSel?0.45:0.25}
+                    stroke={color} strokeWidth={isSel?2.5:1}/>
+                  {h>20 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
+                    fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(9,Math.min(13,h/4))} fontWeight="600">
+                    {(length/1000).toFixed(3)}
+                  </text>}
+                  {h>30 && w>20 && <text x={x1+w/2} y={y1-h/2+14} textAnchor="middle" dominantBaseline="middle"
+                    fill={isSel?COLORS.selected:COLORS.text} fontSize={8} opacity={0.7}>
+                    №{p.sheet_number}
+                  </text>}
                   {p.manual_length && <text x={x1+3} y={y1-h+10} fill="#dc2626" fontSize={9}>✎</text>}
                 </g>
               );
             })}
           </g>
 
-          {/* Контур ската */}
-          <path d={polyPath} fill="none" stroke={COLORS.polygon} strokeWidth="2" />
+          <path d={polyPath} fill="none" stroke={COLORS.polygon} strokeWidth="2"/>
 
-          {/* Rubber-band прямокутник */}
+          {/* Rubber-band */}
           {rubberBand && (
-            <rect
-              x={rubberBand.x1} y={rubberBand.y1}
-              width={rubberBand.x2 - rubberBand.x1}
-              height={rubberBand.y2 - rubberBand.y1}
-              fill="rgba(124,58,237,0.1)"
-              stroke={COLORS.selected}
-              strokeWidth="1"
-              strokeDasharray="4 2"
-            />
+            <rect x={rubberBand.x1} y={rubberBand.y1}
+              width={rubberBand.x2-rubberBand.x1} height={rubberBand.y2-rubberBand.y1}
+              fill="rgba(124,58,237,0.1)" stroke={COLORS.selected} strokeWidth="1" strokeDasharray="4 2"/>
           )}
 
           {/* Розміри */}
-          <line x1={tx(0)} y1={PADDING-20} x2={tx(W)} y2={PADDING-20} stroke="#9ca3af" strokeWidth="1" markerEnd="url(#arrow)" />
+          <line x1={tx(0)} y1={PADDING-20} x2={tx(W)} y2={PADDING-20} stroke="#9ca3af" strokeWidth="1" markerEnd="url(#arrow)"/>
           <text x={tx(W/2)} y={PADDING-28} textAnchor="middle" fill="#374151" fontSize="11" fontWeight="600">{(W/1000).toFixed(2)} м</text>
-          <line x1={PADDING-20} y1={ty(0)} x2={PADDING-20} y2={ty(H)} stroke="#9ca3af" strokeWidth="1" />
+          <line x1={PADDING-20} y1={ty(0)} x2={PADDING-20} y2={ty(H)} stroke="#9ca3af" strokeWidth="1"/>
           <text x={PADDING-35} y={ty(H/2)} textAnchor="middle" fill="#374151" fontSize="11" fontWeight="600"
-            transform={`rotate(-90, ${PADDING-35}, ${ty(H/2)})`}>{(H/1000).toFixed(2)} м</text>
-          {Array.from({ length: Math.ceil(W/1000)+1 }, (_,i) => i).map(i => (
+            transform={`rotate(-90,${PADDING-35},${ty(H/2)})`}>{(H/1000).toFixed(2)} м</text>
+          {Array.from({length:Math.ceil(W/1000)+1},(_,i)=>i).map(i=>(
             <text key={`lx${i}`} x={tx(i*1000)} y={PADDING+H*scale+18} textAnchor="middle" fill="#6b7280" fontSize="9">{i}</text>
           ))}
-          {Array.from({ length: Math.ceil(H/1000)+1 }, (_,i) => i).map(i => (
+          {Array.from({length:Math.ceil(H/1000)+1},(_,i)=>i).map(i=>(
             <text key={`ly${i}`} x={PADDING-8} y={ty(i*1000)+3} textAnchor="end" fill="#6b7280" fontSize="9">{i}</text>
           ))}
         </svg>
@@ -404,10 +491,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
 
       {/* Легенда */}
       <div style={{ display:'flex', gap:'16px', marginTop:'12px', flexWrap:'wrap' }}>
-        <LegendItem color={COLORS.full}     label="Повний лист" />
-        <LegendItem color={COLORS.cut}      label="Обрізаний лист" />
-        <LegendItem color={COLORS.waste}    label="Великий відхід (>50%)" />
-        <LegendItem color={COLORS.selected} label="Виділений лист" />
+        <LegendItem color={COLORS.full}     label="Повний лист"/>
+        <LegendItem color={COLORS.cut}      label="Обрізаний лист"/>
+        <LegendItem color={COLORS.waste}    label="Великий відхід (>50%)"/>
+        <LegendItem color={COLORS.selected} label="Виділений лист"/>
       </div>
 
       {/* Таблиця */}
@@ -426,7 +513,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
           </thead>
           <tbody>
             {uniqueLengths.map(len => {
-              const sheets = visiblePlacements.filter(p => (p.manual_length??p.length) === len);
+              const sheets = visiblePlacements.filter(p=>(p.manual_length??p.length)===len);
               return (
                 <tr key={len} style={{ borderTop:'1px solid #f3f4f6' }}>
                   <td style={{ padding:'8px 12px', fontWeight:500 }}>{(len/1000).toFixed(3)} м</td>
@@ -446,77 +533,53 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
         </table>
       </div>
 
-      {/* ===== ПЛАВАЮЧА ПАНЕЛЬ РЕДАГУВАННЯ ===== */}
+      {/* ===== ПЛАВАЮЧА ПАНЕЛЬ ===== */}
       {hasSelection && (
         <div
           onMouseDown={onPanelMouseDown}
-          style={{
-            position: 'fixed',
-            left: panelPos.x,
-            top: panelPos.y,
-            zIndex: 500,
-            background: '#fff',
-            border: `2px solid ${COLORS.selected}`,
-            borderRadius: '10px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-            width: '280px',
-            userSelect: 'none',
-          }}
+          style={{ position:'fixed', left:panelPos.x, top:panelPos.y, zIndex:500,
+            background:'#fff', border:`2px solid ${COLORS.selected}`, borderRadius:'10px',
+            boxShadow:'0 8px 32px rgba(0,0,0,0.2)', width:'280px', userSelect:'none' }}
         >
-          {/* Хедер — тягнути */}
-          <div style={{
-            background: COLORS.selected, color: '#fff',
-            padding: '8px 12px', borderRadius: '8px 8px 0 0',
-            cursor: 'move', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          }}>
+          <div style={{ background:COLORS.selected, color:'#fff', padding:'8px 12px', borderRadius:'8px 8px 0 0',
+            cursor:'move', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <span style={{ fontWeight:600, fontSize:'.85rem' }}>✏ Виділено: {selected.size} шт</span>
-            <button onClick={() => setSelected(new Set())}
+            <button onClick={()=>setSelected(new Set())}
               style={{ background:'none', border:'none', color:'#fff', cursor:'pointer', fontSize:'1rem', lineHeight:1 }}>✕</button>
           </div>
-
-          <div style={{ padding: '12px' }}>
-
-            {/* Горизонталь */}
+          <div style={{ padding:'12px' }}>
             <div style={{ marginBottom:'10px' }}>
               <div style={sectionLabel}>← → Зміщення по горизонталі</div>
-              {STEPS.map(s => (
+              {STEPS.map(s=>(
                 <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px' }}>
-                  <button onClick={() => moveLeft(s.mm)}  style={ctrlBtn}>← {s.label}</button>
-                  <button onClick={() => moveRight(s.mm)} style={ctrlBtn}>→ {s.label}</button>
+                  <button onClick={()=>moveLeft(s.mm)}  style={ctrlBtn}>← {s.label}</button>
+                  <button onClick={()=>moveRight(s.mm)} style={ctrlBtn}>→ {s.label}</button>
                 </div>
               ))}
             </div>
-
-            {/* Вертикаль */}
             <div style={{ marginBottom:'10px' }}>
               <div style={sectionLabel}>↑ ↓ Зміщення по вертикалі</div>
-              {STEPS.map(s => (
+              {STEPS.map(s=>(
                 <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px' }}>
-                  <button onClick={() => moveDown(s.mm)} style={ctrlBtn}>↓ {s.label}</button>
-                  <button onClick={() => moveUp(s.mm)}   style={ctrlBtn}>↑ {s.label}</button>
+                  <button onClick={()=>moveDown(s.mm)} style={ctrlBtn}>↓ {s.label}</button>
+                  <button onClick={()=>moveUp(s.mm)}   style={ctrlBtn}>↑ {s.label}</button>
                 </div>
               ))}
             </div>
-
-            {/* Довжина */}
             <div style={{ marginBottom:'12px' }}>
               <div style={sectionLabel}>↕ Довжина листа</div>
-              {STEPS.map(s => (
+              {STEPS.map(s=>(
                 <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px' }}>
-                  <button onClick={() => lenMinus(s.mm)} style={ctrlBtn}>− {s.label}</button>
-                  <button onClick={() => lenPlus(s.mm)}  style={ctrlBtn}>+ {s.label}</button>
+                  <button onClick={()=>lenMinus(s.mm)} style={ctrlBtn}>− {s.label}</button>
+                  <button onClick={()=>lenPlus(s.mm)}  style={ctrlBtn}>+ {s.label}</button>
                 </div>
               ))}
             </div>
-
-            {/* Дії */}
             <div style={{ display:'flex', flexDirection:'column', gap:'6px', borderTop:'1px solid #e5e7eb', paddingTop:'10px' }}>
-              <button onClick={resetSelected}
-                style={{ padding:'6px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#f9fafb', fontSize:'.8rem' }}>
+              <button onClick={resetSelected} style={{ padding:'6px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#f9fafb', fontSize:'.8rem' }}>
                 ↩ Скинути вибрані
               </button>
-              <button onClick={deleteSelected}
-                style={{ padding:'6px', border:'1px solid #fca5a5', borderRadius:'6px', cursor:'pointer', background:'#fff', color:'#dc2626', fontSize:'.8rem' }}>
+              <button onClick={deleteSelected} style={{ padding:'6px', border:'1px solid #fca5a5', borderRadius:'6px', cursor:'pointer', background:'#fff', color:'#dc2626', fontSize:'.8rem' }}>
                 🗑 Видалити вибрані
               </button>
             </div>
@@ -527,28 +590,15 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   );
 }
 
-const zoomBtn: React.CSSProperties = {
-  padding: '4px 10px', border: '1px solid #d1d5db',
-  borderRadius: '6px', cursor: 'pointer', background: '#fff',
-};
-
-const ctrlBtn: React.CSSProperties = {
-  flex: 1, padding: '5px 4px',
-  border: '1px solid #d1d5db', borderRadius: '6px',
-  cursor: 'pointer', background: '#fff',
-  fontSize: '.78rem', fontWeight: 500,
-};
-
-const sectionLabel: React.CSSProperties = {
-  fontSize: '.72rem', fontWeight: 600,
-  color: '#6b7280', marginBottom: '6px',
-  textTransform: 'uppercase',
-};
+const zoomBtn: React.CSSProperties = { padding:'4px 10px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff' };
+const shiftBtn: React.CSSProperties = { padding:'4px 10px', border:'1px solid #bbf7d0', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'.78rem', fontWeight:500, color:'#166534' };
+const ctrlBtn: React.CSSProperties = { flex:1, padding:'5px 4px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'.78rem', fontWeight:500 };
+const sectionLabel: React.CSSProperties = { fontSize:'.72rem', fontWeight:600, color:'#6b7280', marginBottom:'6px', textTransform:'uppercase' };
 
 function LegendItem({ color, label }: { color: string; label: string }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'.78rem', color:'#374151' }}>
-      <div style={{ width:'14px', height:'14px', background:color, opacity:0.6, borderRadius:'3px', border:`1px solid ${color}` }} />
+      <div style={{ width:'14px', height:'14px', background:color, opacity:0.6, borderRadius:'3px', border:`1px solid ${color}` }}/>
       {label}
     </div>
   );
