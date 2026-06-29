@@ -117,6 +117,8 @@ export interface CalcResult {
   placements: SheetPlacement[];
   accessories?: AccessoryResult;
   warnings: string[]; errors: string[];
+  sheet_full_width?: number;
+  sheet_useful_width?: number;
 }
 
 export interface SheetGroup {
