@@ -312,8 +312,8 @@ function fitView(pts: Point[]) {
     const ph = Math.max(...ys) - Math.min(...ys) || 1;
     const PADDING = 80;
     const newScale = Math.min((W - PADDING * 2) / pw, (H - PADDING * 2) / ph) * 0.85;
-    const newOffX  = Math.max(PADDING, PADDING + ((W - PADDING * 2) - pw * newScale) / 2 - Math.min(...xs) * newScale);
-    const newOffY  = Math.max(PADDING, PADDING + ((H - PADDING * 2) - ph * newScale) / 2 - Math.min(...ys) * newScale);
+    const newOffX  = PADDING - Math.min(...xs) * newScale;
+    const newOffY  = PADDING - Math.min(...ys) * newScale;
     setScale(newScale);
     setOffset([newOffX, newOffY]);
   }
