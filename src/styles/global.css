@@ -489,7 +489,10 @@ tr:hover td { background: var(--clr-brand-pale); }
   background: var(--clr-surface);
   border-right: 1px solid var(--clr-border);
   overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--sp-3) 0;
+  position: relative;
+  z-index: 2;
 }
 
 .editor-canvas-wrap {

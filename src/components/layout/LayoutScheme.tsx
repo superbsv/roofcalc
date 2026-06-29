@@ -92,7 +92,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   // Полігон ската в SVG координатах
   const polyPath = polygonPoints.length >= 3
 ? polygonPoints.map((p, i) =>
-        `${i === 0 ? 'M' : 'L'} ${tx(p[0] * 1000)} ${ty(p[1] * 1000)}`
+        `${i === 0 ? 'M' : 'L'} ${tx(p[0])} ${ty(p[1])}`
       ).join(' ') + ' Z'
     : `M ${tx(0)} ${ty(0)} L ${tx(W)} ${ty(0)} L ${tx(W)} ${ty(H)} L ${tx(0)} ${ty(H)} Z`;
 
