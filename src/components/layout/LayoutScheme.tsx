@@ -136,9 +136,9 @@ function generateLayout(
     const hR = getPolygonHeightAtX(visRight, polygon);
     const colH = Math.max(hL, hM, hR);
 
-    const sheetLength = colH > 0
-      ? Math.max(1, Math.round(colH + eaveRidgeExtra))
-      : baseLength;
+    // Якщо висота 0 — лист за межею ската, пропускаємо
+if (colH <= 0) continue;
+const sheetLength = Math.max(1, Math.round(colH + eaveRidgeExtra));
 
     placements.push({
       sheet_number: sheetNum++,
