@@ -335,13 +335,34 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     onPolygonChange(pts.map(([x,y]) => [Math.round(x*1000), Math.round(y*1000)] as Point));
   }
 
+const [tplModal, setTplModal] = useState(false);
+  const [tplIdx, setTplIdx]     = useState(0);
+  const [tplW, setTplW]         = useState('6');
+  const [tplH, setTplH]         = useState('4');
+
   function loadTemplate(idx: number) {
-    setActiveTemplate(idx);
-    const tpl = TEMPLATES[idx];
-    const pts = tpl.pts as Point[];
+    setTplIdx(idx);
+    setTplModal(true);
+  }
+
+  function applyTemplate() {
+    const W = parseFloat(tplW) || 6;
+    const H = parseFloat(tplH) || 4;
+    const tpl = TEMPLATES[tplIdx];
+    // Масштабуємо точки шаблону під введені розміри
+    const xs = tpl.pts.map(p => p[0]);
+    const ys = tpl.pts.map(p => p[1]);
+    const tw = Math.max(...xs) - Math.min(...xs) || 1;
+    const th = Math.max(...ys) - Math.min(...ys) || 1;
+    const pts: Point[] = tpl.pts.map(([x, y]) => [
+      parseFloat(((x / tw) * W).toFixed(3)),
+      parseFloat(((y / th) * H).toFixed(3)),
+    ]);
+    setActiveTemplate(tplIdx);
     setPoints(pts);
     setClosed(true);
     setShowLayout(false);
+    setTplModal(false);
     notifyChange(pts);
     fitView(pts);
   }
@@ -539,6 +560,38 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
           </div>
         )}
       </div>
+{tplModal && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000}}>
+          <div style={{background:'#fff',borderRadius:'12px',padding:'24px',width:'320px',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+            <h3 style={{margin:'0 0 16px',fontSize:'1rem'}}>📐 {TEMPLATES[tplIdx].name}</h3>
+            <div style={{marginBottom:'12px'}}>
+              <label style={{display:'block',fontSize:'.8rem',fontWeight:500,marginBottom:'4px'}}>Ширина, м</label>
+              <input type="number" step="0.1" value={tplW}
+                onChange={e => setTplW(e.target.value)}
+                style={{width:'100%',padding:'8px 12px',border:'1px solid #d1d5db',borderRadius:'6px',fontSize:'.9rem',boxSizing:'border-box'}} />
+            </div>
+            <div style={{marginBottom:'20px'}}>
+              <label style={{display:'block',fontSize:'.8rem',fontWeight:500,marginBottom:'4px'}}>Висота (довжина крокви), м</label>
+              <input type="number" step="0.1" value={tplH}
+                onChange={e => setTplH(e.target.value)}
+                style={{width:'100%',padding:'8px 12px',border:'1px solid #d1d5db',borderRadius:'6px',fontSize:'.9rem',boxSizing:'border-box'}} />
+            </div>
+            <div style={{display:'flex',gap:'8px',justifyContent:'flex-end'}}>
+              <button onClick={() => setTplModal(false)}
+                style={{padding:'8px 16px',border:'1px solid #d1d5db',borderRadius:'6px',cursor:'pointer',background:'#fff'}}>
+                Скасувати
+              </button>
+              <button onClick={applyTemplate}
+                style={{padding:'8px 16px',background:'#2563eb',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:600}}>
+                Застосувати
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>   {/* ← це закриває editor-wrap */}
+  );
+}
     </div>
   );
 }
