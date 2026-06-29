@@ -3,7 +3,7 @@
 // components/layout/LayoutScheme.tsx
 // ============================================
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Point as ApiPoint } from '../../api/client';
 
 interface SheetPlacement {
@@ -59,12 +59,15 @@ const COLORS = {
   bg:       '#f8fafc',
 };
 
-// Кроки: 0.1м=100мм, 0.01м=10мм, 0.001м=1мм
 const STEPS = [
   { label: '0.1м',   mm: 100 },
   { label: '0.01м',  mm: 10  },
   { label: '0.001м', mm: 1   },
 ];
+
+const PADDING = 80;
+const SVG_W   = 900;
+const SVG_H   = 600;
 
 export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onUpdate }: Props) {
   const [placements, setPlacements] = useState<SheetPlacement[]>(
@@ -73,29 +76,37 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [zoom, setZoom]         = useState(1);
 
-  // Позиція панелі редагування (перетягування)
-  const [panelPos, setPanelPos] = useState({ x: 20, y: 80 });
-  const dragRef    = useRef<{ startX: number; startY: number; startPX: number; startPY: number } | null>(null);
-  const panelRef   = useRef<HTMLDivElement>(null);
+  // Rubber-band selection
+  const [rubberBand, setRubberBand] = useState<{ x1:number; y1:number; x2:number; y2:number } | null>(null);
+  const svgRef     = useRef<SVGSVGElement>(null);
+  const isDragging = useRef(false);
+  const dragStart  = useRef<{ x:number; y:number } | null>(null);
+
+  // Плаваюча панель
+  const [panelPos, setPanelPos] = useState({ x: 20, y: 120 });
+  const panelDrag = useRef<{ startX:number; startY:number; startPX:number; startPY:number } | null>(null);
 
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
-  const PADDING = 80;
-  const SVG_W = 900;
-  const SVG_H = 600;
   const scale = Math.min((SVG_W - PADDING*2) / W, (SVG_H - PADDING*2) / H) * zoom;
 
   const tx = (x: number) => PADDING + x * scale;
   const ty = (y: number) => PADDING + (H - y) * scale;
 
+  // SVG координати → світові мм
+  const svgToWorld = (svgX: number, svgY: number) => ({
+    wx: (svgX - PADDING) / scale,
+    wy: H - (svgY - PADDING) / scale,
+  });
+
   const polyPath = polygonPoints.length >= 3
-    ? polygonPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${tx(p[0])} ${ty(p[1])}`).join(' ') + ' Z'
+    ? polygonPoints.map((p, i) => `${i===0?'M':'L'} ${tx(p[0])} ${ty(p[1])}`).join(' ') + ' Z'
     : `M ${tx(0)} ${ty(0)} L ${tx(W)} ${ty(0)} L ${tx(W)} ${ty(H)} L ${tx(0)} ${ty(H)} Z`;
 
   const sheetColor = (p: SheetPlacement, isSel: boolean) => {
     if (isSel) return COLORS.selected;
     if (p.intersect_area_m2 === undefined || p.full_area_m2 === undefined) return COLORS.full;
-    if ((p.waste_area_m2 ?? 0) / (p.full_area_m2 ?? 1) * 100 > 50) return COLORS.waste;
+    if ((p.waste_area_m2??0)/(p.full_area_m2??1)*100 > 50) return COLORS.waste;
     if (p.intersect_area_m2 < p.full_area_m2 * 0.95) return COLORS.cut;
     return COLORS.full;
   };
@@ -103,8 +114,84 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   const visiblePlacements = placements.filter(p => !p.deleted);
   const hasSelection = selected.size > 0;
 
-  // ---- Вибір листів ----
+  // ---- Отримати SVG координати з події миші ----
+  const getSvgPoint = (e: React.MouseEvent | MouseEvent) => {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const rect = svg.getBoundingClientRect();
+    const scaleF = SVG_W / rect.width; // viewBox scale
+    return {
+      x: (e.clientX - rect.left) * scaleF,
+      y: (e.clientY - rect.top) * scaleF,
+    };
+  };
+
+  // ---- Mouse down на SVG ----
+  const onSvgMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const pt = getSvgPoint(e);
+    dragStart.current = pt;
+    isDragging.current = false;
+  };
+
+  // ---- Mouse move на SVG ----
+  const onSvgMouseMove = (e: React.MouseEvent) => {
+    if (!dragStart.current) return;
+    const pt = getSvgPoint(e);
+    const dx = Math.abs(pt.x - dragStart.current.x);
+    const dy = Math.abs(pt.y - dragStart.current.y);
+    if (dx > 4 || dy > 4) {
+      isDragging.current = true;
+      setRubberBand({
+        x1: Math.min(dragStart.current.x, pt.x),
+        y1: Math.min(dragStart.current.y, pt.y),
+        x2: Math.max(dragStart.current.x, pt.x),
+        y2: Math.max(dragStart.current.y, pt.y),
+      });
+    }
+  };
+
+  // ---- Mouse up на SVG ----
+  const onSvgMouseUp = (e: React.MouseEvent) => {
+    if (!dragStart.current) return;
+
+    if (isDragging.current && rubberBand) {
+      // Rubber-band: виділити всі листи що перетинають прямокутник
+      const rb = rubberBand;
+      const worldX1 = svgToWorld(rb.x1, rb.y1);
+      const worldX2 = svgToWorld(rb.x2, rb.y2);
+      const minWX = Math.min(worldX1.wx, worldX2.wx);
+      const maxWX = Math.max(worldX1.wx, worldX2.wx);
+      const minWY = Math.min(worldX1.wy, worldX2.wy);
+      const maxWY = Math.max(worldX1.wy, worldX2.wy);
+
+      const inRect = visiblePlacements.filter(p => {
+        const length = p.manual_length ?? p.length;
+        const ox = p.offset_x ?? 0;
+        const oy = p.offset_y ?? 0;
+        const px1 = p.x + ox;
+        const py1 = oy;
+        const px2 = px1 + p.full_width;
+        const py2 = py1 + length;
+        return px1 < maxWX && px2 > minWX && py1 < maxWY && py2 > minWY;
+      }).map(p => p.sheet_number);
+
+      if (inRect.length > 0) {
+        setSelected(e.shiftKey
+          ? new Set([...selected, ...inRect])
+          : new Set(inRect));
+      }
+    }
+
+    dragStart.current = null;
+    isDragging.current = false;
+    setRubberBand(null);
+  };
+
+  // ---- Клік на лист ----
   const handleSheetClick = (e: React.MouseEvent, num: number) => {
+    if (isDragging.current) return; // не клік а drag
+    e.stopPropagation();
     if (e.shiftKey) {
       setSelected(prev => {
         const next = new Set(prev);
@@ -112,11 +199,22 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
         return next;
       });
     } else {
-      setSelected(prev => prev.size === 1 && prev.has(num) ? new Set() : new Set([num]));
+      setSelected(prev => prev.size===1 && prev.has(num) ? new Set() : new Set([num]));
     }
   };
 
-  // ---- Оновлення виділених листів ----
+  // ---- Клік на фон SVG — зняти виділення ----
+  const onSvgClick = (e: React.MouseEvent) => {
+    if (isDragging.current) return;
+    if ((e.target as SVGElement).tagName === 'svg' || (e.target as SVGElement).tagName === 'rect') {
+      setSelected(new Set());
+    }
+  };
+
+  // ---- Виділити всі ----
+  const selectAll = () => setSelected(new Set(visiblePlacements.map(p => p.sheet_number)));
+
+  // ---- Оновити виділені ----
   const updateSelected = useCallback((fn: (p: SheetPlacement) => SheetPlacement) => {
     setPlacements(prev => {
       const updated = prev.map(p => selected.has(p.sheet_number) ? fn(p) : p);
@@ -125,13 +223,12 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     });
   }, [selected, onUpdate]);
 
-  // ---- Дії зі стрілками ----
-  const moveLeft  = (mm: number) => updateSelected(p => ({ ...p, offset_x: (p.offset_x ?? 0) - mm }));
-  const moveRight = (mm: number) => updateSelected(p => ({ ...p, offset_x: (p.offset_x ?? 0) + mm }));
-  const moveUp    = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y ?? 0) + mm }));
-  const moveDown  = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y ?? 0) - mm }));
-  const lenPlus   = (mm: number) => updateSelected(p => ({ ...p, manual_length: (p.manual_length ?? p.length) + mm }));
-  const lenMinus  = (mm: number) => updateSelected(p => ({ ...p, manual_length: Math.max(1, (p.manual_length ?? p.length) - mm) }));
+  const moveLeft  = (mm: number) => updateSelected(p => ({ ...p, offset_x: (p.offset_x??0) - mm }));
+  const moveRight = (mm: number) => updateSelected(p => ({ ...p, offset_x: (p.offset_x??0) + mm }));
+  const moveUp    = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y??0) + mm }));
+  const moveDown  = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y??0) - mm }));
+  const lenPlus   = (mm: number) => updateSelected(p => ({ ...p, manual_length: (p.manual_length??p.length) + mm }));
+  const lenMinus  = (mm: number) => updateSelected(p => ({ ...p, manual_length: Math.max(1, (p.manual_length??p.length) - mm) }));
 
   const deleteSelected = () => {
     setPlacements(prev => {
@@ -143,7 +240,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   };
 
   const resetSelected = () => updateSelected(p => ({ ...p, manual_length: undefined, offset_x: undefined, offset_y: undefined }));
-
   const resetAll = () => {
     setPlacements(prev => {
       const updated = prev.map(p => ({ ...p, manual_length: undefined, offset_x: undefined, offset_y: undefined, deleted: undefined }));
@@ -156,30 +252,28 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   // ---- Перетягування панелі ----
   const onPanelMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).tagName === 'BUTTON') return;
-    dragRef.current = { startX: e.clientX, startY: e.clientY, startPX: panelPos.x, startPY: panelPos.y };
+    panelDrag.current = { startX: e.clientX, startY: e.clientY, startPX: panelPos.x, startPY: panelPos.y };
     e.preventDefault();
   };
 
-  const onMouseMove = useCallback((e: MouseEvent) => {
-    if (!dragRef.current) return;
-    setPanelPos({
-      x: dragRef.current.startPX + e.clientX - dragRef.current.startX,
-      y: dragRef.current.startPY + e.clientY - dragRef.current.startY,
-    });
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!panelDrag.current) return;
+      setPanelPos({
+        x: panelDrag.current.startPX + e.clientX - panelDrag.current.startX,
+        y: panelDrag.current.startPY + e.clientY - panelDrag.current.startY,
+      });
+    };
+    const onUp = () => { panelDrag.current = null; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, []);
 
-  const onMouseUp = useCallback(() => { dragRef.current = null; }, []);
-
-  React.useEffect(() => {
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    return () => { window.removeEventListener('mousemove', onMouseMove); window.removeEventListener('mouseup', onMouseUp); };
-  }, [onMouseMove, onMouseUp]);
-
-  const uniqueLengths = Array.from(new Set(visiblePlacements.map(p => p.manual_length ?? p.length))).sort((a, b) => a - b);
+  const uniqueLengths = Array.from(new Set(visiblePlacements.map(p => p.manual_length ?? p.length))).sort((a,b) => a-b);
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', position: 'relative' }}>
+    <div style={{ fontFamily:'system-ui, sans-serif', position:'relative' }}>
 
       {/* Заголовок */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px', flexWrap:'wrap', gap:'8px' }}>
@@ -190,7 +284,18 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
             {hasSelection && <span style={{ color:COLORS.selected, fontWeight:600 }}> · Виділено: {selected.size} шт</span>}
           </div>
         </div>
-        <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+        <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
+          {/* Кнопка Виділити всі */}
+          <button onClick={selectAll}
+            style={{ padding:'6px 12px', background:'#7c3aed', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', fontWeight:600, fontSize:'.82rem' }}>
+            ☑ Виділити всі
+          </button>
+          {hasSelection && (
+            <button onClick={() => setSelected(new Set())}
+              style={{ padding:'6px 12px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'.82rem' }}>
+              ✕ Зняти виділення
+            </button>
+          )}
           <button onClick={() => setZoom(z => Math.max(0.3, z-0.1))} style={zoomBtn}>−</button>
           <span style={{ fontSize:'.85rem', minWidth:'45px', textAlign:'center' }}>{Math.round(zoom*100)}%</span>
           <button onClick={() => setZoom(z => Math.min(3, z+0.1))} style={zoomBtn}>+</button>
@@ -199,27 +304,38 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
         </div>
       </div>
 
-      {!hasSelection && (
-        <div style={{ fontSize:'.8rem', color:'#9ca3af', marginBottom:'8px' }}>
-          💡 Клікніть на лист щоб виділити · Shift+клік — кілька листів
-        </div>
-      )}
+      <div style={{ fontSize:'.8rem', color:'#9ca3af', marginBottom:'8px' }}>
+        💡 Клік на лист — виділити · Shift+клік — додати · Затисни мишу і тягни — виділити область · ☑ Виділити всі
+      </div>
 
-      {/* SVG */}
+      {/* SVG схема */}
       <div style={{ overflowX:'auto', overflowY:'auto', maxHeight:'580px', border:'1px solid #e5e7eb', borderRadius:'10px', background:COLORS.bg }}>
-        <svg width={SVG_W*zoom} height={SVG_H*zoom} viewBox={`0 0 ${SVG_W} ${SVG_H}`} style={{ display:'block' }}>
+        <svg
+          ref={svgRef}
+          width={SVG_W*zoom} height={SVG_H*zoom}
+          viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+          style={{ display:'block', cursor: isDragging.current ? 'crosshair' : 'default' }}
+          onMouseDown={onSvgMouseDown}
+          onMouseMove={onSvgMouseMove}
+          onMouseUp={onSvgMouseUp}
+          onClick={onSvgClick}
+        >
           <rect width={SVG_W} height={SVG_H} fill={COLORS.bg} />
-          {Array.from({ length: Math.ceil(W/1000)+1 }, (_, i) => i).map(i => (
+
+          {Array.from({ length: Math.ceil(W/1000)+1 }, (_,i) => i).map(i => (
             <line key={`gx${i}`} x1={tx(i*1000)} y1={PADDING} x2={tx(i*1000)} y2={PADDING+H*scale} stroke={COLORS.grid} strokeWidth="0.5" />
           ))}
-          {Array.from({ length: Math.ceil(H/1000)+1 }, (_, i) => i).map(i => (
+          {Array.from({ length: Math.ceil(H/1000)+1 }, (_,i) => i).map(i => (
             <line key={`gy${i}`} x1={PADDING} y1={ty(i*1000)} x2={PADDING+W*scale} y2={ty(i*1000)} stroke={COLORS.grid} strokeWidth="0.5" />
           ))}
+
           <defs>
             <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
               <path d="M0,0 L6,3 L0,6 Z" fill="#9ca3af" />
             </marker>
           </defs>
+
+          {/* Листи */}
           <g>
             {visiblePlacements.map(p => {
               const length = p.manual_length ?? p.length;
@@ -254,16 +370,33 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
               );
             })}
           </g>
+
+          {/* Контур ската */}
           <path d={polyPath} fill="none" stroke={COLORS.polygon} strokeWidth="2" />
+
+          {/* Rubber-band прямокутник */}
+          {rubberBand && (
+            <rect
+              x={rubberBand.x1} y={rubberBand.y1}
+              width={rubberBand.x2 - rubberBand.x1}
+              height={rubberBand.y2 - rubberBand.y1}
+              fill="rgba(124,58,237,0.1)"
+              stroke={COLORS.selected}
+              strokeWidth="1"
+              strokeDasharray="4 2"
+            />
+          )}
+
+          {/* Розміри */}
           <line x1={tx(0)} y1={PADDING-20} x2={tx(W)} y2={PADDING-20} stroke="#9ca3af" strokeWidth="1" markerEnd="url(#arrow)" />
           <text x={tx(W/2)} y={PADDING-28} textAnchor="middle" fill="#374151" fontSize="11" fontWeight="600">{(W/1000).toFixed(2)} м</text>
           <line x1={PADDING-20} y1={ty(0)} x2={PADDING-20} y2={ty(H)} stroke="#9ca3af" strokeWidth="1" />
           <text x={PADDING-35} y={ty(H/2)} textAnchor="middle" fill="#374151" fontSize="11" fontWeight="600"
             transform={`rotate(-90, ${PADDING-35}, ${ty(H/2)})`}>{(H/1000).toFixed(2)} м</text>
-          {Array.from({ length: Math.ceil(W/1000)+1 }, (_, i) => i).map(i => (
+          {Array.from({ length: Math.ceil(W/1000)+1 }, (_,i) => i).map(i => (
             <text key={`lx${i}`} x={tx(i*1000)} y={PADDING+H*scale+18} textAnchor="middle" fill="#6b7280" fontSize="9">{i}</text>
           ))}
-          {Array.from({ length: Math.ceil(H/1000)+1 }, (_, i) => i).map(i => (
+          {Array.from({ length: Math.ceil(H/1000)+1 }, (_,i) => i).map(i => (
             <text key={`ly${i}`} x={PADDING-8} y={ty(i*1000)+3} textAnchor="end" fill="#6b7280" fontSize="9">{i}</text>
           ))}
         </svg>
@@ -293,7 +426,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
           </thead>
           <tbody>
             {uniqueLengths.map(len => {
-              const sheets = visiblePlacements.filter(p => (p.manual_length ?? p.length) === len);
+              const sheets = visiblePlacements.filter(p => (p.manual_length??p.length) === len);
               return (
                 <tr key={len} style={{ borderTop:'1px solid #f3f4f6' }}>
                   <td style={{ padding:'8px 12px', fontWeight:500 }}>{(len/1000).toFixed(3)} м</td>
@@ -316,7 +449,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
       {/* ===== ПЛАВАЮЧА ПАНЕЛЬ РЕДАГУВАННЯ ===== */}
       {hasSelection && (
         <div
-          ref={panelRef}
           onMouseDown={onPanelMouseDown}
           style={{
             position: 'fixed',
@@ -331,54 +463,48 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
             userSelect: 'none',
           }}
         >
-          {/* Хедер — за нього тягнуть */}
+          {/* Хедер — тягнути */}
           <div style={{
             background: COLORS.selected, color: '#fff',
             padding: '8px 12px', borderRadius: '8px 8px 0 0',
             cursor: 'move', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
-            <span style={{ fontWeight: 600, fontSize: '.85rem' }}>✏ Виділено: {selected.size} шт</span>
+            <span style={{ fontWeight:600, fontSize:'.85rem' }}>✏ Виділено: {selected.size} шт</span>
             <button onClick={() => setSelected(new Set())}
-              style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>✕</button>
+              style={{ background:'none', border:'none', color:'#fff', cursor:'pointer', fontSize:'1rem', lineHeight:1 }}>✕</button>
           </div>
 
           <div style={{ padding: '12px' }}>
 
-            {/* Зміщення по горизонталі */}
-            <div style={{ marginBottom: '10px' }}>
-              <div style={{ fontSize: '.72rem', fontWeight: 600, color: '#6b7280', marginBottom: '6px', textTransform: 'uppercase' }}>
-                ← → Зміщення по горизонталі
-              </div>
+            {/* Горизонталь */}
+            <div style={{ marginBottom:'10px' }}>
+              <div style={sectionLabel}>← → Зміщення по горизонталі</div>
               {STEPS.map(s => (
-                <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px', alignItems:'center' }}>
-                  <button onClick={() => moveLeft(s.mm)} style={ctrlBtn}>← {s.label}</button>
+                <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px' }}>
+                  <button onClick={() => moveLeft(s.mm)}  style={ctrlBtn}>← {s.label}</button>
                   <button onClick={() => moveRight(s.mm)} style={ctrlBtn}>→ {s.label}</button>
                 </div>
               ))}
             </div>
 
-            {/* Зміщення по вертикалі */}
-            <div style={{ marginBottom: '10px' }}>
-              <div style={{ fontSize: '.72rem', fontWeight: 600, color: '#6b7280', marginBottom: '6px', textTransform: 'uppercase' }}>
-                ↑ ↓ Зміщення по вертикалі
-              </div>
+            {/* Вертикаль */}
+            <div style={{ marginBottom:'10px' }}>
+              <div style={sectionLabel}>↑ ↓ Зміщення по вертикалі</div>
               {STEPS.map(s => (
-                <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px', alignItems:'center' }}>
+                <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px' }}>
                   <button onClick={() => moveDown(s.mm)} style={ctrlBtn}>↓ {s.label}</button>
-                  <button onClick={() => moveUp(s.mm)} style={ctrlBtn}>↑ {s.label}</button>
+                  <button onClick={() => moveUp(s.mm)}   style={ctrlBtn}>↑ {s.label}</button>
                 </div>
               ))}
             </div>
 
             {/* Довжина */}
-            <div style={{ marginBottom: '12px' }}>
-              <div style={{ fontSize: '.72rem', fontWeight: 600, color: '#6b7280', marginBottom: '6px', textTransform: 'uppercase' }}>
-                ↕ Довжина листа
-              </div>
+            <div style={{ marginBottom:'12px' }}>
+              <div style={sectionLabel}>↕ Довжина листа</div>
               {STEPS.map(s => (
-                <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px', alignItems:'center' }}>
+                <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px' }}>
                   <button onClick={() => lenMinus(s.mm)} style={ctrlBtn}>− {s.label}</button>
-                  <button onClick={() => lenPlus(s.mm)} style={ctrlBtn}>+ {s.label}</button>
+                  <button onClick={() => lenPlus(s.mm)}  style={ctrlBtn}>+ {s.label}</button>
                 </div>
               ))}
             </div>
@@ -411,6 +537,12 @@ const ctrlBtn: React.CSSProperties = {
   border: '1px solid #d1d5db', borderRadius: '6px',
   cursor: 'pointer', background: '#fff',
   fontSize: '.78rem', fontWeight: 500,
+};
+
+const sectionLabel: React.CSSProperties = {
+  fontSize: '.72rem', fontWeight: 600,
+  color: '#6b7280', marginBottom: '6px',
+  textTransform: 'uppercase',
 };
 
 function LegendItem({ color, label }: { color: string; label: string }) {
