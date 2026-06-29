@@ -113,7 +113,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
 
   const loadMaterials = async () => {
     try {
-      const d = await api('GET', `/materials/type/${cat}`);
+      const d = await api('GET', `/materials/${cat}`);
       setMaterials(d.profiles || []);
     } catch { setError('Помилка завантаження'); }
   };
