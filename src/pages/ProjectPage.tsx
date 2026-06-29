@@ -172,8 +172,23 @@ export default function ProjectPage({ projectId }: Props) {
 
   const totalPrice = specItems.reduce((s, i) => s + Number(i.total || 0), 0);
   const sheetItems = specItems.filter(i => i.type === 'sheet');
-  const accItems   = specItems.filter(i => i.type === 'accessory');
-  const fastItems  = specItems.filter(i => i.type === 'fastener');
+
+  // Групуємо доборні по назві
+  const groupItems = (items: SpecItem[]) => {
+    const map: Record<string, SpecItem> = {};
+    items.forEach(i => {
+      const key = i.name + '|' + i.unit;
+      if (map[key]) {
+        map[key] = { ...map[key], quantity: Number(map[key].quantity) + Number(i.quantity), total: Number(map[key].total) + Number(i.total) };
+      } else {
+        map[key] = { ...i, quantity: Number(i.quantity), total: Number(i.total) };
+      }
+    });
+    return Object.values(map);
+  };
+
+  const accItems  = groupItems(specItems.filter(i => i.type === 'accessory'));
+  const fastItems = groupItems(specItems.filter(i => i.type === 'fastener'));
 
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100%',gap:'16px'}}>
@@ -505,7 +520,7 @@ export default function ProjectPage({ projectId }: Props) {
                       <div className="metric-label">Загальна сума</div>
                     </div>
                     <div className="metric-card">
-                      <div className="metric-value">{sheetItems.reduce((s,i)=>s+i.quantity,0)}</div>
+                      <div className="metric-value">{sheetItems.reduce((s,i)=>s+Number(i.quantity),0)}</div>
                       <div className="metric-label">Листів всього</div>
                     </div>
                     <div className="metric-card">
