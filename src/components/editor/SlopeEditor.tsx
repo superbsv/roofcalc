@@ -145,7 +145,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       setPoints(pts);
       setClosed(true);
       setShowLayout(!!slope.calc_result);
-      fitView(pts);
+      setTimeout(() => fitView(pts), 100);
     } else {
       setPoints([]); setClosed(false); setShowLayout(false);
     }
@@ -300,16 +300,20 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     ctx.restore();
   }
 
-  function fitView(pts: Point[]) {
+function fitView(pts: Point[]) {
     const cv = canvasRef.current;
-    if (!cv || !pts.length) return;
+    const wrap = wrapRef.current;
+    if (!pts.length) return;
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-    const W = cv.width || 600, H = cv.height || 500;
+    // Беремо реальні розміри з wrap або canvas
+    const W = (wrap?.clientWidth || cv?.width || 600) - 0;
+    const H = (wrap?.clientHeight || cv?.height || 500) - 0;
     const pw = Math.max(...xs) - Math.min(...xs) || 1;
     const ph = Math.max(...ys) - Math.min(...ys) || 1;
-    const newScale = Math.min((W - 100) / pw, (H - 100) / ph) * 0.8;
-    const newOffX  = (W - pw * newScale) / 2 - Math.min(...xs) * newScale;
-    const newOffY  = (H - ph * newScale) / 2 - Math.min(...ys) * newScale;
+    const PADDING = 80;
+    const newScale = Math.min((W - PADDING * 2) / pw, (H - PADDING * 2) / ph) * 0.85;
+    const newOffX  = PADDING + ((W - PADDING * 2) - pw * newScale) / 2 - Math.min(...xs) * newScale;
+    const newOffY  = PADDING + ((H - PADDING * 2) - ph * newScale) / 2 - Math.min(...ys) * newScale;
     setScale(newScale);
     setOffset([newOffX, newOffY]);
   }
@@ -404,7 +408,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     setShowLayout(false);
     setTplModal(false);
     notifyChange(pts);
-    setTimeout(() => fitView(pts), 50);
+    setTimeout(() => fitView(pts), 100);
   }
 
   function clearAll() {
