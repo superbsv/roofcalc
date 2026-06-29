@@ -90,7 +90,56 @@ const CAT_LABEL: Record<Category, string> = {
   profile: 'Профнастил',
   falts: 'Фальцева покрівля',
 };
+function ForbiddenRanges({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  let ranges: [number, number][] = [];
+  try { ranges = JSON.parse(value || '[]'); } catch {}
 
+  const update = (newRanges: [number, number][]) => onChange(JSON.stringify(newRanges));
+  const add    = () => update([...ranges, [0, 0]]);
+  const remove = (i: number) => update(ranges.filter((_, idx) => idx !== i));
+  const set    = (i: number, side: 0 | 1, val: number) => {
+    const next = ranges.map((r, idx) => idx === i ? [side === 0 ? val : r[0], side === 1 ? val : r[1]] as [number,number] : r);
+    update(next);
+  };
+
+  return (
+    <div>
+      {ranges.length > 0 && (
+        <div style={{ display:'flex', gap:'8px', marginBottom:'4px' }}>
+          <span style={{ flex:1, fontSize:'.75rem', color:'var(--clr-text-3)', textAlign:'center' }}>Від, мм</span>
+          <span style={{ flex:1, fontSize:'.75rem', color:'var(--clr-text-3)', textAlign:'center' }}>До, мм</span>
+          <span style={{ width:'32px' }}/>
+        </div>
+      )}
+      {ranges.map((r, i) => (
+        <div key={i} style={{ display:'flex', gap:'8px', marginBottom:'6px', alignItems:'center' }}>
+          <input type="number" className="form-control" value={r[0]}
+            onChange={e => set(i, 0, Number(e.target.value))}
+            placeholder="від" style={{ flex:1 }} />
+          <span style={{ color:'var(--clr-text-3)', fontSize:'.85rem' }}>—</span>
+          <input type="number" className="form-control" value={r[1]}
+            onChange={e => set(i, 1, Number(e.target.value))}
+            placeholder="до" style={{ flex:1 }} />
+          <button onClick={() => remove(i)}
+            style={{ width:'32px', height:'36px', border:'1px solid #fca5a5', borderRadius:'6px', background:'#fff', color:'#dc2626', cursor:'pointer', flexShrink:0 }}>
+            ✕
+          </button>
+        </div>
+      ))}
+      <button onClick={add}
+        style={{ padding:'6px 12px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', background:'#fff', cursor:'pointer', fontSize:'.82rem', marginTop:'4px' }}>
+        + Додати діапазон
+      </button>
+      {ranges.length > 0 && (
+        <div style={{ fontSize:'.72rem', color:'var(--clr-text-3)', marginTop:'4px' }}>
+          JSON: {JSON.stringify(ranges)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ProductsPage({ category }: { category?: Category }) {
 export default function ProductsPage({ category }: { category?: Category }) {
   const [cat, setCat] = useState<Category>(category || 'tile');
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -364,13 +413,9 @@ export default function ProductsPage({ category }: { category?: Category }) {
                 </Field>
               </Row>
               <Row>
-                <Field label="Заборонені діапазони довжин (JSON)" style={{ flex: 2 }}>
-                  <input className="form-control" value={forbiddenInput} onChange={e => setForbiddenInput(e.target.value)}
-                    placeholder='[[730, 830], [1080, 1180]]' />
-                  <div style={{ fontSize: '.75rem', color: 'var(--clr-text-3)', marginTop: '4px' }}>
-                    Формат: [[від, до], [від, до]] — діапазони в мм де виробник не виготовляє листи
-                  </div>
-                </Field>
+                <Field label="Заборонені діапазони довжин" style={{ flex: 2 }}>
+                <ForbiddenRanges value={forbiddenInput} onChange={setForbiddenInput} />
+              </Field>
               </Row>
             </Section>
 
