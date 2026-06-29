@@ -400,7 +400,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
       </div>
 
       {/* Панель зсуву розкладки */}
-      <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'10px 14px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
+      <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'10px 14px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap', position:'relative', zIndex:10 }}>
         <span style={{ fontSize:'.8rem', fontWeight:600, color:'#166534' }}>🔄 Зсув розкладки (з перегенерацією):</span>
         <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
           {STEPS.map(s => (
@@ -549,11 +549,11 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
           </div>
           <div style={{ padding:'12px' }}>
             <div style={{ marginBottom:'10px' }}>
-              <div style={sectionLabel}>← → Зміщення по горизонталі</div>
+              <div style={sectionLabel}>← → Зміщення по горизонталі (з перегенерацією)</div>
               {STEPS.map(s=>(
                 <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px' }}>
-                  <button onClick={()=>moveLeft(s.mm)}  style={ctrlBtn}>← {s.label}</button>
-                  <button onClick={()=>moveRight(s.mm)} style={ctrlBtn}>→ {s.label}</button>
+                  <button onClick={()=>shiftLayout(-s.mm)} style={ctrlBtn}>← {s.label}</button>
+                  <button onClick={()=>shiftLayout(+s.mm)} style={ctrlBtn}>→ {s.label}</button>
                 </div>
               ))}
             </div>
