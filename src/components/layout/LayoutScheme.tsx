@@ -98,9 +98,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
 
   // Колір листа залежно від відходу
 const sheetColor = (p: SheetPlacement) => {
+    if (p.intersect_area_m2 === undefined || p.full_area_m2 === undefined) return COLORS.full;
     const wastePct = (p.waste_area_m2 ?? 0) / (p.full_area_m2 ?? 1) * 100;
     if (wastePct > 50) return COLORS.waste;
-    if ((p.intersect_area_m2 ?? 0) < (p.full_area_m2 ?? 1) * 0.95) return COLORS.cut;
+    if (p.intersect_area_m2 < p.full_area_m2 * 0.95) return COLORS.cut;
     return COLORS.full;
   };
 
@@ -200,8 +201,8 @@ const sheetColor = (p: SheetPlacement) => {
             </clipPath>
           </defs>
 
-          {/* Листи (обрізані по контуру) */}
-          <g clipPath="url(#slope-clip)">
+          {/* Листи (прямокутні, не обрізані) */}
+          <g>
             {placements.map(p => {
               const length = p.manual_length ?? p.length;
               const ox = (p.offset_x ?? 0);
