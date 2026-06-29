@@ -469,6 +469,20 @@ tr:hover td { background: var(--clr-brand-pale); }
   border-radius: var(--r-lg);
   overflow: hidden;
   box-shadow: var(--shadow-md);
+  position: relative;
+  z-index: 0;
+}
+
+.editor-sidebar {
+  position: relative;
+  z-index: 2;
+}
+
+.editor-canvas-wrap {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .editor-sidebar {
