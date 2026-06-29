@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { MaterialProfile } from '../api/client';
 
-const BASE = process.env.REACT_APP_API_URL || '/api';
+const BASE = process.env.REACT_APP_API_URL || '/calculator/api';
 const tok  = () => localStorage.getItem('rc_token');
 const api  = async (method: string, path: string, body?: unknown) => {
   const r = await fetch(BASE + path, {
