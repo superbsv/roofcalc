@@ -35,8 +35,8 @@ interface CalcResult {
   rows_count: number;
   total_sheets: number;
   sheet_length_mm: number;
-  sheet_full_width: number;
-  sheet_useful_width: number;
+  sheet_full_width?: number;
+  sheet_useful_width?: number;
   placements: SheetPlacement[];
   warnings: string[];
 }
@@ -138,7 +138,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   };
 
   // Унікальні довжини для легенди
-  const uniqueLengths = [...new Set(placements.map(p => p.manual_length ?? p.length))].sort((a, b) => a - b);
+  const uniqueLengths = Array.from(new Set(placements.map(p => p.manual_length ?? p.length))).sort((a, b) => a - b);
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif' }}>
