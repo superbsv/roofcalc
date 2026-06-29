@@ -12,33 +12,101 @@ interface Props {
   calcResult?: CalcResult | null;
   onPolygonChange: (points: Point[]) => void;
   readOnly?: boolean;
-  gridScale?: number; // метрів на клітинку (default 1)
+  gridScale?: number;
 }
 
 const COLORS = {
-  grid:      '#E2E8F0',
-  gridMaj:   '#CBD5E0',
-  axis:      '#A0AEC0',
-  polygon:   '#1B5E2E',
+  grid:       '#E2E8F0',
+  polygon:    '#1B5E2E',
   polygonFill:'rgba(27,94,46,0.08)',
-  point:     '#1B5E2E',
-  pointFirst:'#C62828',
-  preview:   'rgba(27,94,46,0.4)',
-  sheet:     ['rgba(21,101,192,0.18)','rgba(27,94,46,0.18)'],
+  point:      '#1B5E2E',
+  pointFirst: '#C62828',
+  sheet:      ['rgba(21,101,192,0.18)','rgba(27,94,46,0.18)'],
   sheetBorder:['#1565C0','#1B5E2E'],
-  dim:       '#1565C0',
+  dim:        '#1565C0',
 };
 
-// Шаблони скатів (точки в метрах, відносні)
-const TEMPLATES = [
-  { name:'Прямокутник',  pts:[[0,0],[6,0],[6,4],[0,4]] as Point[], icon:'rect' },
-  { name:'Трапеція',     pts:[[0,0],[6,0],[5,4],[1,4]] as Point[], icon:'trap' },
-  { name:'Прав. трикут.',pts:[[0,0],[6,0],[0,4]]       as Point[], icon:'rtri' },
-  { name:'Рівнобедр.',   pts:[[0,0],[6,0],[3,4]]       as Point[], icon:'itri' },
-  { name:'Паралелогр.',  pts:[[1,0],[6,0],[5,4],[0,4]] as Point[], icon:'para' },
-  { name:'Пятикутник',   pts:[[0,0],[6,0],[6,3],[3,4],[0,3]] as Point[], icon:'pent' },
-  { name:'Г-подібний',   pts:[[0,0],[4,0],[4,2],[6,2],[6,4],[0,4]] as Point[], icon:'lshp' },
-  { name:'Ступінчатий',  pts:[[0,0],[3,0],[3,2],[6,2],[6,4],[0,4]] as Point[], icon:'step' },
+interface TplParam { key: string; label: string; default: number; }
+interface Template {
+  name: string;
+  icon: string;
+  params: TplParam[];
+  build: (p: Record<string, number>) => Point[];
+}
+
+const TEMPLATES: Template[] = [
+  {
+    name: 'Прямокутник', icon: 'rect',
+    params: [
+      { key:'a', label:'a — ширина, м',  default: 6 },
+      { key:'h', label:'h — висота, м',  default: 4 },
+    ],
+    build: ({a,h}) => [[0,0],[a,0],[a,h],[0,h]],
+  },
+  {
+    name: 'Трапеція', icon: 'trap',
+    params: [
+      { key:'a',  label:'a — нижня основа, м', default: 6 },
+      { key:'c',  label:'c — верхня основа, м', default: 4 },
+      { key:'h',  label:'h — висота, м',        default: 4 },
+      { key:'a1', label:'a1 — зміщення, м',     default: 1 },
+    ],
+    build: ({a,c,h,a1}) => [[0,0],[a,0],[a1+c,h],[a1,h]],
+  },
+  {
+    name: 'Прав. трикутник', icon: 'rtri',
+    params: [
+      { key:'a', label:'a — основа, м', default: 6 },
+      { key:'h', label:'h — висота, м', default: 4 },
+    ],
+    build: ({a,h}) => [[0,0],[a,0],[0,h]],
+  },
+  {
+    name: 'Рівнобедр. трикутник', icon: 'itri',
+    params: [
+      { key:'a', label:'a — основа, м', default: 6 },
+      { key:'h', label:'h — висота, м', default: 4 },
+    ],
+    build: ({a,h}) => [[0,0],[a,0],[a/2,h]],
+  },
+  {
+    name: 'Паралелограм', icon: 'para',
+    params: [
+      { key:'a',  label:'a — основа, м',    default: 6 },
+      { key:'h',  label:'h — висота, м',    default: 4 },
+      { key:'a1', label:'a1 — зміщення, м', default: 1 },
+    ],
+    build: ({a,h,a1}) => [[0,0],[a,0],[a+a1,h],[a1,h]],
+  },
+  {
+    name: 'Пятикутник', icon: 'pent',
+    params: [
+      { key:'a',  label:'a — ширина, м',        default: 6 },
+      { key:'h',  label:'h — повна висота, м',  default: 4 },
+      { key:'h1', label:'h1 — висота зрізу, м', default: 1 },
+    ],
+    build: ({a,h,h1}) => [[0,0],[a,0],[a,h-h1],[a/2,h],[0,h-h1]],
+  },
+  {
+    name: 'Г-подібний', icon: 'lshp',
+    params: [
+      { key:'a', label:'a — повна ширина, м', default: 6 },
+      { key:'b', label:'b — повна висота, м', default: 4 },
+      { key:'c', label:'c — виріз ширина, м', default: 2 },
+      { key:'d', label:'d — виріз висота, м', default: 2 },
+    ],
+    build: ({a,b,c,d}) => [[0,0],[a,0],[a,d],[a-c,d],[a-c,b],[0,b]],
+  },
+  {
+    name: 'Ступінчатий', icon: 'step',
+    params: [
+      { key:'a', label:'a — повна ширина, м',   default: 6 },
+      { key:'b', label:'b — повна висота, м',   default: 4 },
+      { key:'c', label:'c — ступінь ширина, м', default: 3 },
+      { key:'d', label:'d — ступінь висота, м', default: 2 },
+    ],
+    build: ({a,b,c,d}) => [[0,0],[c,0],[c,d],[a,d],[a,b],[0,b]],
+  },
 ];
 
 const ICON_SVG: Record<string, string> = {
@@ -56,21 +124,23 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef   = useRef<HTMLDivElement>(null);
 
-  // Стан редактора
-  const [points, setPoints]     = useState<Point[]>([]);
-  const [closed, setClosed]     = useState(false);
-  const [mode, setMode]         = useState<'draw'|'move'>('draw');
-  const [mouse, setMouse]       = useState<Point>([0, 0]);
-  const [scale, setScale]       = useState(60);   // px / m
-  const [offset, setOffset]     = useState<Point>([40, 40]);
-  const [dragIdx, setDragIdx]   = useState(-1);
+  const [points, setPoints]         = useState<Point[]>([]);
+  const [closed, setClosed]         = useState(false);
+  const [mode, setMode]             = useState<'draw'|'move'>('draw');
+  const [mouse, setMouse]           = useState<Point>([0, 0]);
+  const [scale, setScale]           = useState(60);
+  const [offset, setOffset]         = useState<Point>([40, 40]);
+  const [dragIdx, setDragIdx]       = useState(-1);
   const [showLayout, setShowLayout] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState<number | null>(null);
 
-  // При зміні slope — завантажуємо точки
+  // Модальне вікно шаблону
+  const [tplModal, setTplModal]     = useState(false);
+  const [tplIdx, setTplIdx]         = useState(0);
+  const [tplValues, setTplValues]   = useState<Record<string,string>>({});
+
   useEffect(() => {
     if (slope?.polygon_points?.length) {
-      // Конвертуємо мм → м
       const pts = slope.polygon_points.map(([x,y]): Point => [x/1000, y/1000]);
       setPoints(pts);
       setClosed(true);
@@ -82,20 +152,17 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slope?.id]);
 
-  // Показувати розкладку при новому результаті
   useEffect(() => {
     if (calcResult && !calcResult.errors?.length) setShowLayout(true);
     else if (calcResult?.errors?.length) setShowLayout(false);
   }, [calcResult]);
 
-  // Основний render
   const render = useCallback(() => {
     const cv = canvasRef.current;
     if (!cv) return;
     const ctx = cv.getContext('2d')!;
     const W = cv.width, H = cv.height;
     ctx.clearRect(0, 0, W, H);
-
     drawGrid(ctx, W, H);
     if (showLayout && calcResult?.placements) drawLayout(ctx, calcResult.placements);
     drawPolygon(ctx, H);
@@ -105,7 +172,6 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
 
   useEffect(() => { render(); }, [render]);
 
-  // Resize observer
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -120,7 +186,6 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     return () => ro.disconnect();
   }, [render]);
 
-  // ---- Coordinate helpers ----
   const w2s = (wx: number, wy: number, H: number): [number,number] =>
     [wx * scale + offset[0], H - (wy * scale + offset[1])];
 
@@ -132,13 +197,11 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
 
   const snapGrid = (v: number) => Math.round(v / gridScale) * gridScale;
 
-  // ---- Draw functions ----
   function drawGrid(ctx: CanvasRenderingContext2D, W: number, H: number) {
     const step = scale * gridScale;
     ctx.save();
     ctx.strokeStyle = COLORS.grid;
     ctx.lineWidth = 0.5;
-
     const startX = ((offset[0] % step) + step) % step;
     for (let x = startX; x < W; x += step) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
@@ -147,8 +210,6 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     for (let y = startY % step; y < H; y += step) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
-
-    // Axis numbers
     ctx.fillStyle = '#A0AEC0'; ctx.font = '10px Inter, sans-serif';
     const gs = gridScale;
     let i = 0;
@@ -182,8 +243,6 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     }
     ctx.strokeStyle = COLORS.polygon; ctx.lineWidth = 2;
     ctx.stroke();
-
-    // Розміри сторін
     if (closed) {
       ctx.font = '11px Inter, sans-serif';
       ctx.fillStyle = COLORS.dim;
@@ -211,10 +270,9 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   function drawLayout(ctx: CanvasRenderingContext2D, placements: SheetPlacement[]) {
     const H = canvasRef.current!.height;
     ctx.save();
-    // Clip to polygon
     if (points.length >= 3) {
       ctx.beginPath();
-      const [sx, sy] = w2s(points[0][0]/1, points[0][1]/1, H);
+      const [sx, sy] = w2s(points[0][0], points[0][1], H);
       ctx.moveTo(sx, sy);
       for (let i = 1; i < points.length; i++) {
         const [px, py] = w2s(points[i][0], points[i][1], H);
@@ -222,7 +280,6 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       }
       ctx.closePath(); ctx.clip();
     }
-
     placements.forEach((pl, idx) => {
       const mmToM = 1/1000;
       const [px, py] = w2s(pl.x * mmToM, pl.y * mmToM, H);
@@ -243,7 +300,6 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     ctx.restore();
   }
 
-  // ---- Fit view ----
   function fitView(pts: Point[]) {
     const cv = canvasRef.current;
     if (!cv || !pts.length) return;
@@ -258,7 +314,6 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     setOffset([newOffX, newOffY]);
   }
 
-  // ---- Mouse handlers ----
   const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const cv = canvasRef.current!;
     const rect = cv.getBoundingClientRect();
@@ -281,16 +336,13 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
     const H = cv.height;
     const [wx, wy] = s2w(sx, sy, H);
-
     if (e.button === 2) {
       e.preventDefault();
       if (!closed && points.length >= 3) { setClosed(true); notifyChange(points); }
       return;
     }
-
     if (mode === 'draw') {
       if (closed) { setClosed(false); setPoints([]); setShowLayout(false); return; }
-      // Close if clicking near first point
       if (points.length >= 3) {
         const [fx, fy] = w2s(points[0][0], points[0][1], H);
         if ((sx-fx)**2 + (sy-fy)**2 < 100) {
@@ -300,7 +352,6 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       const next = [...points, [wx, wy] as Point];
       setPoints(next);
     } else {
-      // Move mode — find nearest point
       let found = -1;
       points.forEach((p, i) => {
         const [px, py] = w2s(p[0], p[1], H);
@@ -331,40 +382,29 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   }, [onKeyDown]);
 
   function notifyChange(pts: Point[]) {
-    // Конвертуємо м → мм для бекенду
     onPolygonChange(pts.map(([x,y]) => [Math.round(x*1000), Math.round(y*1000)] as Point));
   }
 
-const [tplModal, setTplModal] = useState(false);
-  const [tplIdx, setTplIdx]     = useState(0);
-  const [tplW, setTplW]         = useState('6');
-  const [tplH, setTplH]         = useState('4');
-
-  function loadTemplate(idx: number) {
+  function openTemplate(idx: number) {
     setTplIdx(idx);
+    const defaults: Record<string,string> = {};
+    TEMPLATES[idx].params.forEach(p => { defaults[p.key] = String(p.default); });
+    setTplValues(defaults);
     setTplModal(true);
   }
 
   function applyTemplate() {
-    const W = parseFloat(tplW) || 6;
-    const H = parseFloat(tplH) || 4;
     const tpl = TEMPLATES[tplIdx];
-    // Масштабуємо точки шаблону під введені розміри
-    const xs = tpl.pts.map(p => p[0]);
-    const ys = tpl.pts.map(p => p[1]);
-    const tw = Math.max(...xs) - Math.min(...xs) || 1;
-    const th = Math.max(...ys) - Math.min(...ys) || 1;
-    const pts: Point[] = tpl.pts.map(([x, y]) => [
-      parseFloat(((x / tw) * W).toFixed(3)),
-      parseFloat(((y / th) * H).toFixed(3)),
-    ]);
+    const nums: Record<string,number> = {};
+    tpl.params.forEach(p => { nums[p.key] = parseFloat(tplValues[p.key]) || p.default; });
+    const pts = tpl.build(nums) as Point[];
     setActiveTemplate(tplIdx);
     setPoints(pts);
     setClosed(true);
     setShowLayout(false);
     setTplModal(false);
     notifyChange(pts);
-    fitView(pts);
+    setTimeout(() => fitView(pts), 50);
   }
 
   function clearAll() {
@@ -382,7 +422,7 @@ const [tplModal, setTplModal] = useState(false);
 
   return (
     <div className="editor-wrap">
-      {/* Sidebar — шаблони */}
+      {/* Sidebar */}
       <div className="editor-sidebar">
         <div style={{padding:'8px 12px 4px',fontSize:'.65rem',fontWeight:600,color:'#8896A5',textTransform:'uppercase',letterSpacing:'.5px'}}>
           Шаблони
@@ -392,7 +432,7 @@ const [tplModal, setTplModal] = useState(false);
             <button
               key={i}
               className={`tpl-tile${activeTemplate === i ? ' active' : ''}`}
-              onClick={() => loadTemplate(i)}
+              onClick={() => openTemplate(i)}
               title={tpl.name}
             >
               <svg viewBox="0 0 42 30" style={{color:'var(--clr-brand)'}}>
@@ -407,25 +447,16 @@ const [tplModal, setTplModal] = useState(false);
           Режим
         </div>
         <div style={{padding:'0 8px',display:'flex',flexDirection:'column',gap:'4px'}}>
-          <button
-            className={`btn btn-sm${mode==='draw'?' btn-primary':' btn-secondary'}`}
-            style={{width:'100%',justifyContent:'flex-start'}}
-            onClick={() => setMode('draw')}
-          >
+          <button className={`btn btn-sm${mode==='draw'?' btn-primary':' btn-secondary'}`}
+            style={{width:'100%',justifyContent:'flex-start'}} onClick={() => setMode('draw')}>
             ✏ Малювати
           </button>
-          <button
-            className={`btn btn-sm${mode==='move'?' btn-primary':' btn-secondary'}`}
-            style={{width:'100%',justifyContent:'flex-start'}}
-            onClick={() => setMode('move')}
-          >
+          <button className={`btn btn-sm${mode==='move'?' btn-primary':' btn-secondary'}`}
+            style={{width:'100%',justifyContent:'flex-start'}} onClick={() => setMode('move')}>
             ↕ Редагувати
           </button>
-          <button
-            className="btn btn-sm btn-danger"
-            style={{width:'100%',justifyContent:'flex-start'}}
-            onClick={clearAll}
-          >
+          <button className="btn btn-sm btn-danger"
+            style={{width:'100%',justifyContent:'flex-start'}} onClick={clearAll}>
             🗑 Очистити
           </button>
         </div>
@@ -443,22 +474,15 @@ const [tplModal, setTplModal] = useState(false);
       <div className="editor-canvas-wrap" ref={wrapRef}>
         <canvas
           ref={canvasRef}
-          style={{
-            display:'block', width:'100%', height:'100%',
-            cursor: mode === 'draw' ? 'crosshair' : 'default',
-          }}
+          style={{display:'block',width:'100%',height:'100%',cursor:mode==='draw'?'crosshair':'default'}}
           onMouseMove={onMouseMove}
           onMouseDown={onMouseDown}
           onMouseUp={onMouseUp}
           onContextMenu={e => e.preventDefault()}
         />
-
-        {/* Toolbar */}
         <div className="editor-toolbar">
           <button className="btn btn-sm btn-secondary btn-icon" title="Відмінити (Ctrl+Z)"
-            onClick={() => closed ? setClosed(false) : setPoints(p => p.slice(0,-1))}>
-            ↩
-          </button>
+            onClick={() => closed ? setClosed(false) : setPoints(p => p.slice(0,-1))}>↩</button>
           <button className="btn btn-sm btn-secondary btn-icon" title="Збільшити"
             onClick={() => setScale(s => s * 1.25)}>+</button>
           <button className="btn btn-sm btn-secondary btn-icon" title="Зменшити"
@@ -466,10 +490,8 @@ const [tplModal, setTplModal] = useState(false);
           <button className="btn btn-sm btn-secondary btn-icon" title="По розміру"
             onClick={() => fitView(points)}>⛶</button>
           {calcResult && !calcResult.errors?.length && (
-            <button
-              className={`btn btn-sm ${showLayout ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setShowLayout(v => !v)}
-            >
+            <button className={`btn btn-sm ${showLayout?'btn-primary':'btn-secondary'}`}
+              onClick={() => setShowLayout(v => !v)}>
               {showLayout ? '👁 Сховати' : '📐 Розкладка'}
             </button>
           )}
@@ -477,8 +499,6 @@ const [tplModal, setTplModal] = useState(false);
             {closed ? `✓ Замкнуто · ${points.length} точок` : points.length > 0 ? `${points.length} точок…` : 'Оберіть шаблон або малюйте'}
           </span>
         </div>
-
-        {/* Coordinates */}
         <div className="editor-coords">{coordsText}</div>
       </div>
 
@@ -496,15 +516,15 @@ const [tplModal, setTplModal] = useState(false);
               </div>
               <div style={{display:'flex',justifyContent:'space-between',fontSize:'.8rem'}}>
                 <span style={{color:'var(--clr-text-3)'}}>Ширина:</span>
-                <span style={{fontWeight:600,fontFamily:'var(--font-mono)'}}>{
-                  ((Math.max(...points.map(p=>p[0])) - Math.min(...points.map(p=>p[0]))) * gridScale).toFixed(2)
-                } м</span>
+                <span style={{fontWeight:600,fontFamily:'var(--font-mono)'}}>
+                  {((Math.max(...points.map(p=>p[0]))-Math.min(...points.map(p=>p[0])))*gridScale).toFixed(2)} м
+                </span>
               </div>
               <div style={{display:'flex',justifyContent:'space-between',fontSize:'.8rem'}}>
                 <span style={{color:'var(--clr-text-3)'}}>Висота:</span>
-                <span style={{fontWeight:600,fontFamily:'var(--font-mono)'}}>{
-                  ((Math.max(...points.map(p=>p[1])) - Math.min(...points.map(p=>p[1]))) * gridScale).toFixed(2)
-                } м</span>
+                <span style={{fontWeight:600,fontFamily:'var(--font-mono)'}}>
+                  {((Math.max(...points.map(p=>p[1]))-Math.min(...points.map(p=>p[1])))*gridScale).toFixed(2)} м
+                </span>
               </div>
             </div>
           </div>
@@ -539,9 +559,7 @@ const [tplModal, setTplModal] = useState(false);
               Попередження
             </div>
             {calcResult.warnings.map((w, i) => (
-              <div key={i} className="alert alert-warning" style={{marginBottom:'4px',fontSize:'.75rem',padding:'6px 10px'}}>
-                ⚠ {w}
-              </div>
+              <div key={i} className="alert alert-warning" style={{marginBottom:'4px',fontSize:'.75rem',padding:'6px 10px'}}>⚠ {w}</div>
             ))}
           </div>
         ) : null}
@@ -560,23 +578,37 @@ const [tplModal, setTplModal] = useState(false);
           </div>
         )}
       </div>
-{tplModal && (
+
+      {/* Модальне вікно шаблону */}
+      {tplModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000}}>
-          <div style={{background:'#fff',borderRadius:'12px',padding:'24px',width:'320px',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
-            <h3 style={{margin:'0 0 16px',fontSize:'1rem'}}>📐 {TEMPLATES[tplIdx].name}</h3>
-            <div style={{marginBottom:'12px'}}>
-              <label style={{display:'block',fontSize:'.8rem',fontWeight:500,marginBottom:'4px'}}>Ширина, м</label>
-              <input type="number" step="0.1" value={tplW}
-                onChange={e => setTplW(e.target.value)}
-                style={{width:'100%',padding:'8px 12px',border:'1px solid #d1d5db',borderRadius:'6px',fontSize:'.9rem',boxSizing:'border-box'}} />
+          <div style={{background:'#fff',borderRadius:'12px',padding:'24px',width:'360px',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+            <h3 style={{margin:'0 0 4px',fontSize:'1rem'}}>📐 {TEMPLATES[tplIdx].name}</h3>
+            <div style={{fontSize:'.8rem',color:'#6b7280',marginBottom:'16px'}}>Введіть розміри ската</div>
+
+            <div style={{textAlign:'center',marginBottom:'16px',background:'#f8fafc',borderRadius:'8px',padding:'12px'}}>
+              <svg viewBox="0 0 42 30" width="120" height="86" style={{color:'#1B5E2E'}}>
+                <g dangerouslySetInnerHTML={{__html: ICON_SVG[TEMPLATES[tplIdx].icon]}} />
+              </svg>
             </div>
-            <div style={{marginBottom:'20px'}}>
-              <label style={{display:'block',fontSize:'.8rem',fontWeight:500,marginBottom:'4px'}}>Висота (довжина крокви), м</label>
-              <input type="number" step="0.1" value={tplH}
-                onChange={e => setTplH(e.target.value)}
-                style={{width:'100%',padding:'8px 12px',border:'1px solid #d1d5db',borderRadius:'6px',fontSize:'.9rem',boxSizing:'border-box'}} />
-            </div>
-            <div style={{display:'flex',gap:'8px',justifyContent:'flex-end'}}>
+
+            {TEMPLATES[tplIdx].params.map(param => (
+              <div key={param.key} style={{marginBottom:'12px'}}>
+                <label style={{display:'block',fontSize:'.8rem',fontWeight:500,marginBottom:'4px',color:'#374151'}}>
+                  {param.label}
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  value={tplValues[param.key] ?? String(param.default)}
+                  onChange={e => setTplValues(v => ({...v, [param.key]: e.target.value}))}
+                  style={{width:'100%',padding:'8px 12px',border:'1px solid #d1d5db',borderRadius:'6px',fontSize:'.9rem',boxSizing:'border-box'}}
+                />
+              </div>
+            ))}
+
+            <div style={{display:'flex',gap:'8px',justifyContent:'flex-end',marginTop:'8px'}}>
               <button onClick={() => setTplModal(false)}
                 style={{padding:'8px 16px',border:'1px solid #d1d5db',borderRadius:'6px',cursor:'pointer',background:'#fff'}}>
                 Скасувати
@@ -588,7 +620,7 @@ const [tplModal, setTplModal] = useState(false);
             </div>
           </div>
         </div>
-     )}
+      )}
     </div>
   );
 }
