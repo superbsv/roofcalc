@@ -170,7 +170,7 @@ export default function ProjectPage({ projectId }: Props) {
 
   const selectedMaterial = materials.find(m => m.id === slopeParams.material_profile_id);
 
-  const totalPrice = specItems.reduce((s, i) => s + (i.total || 0), 0);
+  const totalPrice = specItems.reduce((s, i) => s + Number(i.total || 0), 0);
   const sheetItems = specItems.filter(i => i.type === 'sheet');
   const accItems   = specItems.filter(i => i.type === 'accessory');
   const fastItems  = specItems.filter(i => i.type === 'fastener');
@@ -534,14 +534,14 @@ export default function ProjectPage({ projectId }: Props) {
                               <tr key={item.id}>
                                 <td>{item.name}</td>
                                 <td>{item.unit}</td>
-                                <td>{item.quantity}</td>
-                                <td>{item.price?.toFixed(2)} грн</td>
-                                <td><b>{item.total?.toFixed(2)} грн</b></td>
+                                <td>{Number(item.quantity).toFixed(2)}</td>
+                                <td>{Number(item.price).toFixed(2)} грн</td>
+                                <td><b>{Number(item.total).toFixed(2)} грн</b></td>
                               </tr>
                             ))}
                             <tr className="tr-total">
                               <td colSpan={4}>Підсумок розділу</td>
-                              <td><b>{(items as SpecItem[]).reduce((s,i)=>s+i.total,0).toFixed(2)} грн</b></td>
+                              <td><b>{(items as SpecItem[]).reduce((s,i)=>s+Number(i.total),0).toFixed(2)} грн</b></td>
                             </tr>
                           </tbody>
                         </table>
