@@ -416,7 +416,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
           </defs>
 
           {/* Листи — обрізані по ширині ската */}
-          <g clipPath="url(#slope-bounds)">
+          <g>
             {visiblePlacements.map(p => {
               const length = p.manual_length ?? p.length;
               const ox = p.offset_x ?? 0, oy = p.offset_y ?? 0;
