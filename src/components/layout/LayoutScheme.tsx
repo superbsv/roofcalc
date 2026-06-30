@@ -169,8 +169,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     ? Math.max(...polygonPoints.map((_, i) => getPolygonHeightAtX(polygonPoints[i][0], polygonPoints)))
     : H;
   const eaveRidgeExtra = Math.max(0, baseLength - maxPolygonHeight);
-
-  const [placements, setPlacements]     = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
   const [placements, setPlacements]     = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
 
   // Оновлюємо placements коли приходить новий calcResult
