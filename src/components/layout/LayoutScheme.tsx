@@ -171,6 +171,15 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   const eaveRidgeExtra = Math.max(0, baseLength - maxPolygonHeight);
 
   const [placements, setPlacements]     = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
+  const [placements, setPlacements]     = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
+
+  // Оновлюємо placements коли приходить новий calcResult
+  useEffect(() => {
+    setPlacements(calcResult.placements.map(p => ({ ...p })));
+    layoutOffsetRef.current = 0;
+    setLayoutOffset(0);
+    setSelected(new Set());
+  }, [calcResult]);
   const layoutOffsetRef                 = useRef(0);
   const [layoutOffset, setLayoutOffset] = useState(0);
   const [selected, setSelected]         = useState<Set<number>>(new Set());
