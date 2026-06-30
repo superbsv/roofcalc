@@ -227,7 +227,9 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     });
   }, [selected, onUpdate]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const moveLeft  = (mm: number) => updateSelected(p => ({ ...p, offset_x: (p.offset_x??0) - mm }));
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const moveRight = (mm: number) => updateSelected(p => ({ ...p, offset_x: (p.offset_x??0) + mm }));
   const moveUp    = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y??0) + mm }));
   const moveDown  = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y??0) - mm }));
