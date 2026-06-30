@@ -420,7 +420,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
               const ox = p.offset_x ?? 0, oy = p.offset_y ?? 0;
               const isSel = selected.has(p.sheet_number);
               const x1 = tx(p.x + ox);
-              const y1 = ty(oy);
+              const y1 = ty(p.y + oy);
               const w  = p.full_width * scale;
               const h  = length * scale;
               const color = sheetColor(p, isSel);
