@@ -231,8 +231,24 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     const base = p.manual_length ?? p.length;
     if (!hasMultipleRows || rowSplitOffset === 0) return base;
 
-    const ox = p.offset_x ?? 0;
-    let colTotal = base + (p.row_index === 0 ? (placements.find(r => r.col_index === p.col_index && r.row_index === 1)?.length ?? 0) : 0) + (p.row_index === 0 ? 0 : originalSplitY);
+    if (p.row_index === 0) {
+      // Ряд 0 завжди тягнеться від 0 до лінії розподілу
+      return Math.max(1, effectiveSplitY);
+    }
+    if (p.row_index === 1) {
+      // Ряд 1: загальна висота колонки мінус нова лінія розподілу
+      // Загальна = originalSplitY + оригінальна довжина ряду 1
+      return Math.max(1, (originalSplitY + base) - effectiveSplitY);
+    }
+    return base;
+  };
+
+  const getDisplayY = (p: SheetPlacement): number => {
+    const oy = p.offset_y ?? 0;
+    if (!hasMultipleRows || rowSplitOffset === 0) return p.y + oy;
+    if (p.row_index >= 1) return effectiveSplitY + oy;
+    return oy; // ряд 0 завжди з нуля
+  };
 
     if (polygonPoints.length >= 3) {
       const colH = Math.max(
