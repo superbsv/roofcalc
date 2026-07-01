@@ -220,7 +220,13 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     onUpdate?.(np);
     setSelected(new Set());
   }, [W, H, polygonPoints, usefulWidth, fullWidth, baseLength, eaveRidgeExtra, onUpdate]);
-
+  const shiftVertical = useCallback((deltaMm: number) => {
+    setPlacements(prev => {
+      const updated = prev.map(p => ({ ...p, offset_y: (p.offset_y ?? 0) + deltaMm }));
+      onUpdate?.(updated.filter(p => !p.deleted));
+      return updated;
+    });
+  }, [onUpdate]);
   // Зсув лінії розподілу рядів
   const shiftSplit = useCallback((deltaMm: number) => {
     setRowSplitOffset(prev => prev + deltaMm);
