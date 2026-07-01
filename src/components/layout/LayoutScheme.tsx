@@ -215,11 +215,14 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     layoutOffsetRef.current += deltaMm;
     const newOffset = layoutOffsetRef.current;
     setLayoutOffset(newOffset);
-    const np = generateLayout(newOffset, W, H, polygonPoints, usefulWidth, fullWidth, baseLength, eaveRidgeExtra);
-    setPlacements(np);
-    onUpdate?.(np);
+    // Зсуваємо x всіх листів без перегенерації щоб зберегти multi-row
+    setPlacements(prev => {
+      const updated = prev.map(p => ({ ...p, offset_x: (p.offset_x ?? 0) + deltaMm }));
+      onUpdate?.(updated.filter(p => !p.deleted));
+      return updated;
+    });
     setSelected(new Set());
-  }, [W, H, polygonPoints, usefulWidth, fullWidth, baseLength, eaveRidgeExtra, onUpdate]);
+  }, [onUpdate]);
   const shiftVertical = useCallback((deltaMm: number) => {
     setPlacements(prev => {
       const updated = prev.map(p => ({ ...p, offset_y: (p.offset_y ?? 0) + deltaMm }));
@@ -393,13 +396,16 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
       {/* Зелена панель зсуву */}
       <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'10px 14px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap' }}>
         <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
-          <span style={{ fontSize:'.82rem', fontWeight:600, color:'#166534', whiteSpace:'nowrap' }}>🔄 По горизонталі:</span>
+          <span style={{ fontSize:'.82rem', fontWeight:600, color:'#166534', whiteSpace:'nowrap' }}>По вертикалі:</span>
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
             {STEPS.map(s => (
               <React.Fragment key={s.mm}>
-                <button onClick={()=>shiftLayout(-s.mm)} style={shiftBtn}>← {s.label}</button>
-                <button onClick={()=>shiftLayout(+s.mm)} style={shiftBtn}>→ {s.label}</button>
+                <button onClick={()=>shiftVertical(-s.mm)} style={shiftBtn}>↓ {s.label}</button>
+                <button onClick={()=>shiftVertical(+s.mm)} style={shiftBtn}>↑ {s.label}</button>
               </React.Fragment>
+            ))}
+          </div>
+        </div>
             ))}
           </div>
         </div>
