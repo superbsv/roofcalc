@@ -70,26 +70,6 @@ const PADDING = 80;
 const SVG_W   = 900;
 const SVG_H   = 600;
 
-function getPolygonHeightAtX(x: number, polygon: Point[]): number {
-  if (!polygon.length) return 0;
-  const ys: number[] = [];
-  const n = polygon.length;
-  for (let i = 0; i < n; i++) {
-    const [x1, y1] = polygon[i];
-    const [x2, y2] = polygon[(i + 1) % n];
-    if (x1 === x2) {
-      if (Math.abs(x1 - x) < 2) { ys.push(y1, y2); }
-      continue;
-    }
-    const xMin = Math.min(x1, x2), xMax = Math.max(x1, x2);
-    if (x >= xMin && x <= xMax) {
-      const t = (x - x1) / (x2 - x1);
-      ys.push(y1 + t * (y2 - y1));
-    }
-  }
-  if (ys.length < 2) return 0;
-  return Math.max(...ys) - Math.min(...ys);
-}
 
 export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onUpdate }: Props) {
   const W = calcResult.slope_width_mm;
