@@ -70,7 +70,6 @@ const PADDING = 80;
 const SVG_W   = 900;
 const SVG_H   = 600;
 
-// Висота полігону в точці X
 function getPolygonHeightAtX(x: number, polygon: Point[]): number {
   if (!polygon.length) return 0;
   const ys: number[] = [];
@@ -92,7 +91,6 @@ function getPolygonHeightAtX(x: number, polygon: Point[]): number {
   return Math.max(...ys) - Math.min(...ys);
 }
 
-// Генерація multi-row розкладки з заданим зсувом
 function generateLayoutMultiRow(
   layoutOffset: number,
   slopeWidth: number,
@@ -101,12 +99,11 @@ function generateLayoutMultiRow(
   fullWidth: number,
   sheetLength: number,
   rows: number,
-  effectiveLength: number, // = originalSplitY (відстань між рядами)
+  effectiveLength: number,
   eaveRidgeExtra: number,
 ): SheetPlacement[] {
   const placements: SheetPlacement[] = [];
   let sheetNum = 1;
-
   const startCol = Math.floor((-layoutOffset / usefulWidth) - 1) + 1;
 
   for (let col = startCol; ; col++) {
@@ -123,7 +120,6 @@ function generateLayoutMultiRow(
       getPolygonHeightAtX(visMid, polygon),
       getPolygonHeightAtX(visRight, polygon),
     );
-
     if (colH <= 0) continue;
 
     const totalNeeded = colH + eaveRidgeExtra;
@@ -133,7 +129,6 @@ function generateLayoutMultiRow(
       const remaining = totalNeeded - rowY;
       if (remaining <= 0) break;
       const rowLength = Math.min(sheetLength, remaining);
-
       placements.push({
         sheet_number: sheetNum++,
         col_index:    col,
@@ -146,11 +141,9 @@ function generateLayoutMultiRow(
       });
     }
   }
-
   return placements;
 }
 
-// Оцінка % відходу для листа (без даних від PHP)
 function estimateWastePct(
   sheetX: number,
   sheetY: number,
@@ -163,9 +156,7 @@ function estimateWastePct(
   const colH = getPolygonHeightAtX(sheetX + usefulWidth / 2, polygon);
   if (colH <= 0) return 100;
   const totalNeeded = colH + eaveRidgeExtra;
-  const overlapTop    = Math.min(sheetY + sheetLen, totalNeeded);
-  const overlapBottom = Math.max(sheetY, 0);
-  const overlapH = Math.max(0, overlapTop - overlapBottom);
+  const overlapH = Math.max(0, Math.min(sheetY + sheetLen, totalNeeded) - Math.max(sheetY, 0));
   const intersect = overlapH * usefulWidth;
   const full = sheetLen * fullWidth;
   if (full <= 0) return 100;
@@ -176,29 +167,23 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
 
-  // Параметри листа
   const usefulWidth  = calcResult.placements[0]?.useful_width ?? 1100;
   const fullWidth    = calcResult.placements[0]?.full_width   ?? 1185;
   const sheetLength  = calcResult.sheet_length_mm;
   const rows         = calcResult.rows_count;
 
-  // Зсув між рядами: row_index=1 починається з originalSplitY
-  const originalSplitY   = calcResult.placements.find(p => p.row_index === 1)?.y ?? sheetLength;
-  const effectiveLength  = originalSplitY; // = sheetLength - lengthOverlap
-  const hasMultipleRows  = rows > 1 && originalSplitY > 0;
+  const originalSplitY  = calcResult.placements.find(p => p.row_index === 1)?.y ?? sheetLength;
+  const effectiveLength = originalSplitY;
+  const hasMultipleRows = rows > 1 && originalSplitY > 0;
+  const eaveRidgeExtra  = Math.max(0, sheetLength - H);
 
-  // eaveRidgeExtra: різниця між повною потребою і висотою ската (для 1-рядного)
-  // Для multi-row: повна висота = rows * effectiveLength + (sheetLength - effectiveLength)
-  // Але для оцінки кольору досить грубо
-  const eaveRidgeExtra = Math.max(0, sheetLength - H);
-
-  const [placements, setPlacements]       = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
+  const [placements, setPlacements]         = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
   const [rowSplitOffset, setRowSplitOffset] = useState(0);
-  const [isShifted, setIsShifted]         = useState(false); // чи були зміни горизонтального зсуву
+  const [isShifted, setIsShifted]           = useState(false);
   const layoutOffsetRef = useRef(0);
-  const [layoutOffset, setLayoutOffset]   = useState(0);
-  const [selected, setSelected]           = useState<Set<number>>(new Set());
-  const [zoom, setZoom]                   = useState(1);
+  const [layoutOffset, setLayoutOffset]     = useState(0);
+  const [selected, setSelected]             = useState<Set<number>>(new Set());
+  const [zoom, setZoom]                     = useState(1);
 
   const [rubberBand, setRubberBand] = useState<{x1:number;y1:number;x2:number;y2:number}|null>(null);
   const svgRef     = useRef<SVGSVGElement>(null);
@@ -227,19 +212,12 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
 
   const effectiveSplitY = originalSplitY + rowSplitOffset;
 
+  // ---- Довжина і Y для відображення ----
   const getDisplayLength = (p: SheetPlacement): number => {
     const base = p.manual_length ?? p.length;
     if (!hasMultipleRows || rowSplitOffset === 0) return base;
-
-    if (p.row_index === 0) {
-      // Ряд 0 завжди тягнеться від 0 до лінії розподілу
-      return Math.max(1, effectiveSplitY);
-    }
-    if (p.row_index === 1) {
-      // Ряд 1: загальна висота колонки мінус нова лінія розподілу
-      // Загальна = originalSplitY + оригінальна довжина ряду 1
-      return Math.max(1, (originalSplitY + base) - effectiveSplitY);
-    }
+    if (p.row_index === 0) return Math.max(1, effectiveSplitY);
+    if (p.row_index === 1) return Math.max(1, (originalSplitY + base) - effectiveSplitY);
     return base;
   };
 
@@ -247,45 +225,16 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     const oy = p.offset_y ?? 0;
     if (!hasMultipleRows || rowSplitOffset === 0) return p.y + oy;
     if (p.row_index >= 1) return effectiveSplitY + oy;
-    return oy; // ряд 0 завжди з нуля
+    return oy;
   };
 
-    if (polygonPoints.length >= 3) {
-      const colH = Math.max(
-        getPolygonHeightAtX(p.x + ox, polygonPoints),
-        getPolygonHeightAtX(p.x + ox + p.useful_width / 2, polygonPoints),
-        getPolygonHeightAtX(p.x + ox + p.useful_width, polygonPoints),
-      );
-      if (colH > 0) colTotal = colH + eaveRidgeExtra;
-    }
-
-    if (p.row_index === 0) {
-      return Math.max(0, Math.min(sheetLength, Math.min(colTotal, effectiveSplitY)));
-    }
-    if (p.row_index === 1) {
-      return Math.max(0, Math.min(sheetLength, colTotal - effectiveSplitY));
-    }
-    return base;
-  };
-
-  const getDisplayY = (p: SheetPlacement): number => {
-    const oy = p.offset_y ?? 0;
-    if (!hasMultipleRows || rowSplitOffset === 0) return p.y + oy;
-    // Ряд 1 завжди починається точно з лінії розподілу
-    if (p.row_index >= 1) return effectiveSplitY + oy;
-    return p.y + oy;
-  };
-
-  // Колір листа з урахуванням актуального стану
   const sheetColor = (p: SheetPlacement, isSel: boolean): string => {
     if (isSel) return COLORS.selected;
-
     const dispLen = getDisplayLength(p);
     const dispY   = getDisplayY(p);
     const ox      = p.offset_x ?? 0;
     const sheetX  = p.x + ox;
 
-    // Якщо є дані від PHP і лист не переміщений
     if (!isShifted && !p.offset_x && !p.offset_y && !p.manual_length &&
         p.intersect_area_m2 !== undefined && p.full_area_m2 !== undefined) {
       const wastePct = (p.waste_area_m2??0) / (p.full_area_m2??1) * 100;
@@ -294,33 +243,25 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
       return COLORS.full;
     }
 
-    // Оцінка з полігону
     if (polygonPoints.length >= 3) {
       const wastePct = estimateWastePct(sheetX, dispY, dispLen, p.useful_width, p.full_width, polygonPoints, eaveRidgeExtra);
       if (wastePct > 50) return COLORS.waste;
       if (wastePct > 5)  return COLORS.cut;
       return COLORS.full;
     }
-
     return COLORS.full;
   };
 
   const visiblePlacements = placements.filter(p => !p.deleted);
   const hasSelection = selected.size > 0;
 
-  // Горизонтальний зсув з перегенерацією multi-row
   const shiftLayout = useCallback((deltaMm: number) => {
     layoutOffsetRef.current += deltaMm;
     const newOffset = layoutOffsetRef.current;
     setLayoutOffset(newOffset);
     setIsShifted(true);
-
     if (polygonPoints.length >= 3) {
-      const np = generateLayoutMultiRow(
-        newOffset, W, polygonPoints,
-        usefulWidth, fullWidth,
-        sheetLength, rows, effectiveLength, eaveRidgeExtra,
-      );
+      const np = generateLayoutMultiRow(newOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, rows, effectiveLength, eaveRidgeExtra);
       setPlacements(np);
       onUpdate?.(np);
     } else {
@@ -345,10 +286,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     });
   }, [selected, onUpdate]);
 
-  const moveUp    = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y??0) + mm }));
-  const moveDown  = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y??0) - mm }));
-  const lenPlus   = (mm: number) => updateSelected(p => ({ ...p, manual_length: (p.manual_length??p.length) + mm }));
-  const lenMinus  = (mm: number) => updateSelected(p => ({ ...p, manual_length: Math.max(1, (p.manual_length??p.length) - mm) }));
+  const moveUp   = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y??0) + mm }));
+  const moveDown = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y??0) - mm }));
+  const lenPlus  = (mm: number) => updateSelected(p => ({ ...p, manual_length: (p.manual_length??p.length) + mm }));
+  const lenMinus = (mm: number) => updateSelected(p => ({ ...p, manual_length: Math.max(1, (p.manual_length??p.length) - mm) }));
 
   const deleteSelected = () => {
     setPlacements(prev => {
@@ -411,10 +352,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
       const minX = Math.min(w1.wx, w2.wx), maxX = Math.max(w1.wx, w2.wx);
       const minY = Math.min(w1.wy, w2.wy), maxY = Math.max(w1.wy, w2.wy);
       const inRect = visiblePlacements.filter(p => {
-        const len  = getDisplayLength(p);
+        const len   = getDisplayLength(p);
         const dispY = getDisplayY(p);
-        const ox   = p.offset_x ?? 0;
-        const px   = p.x + ox;
+        const ox    = p.offset_x ?? 0;
+        const px    = p.x + ox;
         return px < maxX && px + p.full_width > minX && dispY < maxY && dispY + len > minY;
       }).map(p => p.sheet_number);
       if (inRect.length > 0) {
@@ -466,7 +407,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   return (
     <div style={{ fontFamily:'system-ui, sans-serif', position:'relative' }}>
 
-      {/* Заголовок */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px', flexWrap:'wrap', gap:'8px' }}>
         <div>
           <h3 style={{ margin:0, fontSize:'1rem' }}>Схема розкладки — {slopeName}</h3>
@@ -492,7 +432,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
         💡 Клік — виділити · Shift+клік — додати · Тягни мишу — виділити область
       </div>
 
-      {/* Зелена панель зсуву */}
       <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'10px 14px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap' }}>
         <span style={{ fontSize:'.82rem', fontWeight:600, color:'#166534', whiteSpace:'nowrap' }}>🔄 По горизонталі:</span>
         <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
@@ -505,7 +444,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
         </div>
       </div>
 
-      {/* Блакитна панель розподілу рядів */}
       {hasMultipleRows && (
         <div style={{ background:'#ecfeff', border:'1px solid #a5f3fc', borderRadius:'8px', padding:'10px 14px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
           <span style={{ fontSize:'.82rem', fontWeight:600, color:'#0e7490', whiteSpace:'nowrap' }}>
@@ -527,7 +465,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
         </div>
       )}
 
-      {/* SVG */}
       <div style={{ overflowX:'auto', overflowY:'auto', maxHeight:'580px', border:'1px solid #e5e7eb', borderRadius:'10px', background:COLORS.bg }}>
         <svg ref={svgRef} width={SVG_W*zoom} height={SVG_H*zoom} viewBox={`0 0 ${SVG_W} ${SVG_H}`}
           style={{ display:'block' }}
@@ -578,7 +515,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
             })}
           </g>
 
-          {/* Лінія розподілу рядів */}
           {hasMultipleRows && effectiveSplitY > 0 && (
             <g>
               <line x1={PADDING} y1={ty(effectiveSplitY)} x2={PADDING+W*scale} y2={ty(effectiveSplitY)}
@@ -611,7 +547,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
         </svg>
       </div>
 
-      {/* Легенда */}
       <div style={{ display:'flex', gap:'16px', marginTop:'12px', flexWrap:'wrap' }}>
         <LegendItem color={COLORS.full}     label="Повний лист"/>
         <LegendItem color={COLORS.cut}      label="Обрізаний лист"/>
@@ -620,7 +555,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
         {hasMultipleRows && <LegendItem color={COLORS.split} label="Лінія розподілу рядів"/>}
       </div>
 
-      {/* Таблиця */}
       <div style={{ marginTop:'16px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:'8px', overflow:'hidden' }}>
         <div style={{ padding:'10px 16px', background:'#f9fafb', borderBottom:'1px solid #e5e7eb', fontWeight:600, fontSize:'.85rem' }}>
           Специфікація листів
@@ -656,7 +590,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
         </table>
       </div>
 
-      {/* Плаваюча панель */}
       {hasSelection && (
         <div onMouseDown={onPanelMouseDown}
           style={{ position:'fixed', left:panelPos.x, top:panelPos.y, zIndex:500,
