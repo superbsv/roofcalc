@@ -1,7 +1,6 @@
 // ============================================
 // ArtBudTrading Roof Calculator
 // components/editor/SlopeEditor.tsx
-// Повнофункціональний Canvas-редактор скатів
 // ============================================
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
@@ -17,6 +16,7 @@ interface Props {
 
 const COLORS = {
   grid:       '#E2E8F0',
+  axis:       '#CBD5E0',
   polygon:    '#1B5E2E',
   polygonFill:'rgba(27,94,46,0.08)',
   point:      '#1B5E2E',
@@ -24,6 +24,8 @@ const COLORS = {
   sheet:      ['rgba(21,101,192,0.18)','rgba(27,94,46,0.18)'],
   sheetBorder:['#1565C0','#1B5E2E'],
   dim:        '#1565C0',
+  tooltip:    '#1a1a2e',
+  cursorLen:  '#1565C0',
 };
 
 interface TplParam { key: string; label: string; default: number; }
@@ -120,6 +122,9 @@ const ICON_SVG: Record<string, string> = {
   step: '<polyline points="3,24 3,4 18,4 18,13 37,13 37,24 3,24" fill="none" stroke="currentColor" stroke-width="1.5"/>',
 };
 
+// Точність прив'язки — 1мм
+const SNAP_PRECISION = 0.001;
+
 export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOnly, gridScale = 1 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef   = useRef<HTMLDivElement>(null);
@@ -129,15 +134,14 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   const [mode, setMode]             = useState<'draw'|'move'>('draw');
   const [mouse, setMouse]           = useState<Point>([0, 0]);
   const [scale, setScale]           = useState(60);
-  const [offset, setOffset]         = useState<Point>([40, 40]);
+  const [offset, setOffset]         = useState<Point>([60, 40]);
   const [dragIdx, setDragIdx]       = useState(-1);
   const [showLayout, setShowLayout] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState<number | null>(null);
 
-  // Модальне вікно шаблону
-  const [tplModal, setTplModal]     = useState(false);
-  const [tplIdx, setTplIdx]         = useState(0);
-  const [tplValues, setTplValues]   = useState<Record<string,string>>({});
+  const [tplModal, setTplModal]   = useState(false);
+  const [tplIdx, setTplIdx]       = useState(0);
+  const [tplValues, setTplValues] = useState<Record<string,string>>({});
 
   useEffect(() => {
     if (slope?.polygon_points?.length) {
@@ -167,6 +171,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     if (showLayout && calcResult?.placements) drawLayout(ctx, calcResult.placements);
     drawPolygon(ctx, H);
     drawPoints(ctx, H);
+    if (mode === 'draw' && !closed) drawCursorInfo(ctx, H);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [points, closed, mouse, scale, offset, mode, showLayout, calcResult]);
 
@@ -192,36 +197,71 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   const s2w = (sx: number, sy: number, H: number): Point => {
     const wx = (sx - offset[0]) / scale;
     const wy = (H - sy - offset[1]) / scale;
-    return [snapGrid(wx), snapGrid(wy)];
+    // Прив'язка до 1мм
+    return [
+      Math.round(wx / SNAP_PRECISION) * SNAP_PRECISION,
+      Math.round(wy / SNAP_PRECISION) * SNAP_PRECISION,
+    ];
   };
-
-  const snapGrid = (v: number) => Math.round(v / gridScale) * gridScale;
 
   function drawGrid(ctx: CanvasRenderingContext2D, W: number, H: number) {
     const step = scale * gridScale;
     ctx.save();
+
+    // Тонкі лінії сітки по всій площині
     ctx.strokeStyle = COLORS.grid;
     ctx.lineWidth = 0.5;
+    // Вертикальні лінії — від лівого краю до правого
     const startX = ((offset[0] % step) + step) % step;
     for (let x = startX; x < W; x += step) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
     }
-    const startY = ((H - offset[1]) % step + step) % step;
-    for (let y = startY % step; y < H; y += step) {
+    // Горизонтальні лінії
+    const startY = (((H - offset[1]) % step) + step) % step;
+    for (let y = startY; y < H; y += step) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
-    ctx.fillStyle = '#A0AEC0'; ctx.font = '10px Inter, sans-serif';
-    const gs = gridScale;
-    let i = 0;
-    for (let x = offset[0]; x < W; x += step) {
-      ctx.fillText((i * gs).toFixed(gs < 1 ? 1 : 0) + 'м', x + 2, H - offset[1] + 13);
-      i++;
+
+    // Осі X та Y (жирніші)
+    ctx.strokeStyle = COLORS.axis;
+    ctx.lineWidth = 1;
+    const axisY = H - offset[1];
+    if (axisY >= 0 && axisY <= H) {
+      ctx.beginPath(); ctx.moveTo(0, axisY); ctx.lineTo(W, axisY); ctx.stroke();
     }
-    i = 0;
-    for (let y = H - offset[1]; y > 0; y -= step) {
-      if (i > 0) ctx.fillText((i * gs).toFixed(gs < 1 ? 1 : 0), 2, y - 2);
-      i++;
+    const axisX = offset[0];
+    if (axisX >= 0 && axisX <= W) {
+      ctx.beginPath(); ctx.moveTo(axisX, 0); ctx.lineTo(axisX, H); ctx.stroke();
     }
+
+    // Підписи по X (на всю ширину)
+    ctx.fillStyle = '#718096';
+    ctx.font = '10px Inter, system-ui, sans-serif';
+    const labelY = Math.min(H - 4, axisY + 14);
+    // Знаходимо першу мітку зліва
+    const firstI = Math.floor(-offset[0] / step);
+    for (let i = firstI; i * step + offset[0] < W; i++) {
+      const px = i * step + offset[0];
+      if (px < 0) continue;
+      const val = (i * gridScale).toFixed(gridScale < 1 ? 1 : 0);
+      ctx.fillText(val + 'м', px + 3, labelY);
+      // Мала риска на осі
+      ctx.beginPath(); ctx.moveTo(px, axisY - 3); ctx.lineTo(px, axisY + 3);
+      ctx.strokeStyle = COLORS.axis; ctx.lineWidth = 1; ctx.stroke();
+    }
+
+    // Підписи по Y (на всю висоту)
+    const firstJ = Math.floor((offset[1] - H) / step);
+    for (let j = firstJ; j * step < offset[1]; j++) {
+      const py = H - offset[1] + j * step;
+      if (py < 0 || py > H) continue;
+      if (j === 0) continue;
+      const val = (-j * gridScale).toFixed(gridScale < 1 ? 1 : 0);
+      ctx.fillText(val, axisX < 30 ? 2 : axisX - 28, py - 2);
+      ctx.beginPath(); ctx.moveTo(axisX - 3, py); ctx.lineTo(axisX + 3, py);
+      ctx.strokeStyle = COLORS.axis; ctx.lineWidth = 1; ctx.stroke();
+    }
+
     ctx.restore();
   }
 
@@ -243,16 +283,74 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     }
     ctx.strokeStyle = COLORS.polygon; ctx.lineWidth = 2;
     ctx.stroke();
+
+    // Підписи довжин сторін
     if (closed) {
-      ctx.font = '11px Inter, sans-serif';
+      ctx.font = '11px Inter, system-ui, sans-serif';
       ctx.fillStyle = COLORS.dim;
       for (let i = 0; i < points.length; i++) {
         const a = points[i], b = points[(i + 1) % points.length];
-        const len = Math.sqrt((b[0]-a[0])**2 + (b[1]-a[1])**2) * gridScale;
+        const len = Math.sqrt((b[0]-a[0])**2 + (b[1]-a[1])**2);
         const [mx, my] = w2s((a[0]+b[0])/2, (a[1]+b[1])/2, H);
-        ctx.fillText(len.toFixed(2) + 'м', mx + 4, my - 4);
+        ctx.fillText(len.toFixed(3) + 'м', mx + 4, my - 4);
       }
     }
+    ctx.restore();
+  }
+
+  // Підсвічування координат та довжини поточного відрізка
+  function drawCursorInfo(ctx: CanvasRenderingContext2D, H: number) {
+    const [wx, wy] = s2w(mouse[0], mouse[1], H);
+    const mx = mouse[0], my = mouse[1];
+
+    ctx.save();
+    ctx.font = '11px Inter, system-ui, sans-serif';
+
+    // Перехрестя на курсорі
+    ctx.strokeStyle = 'rgba(21,101,192,0.5)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(mx, 0); ctx.lineTo(mx, H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, my); ctx.lineTo(canvasRef.current!.width, my); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Рядок координат і довжини
+    const coordStr = `X = ${wx.toFixed(3)} м;  Y = ${wy.toFixed(3)} м`;
+    let lenStr = '';
+    if (points.length > 0) {
+      const last = points[points.length - 1];
+      const len = Math.sqrt((wx - last[0])**2 + (wy - last[1])**2);
+      lenStr = `  a = ${len.toFixed(3)} м`;
+    }
+    const fullStr = coordStr + lenStr;
+
+    // Тло підказки
+    const textW = ctx.measureText(fullStr).width + 16;
+    const textH = 20;
+    let bx = mx + 14, by = my - 30;
+    const W = canvasRef.current!.width;
+    if (bx + textW > W - 4) bx = mx - textW - 14;
+    if (by < 4) by = my + 14;
+
+    ctx.fillStyle = 'rgba(26,26,46,0.85)';
+    ctx.beginPath();
+    ctx.roundRect?.(bx, by, textW, textH, 4);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(coordStr, bx + 8, by + 13);
+
+    if (lenStr) {
+      ctx.fillStyle = '#93c5fd';
+      ctx.fillText(lenStr, bx + 8 + ctx.measureText(coordStr).width, by + 13);
+    }
+
+    // Крапка прив'язки
+    ctx.fillStyle = COLORS.cursorLen;
+    ctx.beginPath();
+    ctx.arc(mx, my, 3, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.restore();
   }
 
@@ -292,7 +390,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       ctx.lineWidth = 0.7;
       ctx.strokeRect(px, py - ph, pw, ph);
       if (pw > 28 && ph > 14) {
-        ctx.font = '9px Inter, sans-serif';
+        ctx.font = '9px Inter, system-ui, sans-serif';
         ctx.fillStyle = COLORS.sheetBorder[ci];
         ctx.fillText(`${pl.col_index+1},${pl.row_index+1}`, px + 3, py - ph + 11);
       }
@@ -300,20 +398,19 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     ctx.restore();
   }
 
-function fitView(pts: Point[]) {
+  function fitView(pts: Point[]) {
     const cv = canvasRef.current;
     const wrap = wrapRef.current;
     if (!pts.length) return;
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-    // Беремо реальні розміри з wrap або canvas
-    const W = (wrap?.clientWidth || cv?.width || 600) - 0;
-    const H = (wrap?.clientHeight || cv?.height || 500) - 0;
+    const W = (wrap?.clientWidth || cv?.width || 600);
+    const H = (wrap?.clientHeight || cv?.height || 500);
     const pw = Math.max(...xs) - Math.min(...xs) || 1;
     const ph = Math.max(...ys) - Math.min(...ys) || 1;
-    const PADDING = 80;
-    const newScale = Math.min((W - PADDING * 2) / pw, (H - PADDING * 2) / ph) * 0.85;
-    const newOffX  = PADDING - Math.min(...xs) * newScale;
-    const newOffY  = PADDING - Math.min(...ys) * newScale;
+    const PAD = 80;
+    const newScale = Math.min((W - PAD * 2) / pw, (H - PAD * 2) / ph) * 0.85;
+    const newOffX  = PAD - Math.min(...xs) * newScale;
+    const newOffY  = PAD - Math.min(...ys) * newScale;
     setScale(newScale);
     setOffset([newOffX, newOffY]);
   }
@@ -340,6 +437,7 @@ function fitView(pts: Point[]) {
     const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
     const H = cv.height;
     const [wx, wy] = s2w(sx, sy, H);
+
     if (e.button === 2) {
       e.preventDefault();
       if (!closed && points.length >= 3) { setClosed(true); notifyChange(points); }
@@ -366,6 +464,21 @@ function fitView(pts: Point[]) {
   };
 
   const onMouseUp = () => setDragIdx(-1);
+
+  // Колесо миші — масштабування
+  const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const cv = canvasRef.current!;
+    const rect = cv.getBoundingClientRect();
+    const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const newScale = Math.max(10, Math.min(2000, scale * factor));
+    // Zoom до точки під курсором
+    const newOffX = sx - (sx - offset[0]) * (newScale / scale);
+    const newOffY = sy - (sy - offset[1]) * (newScale / scale);
+    setScale(newScale);
+    setOffset([newOffX, newOffY]);
+  };
 
   const onKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Enter' && !closed && points.length >= 3) {
@@ -416,13 +529,11 @@ function fitView(pts: Point[]) {
     onPolygonChange([]);
   }
 
-  const coordsText = (() => {
-    const cv = canvasRef.current;
-    if (!cv) return '';
-    const H = cv.height || 500;
-    const [wx, wy] = s2w(mouse[0], mouse[1], H);
-    return `X: ${(wx*gridScale).toFixed(2)}м  Y: ${(wy*gridScale).toFixed(2)}м`;
-  })();
+  // Поточні координати для статус-рядка
+  const cv0 = canvasRef.current;
+  const H0  = cv0?.height || 500;
+  const [curWx, curWy] = s2w(mouse[0], mouse[1], H0);
+  const coordsText = `X: ${curWx.toFixed(3)} м  Y: ${curWy.toFixed(3)} м`;
 
   return (
     <div className="editor-wrap">
@@ -469,6 +580,7 @@ function fitView(pts: Point[]) {
           <b style={{color:'var(--clr-text-2)'}}>Управління:</b><br/>
           ЛКМ — точка<br/>
           ПКМ / Enter — замкнути<br/>
+          Колесо — масштаб<br/>
           Ctrl+Z — відмінити<br/>
           Esc — скинути
         </div>
@@ -482,14 +594,15 @@ function fitView(pts: Point[]) {
           onMouseMove={onMouseMove}
           onMouseDown={onMouseDown}
           onMouseUp={onMouseUp}
+          onWheel={onWheel}
           onContextMenu={e => e.preventDefault()}
         />
         <div className="editor-toolbar">
           <button className="btn btn-sm btn-secondary btn-icon" title="Відмінити (Ctrl+Z)"
             onClick={() => closed ? setClosed(false) : setPoints(p => p.slice(0,-1))}>↩</button>
-          <button className="btn btn-sm btn-secondary btn-icon" title="Збільшити"
+          <button className="btn btn-sm btn-secondary btn-icon" title="Збільшити (+)"
             onClick={() => setScale(s => s * 1.25)}>+</button>
-          <button className="btn btn-sm btn-secondary btn-icon" title="Зменшити"
+          <button className="btn btn-sm btn-secondary btn-icon" title="Зменшити (-)"
             onClick={() => setScale(s => s / 1.25)}>−</button>
           <button className="btn btn-sm btn-secondary btn-icon" title="По розміру"
             onClick={() => fitView(points)}>⛶</button>
@@ -521,13 +634,19 @@ function fitView(pts: Point[]) {
               <div style={{display:'flex',justifyContent:'space-between',fontSize:'.8rem'}}>
                 <span style={{color:'var(--clr-text-3)'}}>Ширина:</span>
                 <span style={{fontWeight:600,fontFamily:'var(--font-mono)'}}>
-                  {((Math.max(...points.map(p=>p[0]))-Math.min(...points.map(p=>p[0])))*gridScale).toFixed(2)} м
+                  {((Math.max(...points.map(p=>p[0]))-Math.min(...points.map(p=>p[0]))*gridScale)).toFixed(3)} м
                 </span>
               </div>
               <div style={{display:'flex',justifyContent:'space-between',fontSize:'.8rem'}}>
                 <span style={{color:'var(--clr-text-3)'}}>Висота:</span>
                 <span style={{fontWeight:600,fontFamily:'var(--font-mono)'}}>
-                  {((Math.max(...points.map(p=>p[1]))-Math.min(...points.map(p=>p[1])))*gridScale).toFixed(2)} м
+                  {((Math.max(...points.map(p=>p[1]))-Math.min(...points.map(p=>p[1]))*gridScale)).toFixed(3)} м
+                </span>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:'.8rem'}}>
+                <span style={{color:'var(--clr-text-3)'}}>Точки:</span>
+                <span style={{fontWeight:500,fontFamily:'var(--font-mono)',fontSize:'.7rem'}}>
+                  {points.map(p=>`(${p[0].toFixed(2)},${p[1].toFixed(2)})`).join(' ')}
                 </span>
               </div>
             </div>
@@ -603,8 +722,8 @@ function fitView(pts: Point[]) {
                 </label>
                 <input
                   type="number"
-                  step="0.1"
-                  min="0.1"
+                  step="0.001"
+                  min="0.001"
                   value={tplValues[param.key] ?? String(param.default)}
                   onChange={e => setTplValues(v => ({...v, [param.key]: e.target.value}))}
                   style={{width:'100%',padding:'8px 12px',border:'1px solid #d1d5db',borderRadius:'6px',fontSize:'.9rem',boxSizing:'border-box'}}
