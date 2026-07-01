@@ -91,65 +91,12 @@ function getPolygonHeightAtX(x: number, polygon: Point[]): number {
   return Math.max(...ys) - Math.min(...ys);
 }
 
-function generateLayout(
-  layoutOffset: number,
-  slopeWidth: number,
-  slopeHeight: number,
-  polygon: Point[],
-  usefulWidth: number,
-  fullWidth: number,
-  baseLength: number,
-  eaveRidgeExtra: number,
-): SheetPlacement[] {
-  const placements: SheetPlacement[] = [];
-  let sheetNum = 1;
-  const startCol = Math.floor((-layoutOffset / usefulWidth) - 1) + 1;
-
-  for (let col = startCol; ; col++) {
-    const x = layoutOffset + col * usefulWidth;
-    if (x >= slopeWidth) break;
-    if (x + usefulWidth <= 0) continue;
-
-    const visLeft  = Math.max(0, x);
-    const visRight = Math.min(slopeWidth, x + usefulWidth);
-    const visMid   = (visLeft + visRight) / 2;
-
-    const hL = getPolygonHeightAtX(visLeft, polygon);
-    const hM = getPolygonHeightAtX(visMid, polygon);
-    const hR = getPolygonHeightAtX(visRight, polygon);
-    const colH = Math.max(hL, hM, hR);
-
-    if (colH <= 0) continue;
-    const sheetLength = Math.max(1, Math.round(colH + eaveRidgeExtra));
-
-    placements.push({
-      sheet_number: sheetNum++,
-      col_index:    col,
-      row_index:    0,
-      x,
-      y:            0,
-      full_width:   fullWidth,
-      useful_width: usefulWidth,
-      length:       sheetLength,
-    });
-  }
-
-  return placements;
-}
-
 export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onUpdate }: Props) {
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
-  const usefulWidth    = calcResult.placements[0]?.useful_width ?? 1100;
-  const fullWidth      = calcResult.placements[0]?.full_width  ?? 1185;
-  const baseLength     = calcResult.sheet_length_mm;
-  const maxPolygonHeight = polygonPoints.length >= 3
-    ? Math.max(...polygonPoints.map((_, i) => getPolygonHeightAtX(polygonPoints[i][0], polygonPoints)))
-    : H;
-  const eaveRidgeExtra = Math.max(0, baseLength - maxPolygonHeight);
 
   const [placements, setPlacements] = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
-  const [rowSplitOffset, setRowSplitOffset] = useState(0); // зсув лінії розподілу рядів мм
+  const [rowSplitOffset, setRowSplitOffset] = useState(0);
   const layoutOffsetRef = useRef(0);
   const [layoutOffset, setLayoutOffset] = useState(0);
   const [selected, setSelected]         = useState<Set<number>>(new Set());
@@ -179,12 +126,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     ? polygonPoints.map((p, i) => `${i===0?'M':'L'} ${tx(p[0])} ${ty(p[1])}`).join(' ') + ' Z'
     : `M ${tx(0)} ${ty(0)} L ${tx(W)} ${ty(0)} L ${tx(W)} ${ty(H)} L ${tx(0)} ${ty(H)} Z`;
 
-  // Оригінальна Y-позиція розділу (з першого листа row_index=1)
   const originalSplitY = calcResult.placements.find(p => p.row_index === 1)?.y ?? 0;
   const hasMultipleRows = calcResult.rows_count > 1 && originalSplitY > 0;
   const effectiveSplitY = originalSplitY + rowSplitOffset;
 
-  // Обчислюємо відображувані довжини з урахуванням rowSplitOffset
   const getDisplayLength = (p: SheetPlacement): number => {
     const base = p.manual_length ?? p.length;
     if (!hasMultipleRows || rowSplitOffset === 0) return base;
@@ -210,12 +155,9 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   const visiblePlacements = placements.filter(p => !p.deleted);
   const hasSelection = selected.size > 0;
 
-  // Зсув розкладки
   const shiftLayout = useCallback((deltaMm: number) => {
     layoutOffsetRef.current += deltaMm;
-    const newOffset = layoutOffsetRef.current;
-    setLayoutOffset(newOffset);
-    // Зсуваємо x всіх листів без перегенерації щоб зберегти multi-row
+    setLayoutOffset(layoutOffsetRef.current);
     setPlacements(prev => {
       const updated = prev.map(p => ({ ...p, offset_x: (p.offset_x ?? 0) + deltaMm }));
       onUpdate?.(updated.filter(p => !p.deleted));
@@ -223,14 +165,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     });
     setSelected(new Set());
   }, [onUpdate]);
-  const shiftVertical = useCallback((deltaMm: number) => {
-    setPlacements(prev => {
-      const updated = prev.map(p => ({ ...p, offset_y: (p.offset_y ?? 0) + deltaMm }));
-      onUpdate?.(updated.filter(p => !p.deleted));
-      return updated;
-    });
-  }, [onUpdate]);
-  // Зсув лінії розподілу рядів
+
   const shiftSplit = useCallback((deltaMm: number) => {
     setRowSplitOffset(prev => prev + deltaMm);
   }, []);
@@ -243,10 +178,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     });
   }, [selected, onUpdate]);
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const moveLeft  = (mm: number) => updateSelected(p => ({ ...p, offset_x: (p.offset_x??0) - mm }));
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const moveRight = (mm: number) => updateSelected(p => ({ ...p, offset_x: (p.offset_x??0) + mm }));
   const moveUp    = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y??0) + mm }));
   const moveDown  = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y??0) - mm }));
   const lenPlus   = (mm: number) => updateSelected(p => ({ ...p, manual_length: (p.manual_length??p.length) + mm }));
@@ -451,7 +382,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
             </marker>
           </defs>
 
-          {/* Листи */}
           <g clipPath="url(#slope-bounds)">
             {visiblePlacements.map(p => {
               const length = getDisplayLength(p);
@@ -482,17 +412,12 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
             })}
           </g>
 
-          {/* Лінія розподілу рядів */}
           {hasMultipleRows && effectiveSplitY > 0 && (
             <g>
-              <line
-                x1={PADDING} y1={ty(effectiveSplitY)}
-                x2={PADDING + W*scale} y2={ty(effectiveSplitY)}
+              <line x1={PADDING} y1={ty(effectiveSplitY)} x2={PADDING+W*scale} y2={ty(effectiveSplitY)}
                 stroke={COLORS.split} strokeWidth="2" strokeDasharray="8 4"/>
-              <rect x={PADDING+2} y={ty(effectiveSplitY)-10} width={80} height={18} rx="4"
-                fill={COLORS.split} opacity={0.9}/>
-              <text x={PADDING+6} y={ty(effectiveSplitY)+3}
-                fill="#fff" fontSize="10" fontWeight="600">
+              <rect x={PADDING+2} y={ty(effectiveSplitY)-10} width={80} height={18} rx="4" fill={COLORS.split} opacity={0.9}/>
+              <text x={PADDING+6} y={ty(effectiveSplitY)+3} fill="#fff" fontSize="10" fontWeight="600">
                 ✂ {(effectiveSplitY/1000).toFixed(2)}м
               </text>
             </g>
@@ -578,7 +503,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
           </div>
           <div style={{ padding:'12px' }}>
             <div style={{ marginBottom:'10px' }}>
-              <div style={sectionLabel}>← → Зсув по горизонталі (з перегенерацією)</div>
+              <div style={sectionLabel}>← → Зсув по горизонталі</div>
               {STEPS.map(s=>(
                 <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px' }}>
                   <button onClick={()=>shiftLayout(-s.mm)} style={ctrlBtn}>← {s.label}</button>
@@ -604,6 +529,17 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
                 </div>
               ))}
             </div>
+            {hasMultipleRows && (
+              <div style={{ marginBottom:'12px' }}>
+                <div style={sectionLabel}>✂ Лінія розподілу рядів</div>
+                {STEPS.map(s=>(
+                  <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px' }}>
+                    <button onClick={()=>shiftSplit(-s.mm)} style={{ ...ctrlBtn, color:'#0e7490', borderColor:'#a5f3fc' }}>↓ {s.label}</button>
+                    <button onClick={()=>shiftSplit(+s.mm)} style={{ ...ctrlBtn, color:'#0e7490', borderColor:'#a5f3fc' }}>↑ {s.label}</button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div style={{ display:'flex', flexDirection:'column', gap:'6px', borderTop:'1px solid #e5e7eb', paddingTop:'10px' }}>
               <button onClick={resetSelected} style={{ padding:'6px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#f9fafb', fontSize:'.8rem' }}>
                 ↩ Скинути вибрані
