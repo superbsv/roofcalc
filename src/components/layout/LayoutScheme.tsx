@@ -1,7 +1,10 @@
 // ============================================
 // ArtBudTrading Roof Calculator
 // components/layout/LayoutScheme.tsx
-// Єдина модель: всі зміни перегенеровують розкладку
+// Логіка за зразком KrovlyaProfy:
+// - листи в колонці стикуються, сума = висота полігону
+// - зміна довжини листа компенсується сусідом зверху
+// - горизонтальний зсув = повна перегенерація
 // ============================================
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
@@ -55,17 +58,10 @@ const COLORS = {
   waste:    '#ef4444',
   selected: '#7c3aed',
   polygon:  '#dc2626',
-  split:    '#0891b2',
   grid:     '#e5e7eb',
   text:     '#1e40af',
   bg:       '#f8fafc',
 };
-
-const STEPS = [
-  { label: '0.1м',   mm: 100 },
-  { label: '0.01м',  mm: 10  },
-  { label: '0.001м', mm: 1   },
-];
 
 const PADDING = 80;
 const SVG_W   = 900;
@@ -95,101 +91,73 @@ function getPolygonHeightAtX(x: number, polygon: Point[]): number {
   return Math.max(...ys) - Math.min(...ys);
 }
 
-// ============================================
-// ЄДИНА функція генерації розкладки.
-// Використовується для будь-яких змін:
-// зсув по горизонталі, зміна лінії розподілу.
-// ============================================
-interface LayoutParams {
-  layoutOffset: number;   // мм, зсув колонок по горизонталі
-  splitY: number;         // мм, позиція лінії розподілу рядів (висота 1-го ряду)
-  slopeWidth: number;     // мм
-  polygon: Point[];       // мм
-  usefulWidth: number;    // мм
-  fullWidth: number;      // мм
-  maxSheetLength: number; // мм — максимальна довжина листа
-  eaveRidgeExtra: number; // мм
-  multiRow: boolean;      // чи скат вимагає кількох рядів
+// Висота колонки з полігону (3 точки: ліва, середина, права)
+function getColumnHeight(x: number, usefulWidth: number, slopeWidth: number, polygon: Point[]): number {
+  const visLeft  = Math.max(0, x);
+  const visRight = Math.min(slopeWidth, x + usefulWidth);
+  if (visRight <= visLeft) return 0;
+  const visMid = (visLeft + visRight) / 2;
+  return Math.max(
+    getPolygonHeightAtX(visLeft,  polygon),
+    getPolygonHeightAtX(visMid,   polygon),
+    getPolygonHeightAtX(visRight, polygon),
+  );
 }
 
-function generateFullLayout(p: LayoutParams): SheetPlacement[] {
+// ============================================
+// Повна генерація розкладки (як KrovlyaProfy):
+// колонки з layoutOffset, в кожній — стек листів знизу вгору,
+// нижні = maxLen, верхній обрізаний по колонці
+// ============================================
+function generateFullLayout(
+  layoutOffset: number,
+  slopeWidth: number,
+  polygon: Point[],
+  usefulWidth: number,
+  fullWidth: number,
+  maxSheetLength: number,
+  eaveRidgeExtra: number,
+): SheetPlacement[] {
   const placements: SheetPlacement[] = [];
   let sheetNum = 1;
 
-  const startCol = Math.floor((-p.layoutOffset / p.usefulWidth) - 1) + 1;
+  const startCol = Math.floor((-layoutOffset / usefulWidth) - 1) + 1;
 
   for (let col = startCol; ; col++) {
-    const x = p.layoutOffset + col * p.usefulWidth;
-    if (x >= p.slopeWidth) break;
-    if (x + p.usefulWidth <= 0) continue;
+    const x = layoutOffset + col * usefulWidth;
+    if (x >= slopeWidth) break;
+    if (x + usefulWidth <= 0) continue;
 
-    const visLeft  = Math.max(0, x);
-    const visRight = Math.min(p.slopeWidth, x + p.usefulWidth);
-    const visMid   = (visLeft + visRight) / 2;
-
-    const colH = Math.max(
-      getPolygonHeightAtX(visLeft,  p.polygon),
-      getPolygonHeightAtX(visMid,   p.polygon),
-      getPolygonHeightAtX(visRight, p.polygon),
-    );
+    const colH = getColumnHeight(x, usefulWidth, slopeWidth, polygon);
     if (colH <= 0) continue;
 
-    const colTotal = colH + p.eaveRidgeExtra; // повна висота покриття колонки
+    const colTotal = colH + eaveRidgeExtra;
 
-    if (!p.multiRow || colTotal <= p.maxSheetLength) {
-      // Один лист покриває всю колонку
-      placements.push({
-        sheet_number: sheetNum++,
-        col_index: col, row_index: 0,
-        x, y: 0,
-        full_width: p.fullWidth, useful_width: p.usefulWidth,
-        length: Math.max(1, Math.round(Math.min(colTotal, p.maxSheetLength))),
-      });
-      continue;
-    }
-
-    // Multi-row: перший ряд до splitY, далі рядами по maxSheetLength
     let currentY = 0;
     let row = 0;
-    // Ряд 0: висота = splitY (обмежена maxSheetLength і colTotal)
-    const row0Len = Math.min(p.splitY, p.maxSheetLength, colTotal);
-    if (row0Len > 0) {
-      placements.push({
-        sheet_number: sheetNum++,
-        col_index: col, row_index: row++,
-        x, y: 0,
-        full_width: p.fullWidth, useful_width: p.usefulWidth,
-        length: Math.max(1, Math.round(row0Len)),
-      });
-      currentY = row0Len;
-    }
-    // Наступні ряди
     while (currentY < colTotal - 0.5) {
       const remaining = colTotal - currentY;
-      const rowLen = Math.min(p.maxSheetLength, remaining);
+      const rowLen = Math.min(maxSheetLength, remaining);
       placements.push({
         sheet_number: sheetNum++,
         col_index: col, row_index: row++,
         x, y: Math.round(currentY),
-        full_width: p.fullWidth, useful_width: p.usefulWidth,
+        full_width: fullWidth, useful_width: usefulWidth,
         length: Math.max(1, Math.round(rowLen)),
       });
       currentY += rowLen;
     }
   }
-
   return placements;
 }
 
-// ============================================
-// Оцінка % відходу
-// ============================================
+// Оцінка % відходу листа відносно полігону
 function estimateWastePct(
   sheetX: number, sheetY: number, sheetLen: number,
   usefulWidth: number, fullWidth: number,
-  polygon: Point[], eaveRidgeExtra: number,
+  polygon: Point[], slopeWidth: number, eaveRidgeExtra: number,
 ): number {
-  const colH = getPolygonHeightAtX(sheetX + usefulWidth / 2, polygon);
+  const colH = getColumnHeight(sheetX, usefulWidth, slopeWidth, polygon);
   if (colH <= 0) return 100;
   const totalNeeded = colH + eaveRidgeExtra;
   const overlapH = Math.max(0, Math.min(sheetY + sheetLen, totalNeeded) - Math.max(sheetY, 0));
@@ -203,110 +171,33 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
 
-  const usefulWidth  = calcResult.placements[0]?.useful_width ?? 1100;
-  const fullWidth    = calcResult.placements[0]?.full_width   ?? 1185;
-  const sheetLength  = calcResult.sheet_length_mm;
+  const usefulWidth = calcResult.placements[0]?.useful_width ?? 1100;
+  const fullWidth   = calcResult.placements[0]?.full_width   ?? 1185;
+  const sheetLength = calcResult.sheet_length_mm;
+  const eaveRidgeExtra = Math.max(0, sheetLength - H);
 
-  const originalSplitY  = calcResult.placements.find(p => p.row_index === 1)?.y ?? sheetLength;
-  const multiRow        = calcResult.rows_count > 1 && originalSplitY > 0;
-  const eaveRidgeExtra  = Math.max(0, sheetLength - H);
-
-  // ---- Стан ----
+  const [placements, setPlacements]   = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
   const [layoutOffset, setLayoutOffset] = useState(0);
-  const [splitY, setSplitY]             = useState(originalSplitY);
-  const [manualMode, setManualMode]     = useState(false); // true після першої зміни
-  const [placements, setPlacements]     = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
-  const [selected, setSelected]         = useState<Set<number>>(new Set());
-  const [zoom, setZoom]                 = useState(1);
+  const [manualMode, setManualMode]   = useState(false);
+  const [selected, setSelected]       = useState<Set<number>>(new Set());
+  const [zoom, setZoom]               = useState(1);
+  const [stepMm, setStepMm]           = useState(100); // крок зміни (як в KrovlyaProfy)
 
   const [rubberBand, setRubberBand] = useState<{x1:number;y1:number;x2:number;y2:number}|null>(null);
   const svgRef     = useRef<SVGSVGElement>(null);
   const isDragging = useRef(false);
   const dragStart  = useRef<{x:number;y:number}|null>(null);
 
-  const [panelPos, setPanelPos] = useState({ x: 20, y: 120 });
+  const [panelPos, setPanelPos] = useState({ x: 20, y: 140 });
   const panelDrag = useRef<{startX:number;startY:number;startPX:number;startPY:number}|null>(null);
 
-  // Скидання при новому розрахунку
   useEffect(() => {
     setPlacements(calcResult.placements.map(p => ({ ...p })));
     setLayoutOffset(0);
-    setSplitY(calcResult.placements.find(p => p.row_index === 1)?.y ?? calcResult.sheet_length_mm);
     setManualMode(false);
     setSelected(new Set());
   }, [calcResult]);
 
-  // ---- Єдина функція перегенерації ----
-  const regenerate = useCallback((newOffset: number, newSplitY: number) => {
-    if (polygonPoints.length < 3) return;
-    const np = generateFullLayout({
-      layoutOffset: newOffset,
-      splitY: newSplitY,
-      slopeWidth: W,
-      polygon: polygonPoints,
-      usefulWidth, fullWidth,
-      maxSheetLength: sheetLength,
-      eaveRidgeExtra,
-      multiRow,
-    });
-    setPlacements(np);
-    onUpdate?.(np);
-    setSelected(new Set());
-  }, [W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveRidgeExtra, multiRow, onUpdate]);
-
-  // ---- Дії ----
-  const shiftLayout = useCallback((deltaMm: number) => {
-    const newOffset = layoutOffset + deltaMm;
-    setLayoutOffset(newOffset);
-    setManualMode(true);
-    regenerate(newOffset, splitY);
-  }, [layoutOffset, splitY, regenerate]);
-
-  const shiftSplit = useCallback((deltaMm: number) => {
-    const newSplit = Math.max(100, Math.min(sheetLength, splitY + deltaMm));
-    setSplitY(newSplit);
-    setManualMode(true);
-    regenerate(layoutOffset, newSplit);
-  }, [layoutOffset, splitY, sheetLength, regenerate]);
-
-  const resetAll = () => {
-    setLayoutOffset(0);
-    setSplitY(originalSplitY);
-    setManualMode(false);
-    const orig = calcResult.placements.map(p => ({ ...p }));
-    setPlacements(orig);
-    onUpdate?.(orig);
-    setSelected(new Set());
-  };
-
-  // ---- Редагування виділених (індивідуальне) ----
-  const updateSelected = useCallback((fn: (p: SheetPlacement) => SheetPlacement) => {
-    setPlacements(prev => {
-      const updated = prev.map(p => selected.has(p.sheet_number) ? fn(p) : p);
-      onUpdate?.(updated.filter(p => !p.deleted));
-      return updated;
-    });
-  }, [selected, onUpdate]);
-
-  const moveUp   = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y??0) + mm }));
-  const moveDown = (mm: number) => updateSelected(p => ({ ...p, offset_y: (p.offset_y??0) - mm }));
-  const moveL    = (mm: number) => updateSelected(p => ({ ...p, offset_x: (p.offset_x??0) - mm }));
-  const moveR    = (mm: number) => updateSelected(p => ({ ...p, offset_x: (p.offset_x??0) + mm }));
-  const lenPlus  = (mm: number) => updateSelected(p => ({ ...p, manual_length: (p.manual_length??p.length) + mm }));
-  const lenMinus = (mm: number) => updateSelected(p => ({ ...p, manual_length: Math.max(1, (p.manual_length??p.length) - mm) }));
-
-  const deleteSelected = () => {
-    setPlacements(prev => {
-      const updated = prev.map(p => selected.has(p.sheet_number) ? { ...p, deleted: true } : p);
-      onUpdate?.(updated.filter(p => !p.deleted));
-      return updated;
-    });
-    setSelected(new Set());
-  };
-
-  const resetSelected = () => updateSelected(p => ({ ...p, manual_length: undefined, offset_x: undefined, offset_y: undefined }));
-
-  // ---- Рендер обчислення ----
   const scale = Math.min((SVG_W - PADDING*2) / W, (SVG_H - PADDING*2) / H) * zoom;
   const tx = (x: number) => PADDING + x * scale;
   const ty = (y: number) => PADDING + (H - y) * scale;
@@ -322,10 +213,134 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   const getY   = (p: SheetPlacement) => p.y + (p.offset_y ?? 0);
   const getX   = (p: SheetPlacement) => p.x + (p.offset_x ?? 0);
 
+  // ============================================
+  // Горизонтальний зсув — повна перегенерація
+  // ============================================
+  const shiftLayout = useCallback((deltaMm: number) => {
+    const newOffset = layoutOffset + deltaMm;
+    setLayoutOffset(newOffset);
+    setManualMode(true);
+    if (polygonPoints.length >= 3) {
+      const np = generateFullLayout(newOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveRidgeExtra);
+      setPlacements(np);
+      onUpdate?.(np);
+    }
+    setSelected(new Set());
+  }, [layoutOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveRidgeExtra, onUpdate]);
+
+  // ============================================
+  // Зміна довжини виділеного листа з КОМПЕНСАЦІЄЮ
+  // сусіда зверху в тій же колонці (стик рухається).
+  // Якщо сусіда нема — просто змінюємо довжину.
+  // ============================================
+  const changeLengthWithJoint = useCallback((deltaMm: number) => {
+    setManualMode(true);
+    setPlacements(prev => {
+      const next = prev.map(p => ({ ...p }));
+      const byNum = new Map(next.map(p => [p.sheet_number, p]));
+
+      selected.forEach(num => {
+        const p = byNum.get(num);
+        if (!p || p.deleted) return;
+
+        const curLen = p.manual_length ?? p.length;
+        const newLen = Math.max(50, curLen + deltaMm);
+        const actualDelta = newLen - curLen;
+        if (actualDelta === 0) return;
+
+        // Сусід зверху: та ж колонка, row_index + 1, стик y = p.y + curLen
+        const above = next.find(q =>
+          !q.deleted &&
+          q.sheet_number !== p.sheet_number &&
+          q.col_index === p.col_index &&
+          q.row_index === p.row_index + 1
+        );
+
+        p.manual_length = newLen;
+
+        if (above) {
+          const aboveLen = above.manual_length ?? above.length;
+          const newAboveLen = aboveLen - actualDelta;
+          if (newAboveLen >= 50) {
+            above.manual_length = newAboveLen;
+            above.y = above.y + actualDelta; // стик рухається
+          } else {
+            // Сусід зникає, якщо довжина стала занадто малою
+            above.deleted = true;
+          }
+        }
+      });
+
+      onUpdate?.(next.filter(p => !p.deleted));
+      return next;
+    });
+  }, [selected, onUpdate]);
+
+  // ============================================
+  // Вертикальний зсув виділених (переміщення стику знизу):
+  // рухає y листа, компенсує довжину листа ЗНИЗУ
+  // ============================================
+  const moveJointVertical = useCallback((deltaMm: number) => {
+    setManualMode(true);
+    setPlacements(prev => {
+      const next = prev.map(p => ({ ...p }));
+
+      selected.forEach(num => {
+        const p = next.find(q => q.sheet_number === num);
+        if (!p || p.deleted) return;
+
+        const below = next.find(q =>
+          !q.deleted &&
+          q.sheet_number !== p.sheet_number &&
+          q.col_index === p.col_index &&
+          q.row_index === p.row_index - 1
+        );
+
+        const curLen = p.manual_length ?? p.length;
+
+        if (below) {
+          // Стик рухається: низ p йде вгору/вниз, довжина p компенсує, довжина below теж
+          const belowLen = below.manual_length ?? below.length;
+          const newBelowLen = belowLen + deltaMm;
+          const newPLen = curLen - deltaMm;
+          if (newBelowLen >= 50 && newPLen >= 50) {
+            below.manual_length = newBelowLen;
+            p.y = p.y + deltaMm;
+            p.manual_length = newPLen;
+          }
+        } else {
+          // Немає сусіда знизу — просто рухаємо лист
+          p.offset_y = (p.offset_y ?? 0) + deltaMm;
+        }
+      });
+
+      onUpdate?.(next.filter(p => !p.deleted));
+      return next;
+    });
+  }, [selected, onUpdate]);
+
+  const deleteSelected = () => {
+    setPlacements(prev => {
+      const updated = prev.map(p => selected.has(p.sheet_number) ? { ...p, deleted: true } : p);
+      onUpdate?.(updated.filter(p => !p.deleted));
+      return updated;
+    });
+    setSelected(new Set());
+  };
+
+  const resetAll = () => {
+    setLayoutOffset(0);
+    setManualMode(false);
+    const orig = calcResult.placements.map(p => ({ ...p }));
+    setPlacements(orig);
+    onUpdate?.(orig);
+    setSelected(new Set());
+  };
+
+  // ---- Колір листа ----
   const sheetColor = (p: SheetPlacement, isSel: boolean): string => {
     if (isSel) return COLORS.selected;
 
-    // Оригінальні дані PHP без змін
     if (!manualMode && !p.offset_x && !p.offset_y && !p.manual_length &&
         p.intersect_area_m2 !== undefined && p.full_area_m2 !== undefined) {
       const wastePct = (p.waste_area_m2??0) / (p.full_area_m2??1) * 100;
@@ -334,9 +349,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
       return COLORS.full;
     }
 
-    // Динамічна оцінка
     if (polygonPoints.length >= 3) {
-      const wastePct = estimateWastePct(getX(p), getY(p), getLen(p), p.useful_width, p.full_width, polygonPoints, eaveRidgeExtra);
+      const wastePct = estimateWastePct(getX(p), getY(p), getLen(p), p.useful_width, p.full_width, polygonPoints, W, eaveRidgeExtra);
       if (wastePct > 50) return COLORS.waste;
       if (wastePct > 5)  return COLORS.cut;
       return COLORS.full;
@@ -415,7 +429,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   const selectAll = () => setSelected(new Set(visiblePlacements.map(p => p.sheet_number)));
 
   const onPanelMouseDown = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === 'BUTTON' || tag === 'INPUT') return;
     panelDrag.current = { startX:e.clientX, startY:e.clientY, startPX:panelPos.x, startPY:panelPos.y };
     e.preventDefault();
   };
@@ -434,19 +449,19 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   const uniqueLengths = useMemo(
     () => Array.from(new Set(visiblePlacements.map(p => getLen(p)))).sort((a,b)=>a-b),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visiblePlacements]
+    [placements]
   );
 
   return (
     <div style={{ fontFamily:'system-ui, sans-serif', position:'relative' }}>
 
+      {/* Заголовок */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px', flexWrap:'wrap', gap:'8px' }}>
         <div>
           <h3 style={{ margin:0, fontSize:'1rem' }}>Схема розкладки — {slopeName}</h3>
           <div style={{ fontSize:'.8rem', color:'#6b7280', marginTop:'2px' }}>
             {calcResult.profile_name} · {visiblePlacements.length} листів · {calcResult.slope_area_m2.toFixed(2)} м²
             {layoutOffset !== 0 && <span style={{ color:'#f59e0b' }}> · Зсув: {layoutOffset>0?'+':''}{layoutOffset}мм</span>}
-            {multiRow && splitY !== originalSplitY && <span style={{ color:COLORS.split }}> · Розподіл: {(splitY/1000).toFixed(3)}м</span>}
             {hasSelection && <span style={{ color:COLORS.selected, fontWeight:600 }}> · Виділено: {selected.size} шт</span>}
           </div>
         </div>
@@ -462,43 +477,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
       </div>
 
       <div style={{ fontSize:'.8rem', color:'#9ca3af', marginBottom:'8px' }}>
-        💡 Клік — виділити · Shift+клік — додати · Тягни мишу — виділити область
+        💡 Клік — виділити лист · Shift+клік — додати · Тягни мишу — виділити область · Кнопки редагування з'являться при виділенні
       </div>
 
-      <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'10px 14px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap' }}>
-        <span style={{ fontSize:'.82rem', fontWeight:600, color:'#166534', whiteSpace:'nowrap' }}>🔄 По горизонталі:</span>
-        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-          {STEPS.map(s => (
-            <React.Fragment key={s.mm}>
-              <button onClick={()=>shiftLayout(-s.mm)} style={shiftBtn}>← {s.label}</button>
-              <button onClick={()=>shiftLayout(+s.mm)} style={shiftBtn}>→ {s.label}</button>
-            </React.Fragment>
-          ))}
-        </div>
-      </div>
-
-      {multiRow && (
-        <div style={{ background:'#ecfeff', border:'1px solid #a5f3fc', borderRadius:'8px', padding:'10px 14px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
-          <span style={{ fontSize:'.82rem', fontWeight:600, color:'#0e7490', whiteSpace:'nowrap' }}>
-            ✂ Лінія розподілу рядів ({(splitY/1000).toFixed(3)} м):
-          </span>
-          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-            {STEPS.map(s => (
-              <React.Fragment key={s.mm}>
-                <button onClick={()=>shiftSplit(-s.mm)} style={splitBtn}>↓ {s.label}</button>
-                <button onClick={()=>shiftSplit(+s.mm)} style={splitBtn}>↑ {s.label}</button>
-              </React.Fragment>
-            ))}
-          </div>
-          {splitY !== originalSplitY && (
-            <button onClick={()=>{ setSplitY(originalSplitY); regenerate(layoutOffset, originalSplitY); }}
-              style={{ padding:'4px 10px', border:'1px solid #a5f3fc', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'.75rem', color:'#0e7490' }}>
-              ↩ Скинути
-            </button>
-          )}
-        </div>
-      )}
-
+      {/* SVG */}
       <div style={{ overflowX:'auto', overflowY:'auto', maxHeight:'580px', border:'1px solid #e5e7eb', borderRadius:'10px', background:COLORS.bg }}>
         <svg ref={svgRef} width={SVG_W*zoom} height={SVG_H*zoom} viewBox={`0 0 ${SVG_W} ${SVG_H}`}
           style={{ display:'block' }}
@@ -549,17 +531,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
             })}
           </g>
 
-          {multiRow && splitY > 0 && (
-            <g>
-              <line x1={PADDING} y1={ty(splitY)} x2={PADDING+W*scale} y2={ty(splitY)}
-                stroke={COLORS.split} strokeWidth="2" strokeDasharray="8 4"/>
-              <rect x={PADDING+2} y={ty(splitY)-10} width={80} height={18} rx="4" fill={COLORS.split} opacity={0.9}/>
-              <text x={PADDING+6} y={ty(splitY)+3} fill="#fff" fontSize="10" fontWeight="600">
-                ✂ {(splitY/1000).toFixed(2)}м
-              </text>
-            </g>
-          )}
-
           <path d={polyPath} fill="none" stroke={COLORS.polygon} strokeWidth="2"/>
 
           {rubberBand && (
@@ -581,14 +552,15 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
         </svg>
       </div>
 
+      {/* Легенда */}
       <div style={{ display:'flex', gap:'16px', marginTop:'12px', flexWrap:'wrap' }}>
         <LegendItem color={COLORS.full}     label="Повний лист"/>
         <LegendItem color={COLORS.cut}      label="Обрізаний лист"/>
         <LegendItem color={COLORS.waste}    label="Великий відхід (>50%)"/>
         <LegendItem color={COLORS.selected} label="Виділений лист"/>
-        {multiRow && <LegendItem color={COLORS.split} label="Лінія розподілу рядів"/>}
       </div>
 
+      {/* Таблиця */}
       <div style={{ marginTop:'16px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:'8px', overflow:'hidden' }}>
         <div style={{ padding:'10px 16px', background:'#f9fafb', borderBottom:'1px solid #e5e7eb', fontWeight:600, fontSize:'.85rem' }}>
           Специфікація листів
@@ -624,62 +596,96 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
         </table>
       </div>
 
+      {/* ===== ПЛАВАЮЧА ПАНЕЛЬ (стиль KrovlyaProfy) ===== */}
       {hasSelection && (
         <div onMouseDown={onPanelMouseDown}
           style={{ position:'fixed', left:panelPos.x, top:panelPos.y, zIndex:500,
             background:'#fff', border:`2px solid ${COLORS.selected}`, borderRadius:'10px',
-            boxShadow:'0 8px 32px rgba(0,0,0,0.2)', width:'280px', userSelect:'none' }}>
-          <div style={{ background:COLORS.selected, color:'#fff', padding:'8px 12px', borderRadius:'8px 8px 0 0',
+            boxShadow:'0 8px 32px rgba(0,0,0,0.25)', width:'250px', userSelect:'none' }}>
+          <div style={{ background:COLORS.selected, color:'#fff', padding:'7px 12px', borderRadius:'8px 8px 0 0',
             cursor:'move', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <span style={{ fontWeight:600, fontSize:'.85rem' }}>✏ Виділено: {selected.size} шт</span>
+            <span style={{ fontWeight:600, fontSize:'.82rem' }}>✏ Виділено: {selected.size} шт</span>
             <button onClick={()=>setSelected(new Set())}
               style={{ background:'none', border:'none', color:'#fff', cursor:'pointer', fontSize:'1rem', lineHeight:1 }}>✕</button>
           </div>
           <div style={{ padding:'12px' }}>
+
+            {/* Крок зміни (мм) — як в KrovlyaProfy */}
             <div style={{ marginBottom:'10px' }}>
-              <div style={sectionLabel}>← → Зміщення виділених по горизонталі</div>
-              {STEPS.map(s=>(
-                <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px' }}>
-                  <button onClick={()=>moveL(s.mm)} style={ctrlBtn}>← {s.label}</button>
-                  <button onClick={()=>moveR(s.mm)} style={ctrlBtn}>→ {s.label}</button>
-                </div>
-              ))}
-            </div>
-            <div style={{ marginBottom:'10px' }}>
-              <div style={sectionLabel}>↑ ↓ Зміщення виділених по вертикалі</div>
-              {STEPS.map(s=>(
-                <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px' }}>
-                  <button onClick={()=>moveDown(s.mm)} style={ctrlBtn}>↓ {s.label}</button>
-                  <button onClick={()=>moveUp(s.mm)}   style={ctrlBtn}>↑ {s.label}</button>
-                </div>
-              ))}
-            </div>
-            <div style={{ marginBottom:'12px' }}>
-              <div style={sectionLabel}>↕ Довжина листа</div>
-              {STEPS.map(s=>(
-                <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px' }}>
-                  <button onClick={()=>lenMinus(s.mm)} style={ctrlBtn}>− {s.label}</button>
-                  <button onClick={()=>lenPlus(s.mm)}  style={ctrlBtn}>+ {s.label}</button>
-                </div>
-              ))}
-            </div>
-            {multiRow && (
-              <div style={{ marginBottom:'12px' }}>
-                <div style={sectionLabel}>✂ Лінія розподілу рядів</div>
-                {STEPS.map(s=>(
-                  <div key={s.mm} style={{ display:'flex', gap:'4px', marginBottom:'4px' }}>
-                    <button onClick={()=>shiftSplit(-s.mm)} style={{ ...ctrlBtn, color:'#0e7490', borderColor:'#a5f3fc' }}>↓ {s.label}</button>
-                    <button onClick={()=>shiftSplit(+s.mm)} style={{ ...ctrlBtn, color:'#0e7490', borderColor:'#a5f3fc' }}>↑ {s.label}</button>
-                  </div>
+              <div style={{ fontSize:'.72rem', fontWeight:600, color:'#6b7280', marginBottom:'4px' }}>
+                Крок зміни, мм:
+              </div>
+              <div style={{ display:'flex', gap:'4px' }}>
+                <input type="number" value={stepMm} min={1} max={1000}
+                  onChange={e => setStepMm(Math.max(1, Number(e.target.value) || 1))}
+                  style={{ flex:1, padding:'5px 8px', border:'1px solid #d1d5db', borderRadius:'6px', fontSize:'.85rem', textAlign:'center' }}/>
+                {[10, 50, 100].map(v => (
+                  <button key={v} onClick={()=>setStepMm(v)}
+                    style={{ padding:'4px 8px', border: stepMm===v ? `1.5px solid ${COLORS.selected}` : '1px solid #d1d5db',
+                      borderRadius:'6px', cursor:'pointer', background: stepMm===v ? '#f5f3ff' : '#fff', fontSize:'.75rem' }}>
+                    {v}
+                  </button>
                 ))}
               </div>
-            )}
-            <div style={{ display:'flex', flexDirection:'column', gap:'6px', borderTop:'1px solid #e5e7eb', paddingTop:'10px' }}>
-              <button onClick={resetSelected} style={{ padding:'6px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#f9fafb', fontSize:'.8rem' }}>
-                ↩ Скинути вибрані
+            </div>
+
+            {/* Хрестовина стрілок як в KrovlyaProfy */}
+            <div style={{ display:'flex', gap:'16px', alignItems:'center', justifyContent:'center', marginBottom:'10px' }}>
+              {/* Переміщення розкладки */}
+              <div style={{ textAlign:'center' }}>
+                <div style={{ fontSize:'.68rem', color:'#6b7280', marginBottom:'4px' }}>Розкладка</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 34px)', gridTemplateRows:'repeat(3, 34px)', gap:'2px' }}>
+                  <div/>
+                  <div/>
+                  <div/>
+                  <button onClick={()=>shiftLayout(-stepMm)} style={arrowBtn} title="Зсунути розкладку ліворуч">←</button>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', fontSize:'.6rem', color:'#9ca3af' }}>всі</div>
+                  <button onClick={()=>shiftLayout(+stepMm)} style={arrowBtn} title="Зсунути розкладку праворуч">→</button>
+                  <div/>
+                  <div/>
+                  <div/>
+                </div>
+              </div>
+
+              {/* Стик листа */}
+              <div style={{ textAlign:'center' }}>
+                <div style={{ fontSize:'.68rem', color:'#6b7280', marginBottom:'4px' }}>Стик листа</div>
+                <div style={{ display:'grid', gridTemplateColumns:'34px', gridTemplateRows:'repeat(2, 34px)', gap:'2px' }}>
+                  <button onClick={()=>moveJointVertical(+stepMm)} style={arrowBtn} title="Стик вгору">↑</button>
+                  <button onClick={()=>moveJointVertical(-stepMm)} style={arrowBtn} title="Стик вниз">↓</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Довжина листа з компенсацією */}
+            <div style={{ marginBottom:'10px' }}>
+              <div style={{ fontSize:'.72rem', fontWeight:600, color:'#6b7280', marginBottom:'4px' }}>
+                Змінити довжину листа на {stepMm} мм:
+              </div>
+              <div style={{ display:'flex', gap:'4px' }}>
+                <button onClick={()=>changeLengthWithJoint(-stepMm)}
+                  style={{ flex:1, padding:'7px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontWeight:600 }}>
+                  − Зменшити
+                </button>
+                <button onClick={()=>changeLengthWithJoint(+stepMm)}
+                  style={{ flex:1, padding:'7px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontWeight:600 }}>
+                  + Збільшити
+                </button>
+              </div>
+              <div style={{ fontSize:'.68rem', color:'#9ca3af', marginTop:'3px' }}>
+                Сусідній лист зверху компенсує зміну
+              </div>
+            </div>
+
+            {/* Дії */}
+            <div style={{ display:'flex', gap:'6px', borderTop:'1px solid #e5e7eb', paddingTop:'10px' }}>
+              <button onClick={deleteSelected}
+                style={{ flex:1, padding:'6px', border:'1px solid #fca5a5', borderRadius:'6px', cursor:'pointer', background:'#fff', color:'#dc2626', fontSize:'.8rem' }}>
+                🗑 Видалити
               </button>
-              <button onClick={deleteSelected} style={{ padding:'6px', border:'1px solid #fca5a5', borderRadius:'6px', cursor:'pointer', background:'#fff', color:'#dc2626', fontSize:'.8rem' }}>
-                🗑 Видалити вибрані
+              <button onClick={resetAll}
+                style={{ flex:1, padding:'6px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#f9fafb', fontSize:'.8rem' }}>
+                ↩ Скинути все
               </button>
             </div>
           </div>
@@ -690,10 +696,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
 }
 
 const zoomBtn: React.CSSProperties  = { padding:'4px 10px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff' };
-const shiftBtn: React.CSSProperties = { padding:'5px 10px', border:'1px solid #bbf7d0', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'.78rem', fontWeight:500, color:'#166534' };
-const splitBtn: React.CSSProperties = { padding:'5px 10px', border:'1px solid #a5f3fc', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'.78rem', fontWeight:500, color:'#0e7490' };
-const ctrlBtn: React.CSSProperties  = { flex:1, padding:'5px 4px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'.78rem', fontWeight:500 };
-const sectionLabel: React.CSSProperties = { fontSize:'.72rem', fontWeight:600, color:'#6b7280', marginBottom:'6px', textTransform:'uppercase' as const };
+const arrowBtn: React.CSSProperties = { width:'34px', height:'34px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'1rem', fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center' };
 
 function LegendItem({ color, label }: { color:string; label:string }) {
   return (
