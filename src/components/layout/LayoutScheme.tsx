@@ -67,6 +67,12 @@ const PADDING = 80;
 const SVG_W   = 900;
 const SVG_H   = 600;
 
+const STEPS = [
+  { label: '0.1м',   mm: 100 },
+  { label: '0.01м',  mm: 10  },
+  { label: '0.001м', mm: 1   },
+];
+
 // ============================================
 // Висота полігону в точці X (мм)
 // ============================================
@@ -228,11 +234,22 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     setSelected(new Set());
   }, [layoutOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveRidgeExtra, onUpdate]);
 
+  // Вертикальний зсув ВСІХ листів
+  const shiftAllVertical = useCallback((deltaMm: number) => {
+    setManualMode(true);
+    setPlacements(prev => {
+      const updated = prev.map(p => ({ ...p, offset_y: (p.offset_y ?? 0) + deltaMm }));
+      onUpdate?.(updated.filter(p => !p.deleted));
+      return updated;
+    });
+  }, [onUpdate]);
+
   // ============================================
   // Зміна довжини виділеного листа з КОМПЕНСАЦІЄЮ
   // сусіда зверху в тій же колонці (стик рухається).
   // Якщо сусіда нема — просто змінюємо довжину.
   // ============================================
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const changeLengthWithJoint = useCallback((deltaMm: number) => {
     setManualMode(true);
     setPlacements(prev => {
@@ -276,10 +293,65 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     });
   }, [selected, onUpdate]);
 
+  // Змінити довжину виділених листів ЗВЕРХУ (верхній край рухається)
+  const changeLengthTop = useCallback((deltaMm: number) => {
+    setManualMode(true);
+    setPlacements(prev => {
+      const next = prev.map(p => ({ ...p }));
+      selected.forEach(num => {
+        const p = next.find(q => q.sheet_number === num);
+        if (!p || p.deleted) return;
+        const curLen = p.manual_length ?? p.length;
+        const newLen = Math.max(50, curLen + deltaMm);
+        p.manual_length = newLen;
+        // Сусід зверху компенсує (стик рухається)
+        const above = next.find(q => !q.deleted && q.sheet_number !== p.sheet_number &&
+          q.col_index === p.col_index && q.row_index === p.row_index + 1);
+        if (above) {
+          const aLen = above.manual_length ?? above.length;
+          const naLen = aLen - (newLen - curLen);
+          if (naLen >= 50) { above.manual_length = naLen; above.y = above.y + (newLen - curLen); }
+          else above.deleted = true;
+        }
+      });
+      onUpdate?.(next.filter(p => !p.deleted));
+      return next;
+    });
+  }, [selected, onUpdate]);
+
+  // Змінити довжину виділених листів ЗНИЗУ (нижній край рухається)
+  const changeLengthBottom = useCallback((deltaMm: number) => {
+    setManualMode(true);
+    setPlacements(prev => {
+      const next = prev.map(p => ({ ...p }));
+      selected.forEach(num => {
+        const p = next.find(q => q.sheet_number === num);
+        if (!p || p.deleted) return;
+        const curLen = p.manual_length ?? p.length;
+        const newLen = Math.max(50, curLen + deltaMm);
+        const actualDelta = newLen - curLen;
+        p.manual_length = newLen;
+        p.offset_y = (p.offset_y ?? 0) - actualDelta; // низ рухається вниз
+        // Сусід знизу компенсує
+        const below = next.find(q => !q.deleted && q.sheet_number !== p.sheet_number &&
+          q.col_index === p.col_index && q.row_index === p.row_index - 1);
+        if (below) {
+          const bLen = below.manual_length ?? below.length;
+          const nbLen = bLen - actualDelta;
+          if (nbLen >= 50) below.manual_length = nbLen;
+          else below.deleted = true;
+        }
+      });
+      onUpdate?.(next.filter(p => !p.deleted));
+      return next;
+    });
+  }, [selected, onUpdate]);
+
   // ============================================
   // Вертикальний зсув виділених (переміщення стику знизу):
   // рухає y листа, компенсує довжину листа ЗНИЗУ
   // ============================================
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const moveJointVertical = useCallback((deltaMm: number) => {
     setManualMode(true);
     setPlacements(prev => {
@@ -477,7 +549,33 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
       </div>
 
       <div style={{ fontSize:'.8rem', color:'#9ca3af', marginBottom:'8px' }}>
-        💡 Клік — виділити лист · Shift+клік — додати · Тягни мишу — виділити область · Кнопки редагування з'являться при виділенні
+        💡 Клік — виділити лист · Shift+клік — додати · Тягни мишу — виділити область
+      </div>
+
+      {/* Панель зсуву всієї розкладки */}
+      <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'10px 14px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+          <span style={{ fontSize:'.82rem', fontWeight:600, color:'#166534', whiteSpace:'nowrap' }}>🔄 По горизонталі:</span>
+          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+            {STEPS.map(s => (
+              <React.Fragment key={s.mm}>
+                <button onClick={()=>shiftLayout(-s.mm)} style={shiftBtn}>← {s.label}</button>
+                <button onClick={()=>shiftLayout(+s.mm)} style={shiftBtn}>→ {s.label}</button>
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+          <span style={{ fontSize:'.82rem', fontWeight:600, color:'#166534', whiteSpace:'nowrap' }}>По вертикалі:</span>
+          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+            {STEPS.map(s => (
+              <React.Fragment key={s.mm}>
+                <button onClick={()=>shiftAllVertical(-s.mm)} style={shiftBtn}>↓ {s.label}</button>
+                <button onClick={()=>shiftAllVertical(+s.mm)} style={shiftBtn}>↑ {s.label}</button>
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* SVG */}
@@ -610,8 +708,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
           </div>
           <div style={{ padding:'12px' }}>
 
-            {/* Крок зміни (мм) — як в KrovlyaProfy */}
-            <div style={{ marginBottom:'10px' }}>
+            {/* Крок зміни (мм) */}
+            <div style={{ marginBottom:'12px' }}>
               <div style={{ fontSize:'.72rem', fontWeight:600, color:'#6b7280', marginBottom:'4px' }}>
                 Крок зміни, мм:
               </div>
@@ -619,7 +717,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
                 <input type="number" value={stepMm} min={1} max={1000}
                   onChange={e => setStepMm(Math.max(1, Number(e.target.value) || 1))}
                   style={{ flex:1, padding:'5px 8px', border:'1px solid #d1d5db', borderRadius:'6px', fontSize:'.85rem', textAlign:'center' }}/>
-                {[10, 50, 100].map(v => (
+                {[1, 10, 100].map(v => (
                   <button key={v} onClick={()=>setStepMm(v)}
                     style={{ padding:'4px 8px', border: stepMm===v ? `1.5px solid ${COLORS.selected}` : '1px solid #d1d5db',
                       borderRadius:'6px', cursor:'pointer', background: stepMm===v ? '#f5f3ff' : '#fff', fontSize:'.75rem' }}>
@@ -629,62 +727,39 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
               </div>
             </div>
 
-            {/* Хрестовина стрілок як в KrovlyaProfy */}
-            <div style={{ display:'flex', gap:'16px', alignItems:'center', justifyContent:'center', marginBottom:'10px' }}>
-              {/* Переміщення розкладки */}
-              <div style={{ textAlign:'center' }}>
-                <div style={{ fontSize:'.68rem', color:'#6b7280', marginBottom:'4px' }}>Розкладка</div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 34px)', gridTemplateRows:'repeat(3, 34px)', gap:'2px' }}>
-                  <div/>
-                  <div/>
-                  <div/>
-                  <button onClick={()=>shiftLayout(-stepMm)} style={arrowBtn} title="Зсунути розкладку ліворуч">←</button>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', fontSize:'.6rem', color:'#9ca3af' }}>всі</div>
-                  <button onClick={()=>shiftLayout(+stepMm)} style={arrowBtn} title="Зсунути розкладку праворуч">→</button>
-                  <div/>
-                  <div/>
-                  <div/>
-                </div>
+            {/* Довжина ЗВЕРХУ */}
+            <div style={{ marginBottom:'10px' }}>
+              <div style={{ fontSize:'.72rem', fontWeight:600, color:'#6b7280', marginBottom:'4px' }}>
+                ⬆ Довжина зверху (верхній край):
               </div>
-
-              {/* Стик листа */}
-              <div style={{ textAlign:'center' }}>
-                <div style={{ fontSize:'.68rem', color:'#6b7280', marginBottom:'4px' }}>Стик листа</div>
-                <div style={{ display:'grid', gridTemplateColumns:'34px', gridTemplateRows:'repeat(2, 34px)', gap:'2px' }}>
-                  <button onClick={()=>moveJointVertical(+stepMm)} style={arrowBtn} title="Стик вгору">↑</button>
-                  <button onClick={()=>moveJointVertical(-stepMm)} style={arrowBtn} title="Стик вниз">↓</button>
-                </div>
+              <div style={{ display:'flex', gap:'4px' }}>
+                <button onClick={()=>changeLengthTop(-stepMm)} style={lenBtn}>− {stepMm}мм</button>
+                <button onClick={()=>changeLengthTop(+stepMm)} style={lenBtn}>+ {stepMm}мм</button>
               </div>
             </div>
 
-            {/* Довжина листа з компенсацією */}
-            <div style={{ marginBottom:'10px' }}>
+            {/* Довжина ЗНИЗУ */}
+            <div style={{ marginBottom:'12px' }}>
               <div style={{ fontSize:'.72rem', fontWeight:600, color:'#6b7280', marginBottom:'4px' }}>
-                Змінити довжину листа на {stepMm} мм:
+                ⬇ Довжина знизу (нижній край):
               </div>
               <div style={{ display:'flex', gap:'4px' }}>
-                <button onClick={()=>changeLengthWithJoint(-stepMm)}
-                  style={{ flex:1, padding:'7px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontWeight:600 }}>
-                  − Зменшити
-                </button>
-                <button onClick={()=>changeLengthWithJoint(+stepMm)}
-                  style={{ flex:1, padding:'7px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontWeight:600 }}>
-                  + Збільшити
-                </button>
+                <button onClick={()=>changeLengthBottom(-stepMm)} style={lenBtn}>− {stepMm}мм</button>
+                <button onClick={()=>changeLengthBottom(+stepMm)} style={lenBtn}>+ {stepMm}мм</button>
               </div>
               <div style={{ fontSize:'.68rem', color:'#9ca3af', marginTop:'3px' }}>
-                Сусідній лист зверху компенсує зміну
+                Сусідній лист компенсує зміну (стик рухається)
               </div>
             </div>
 
             {/* Дії */}
             <div style={{ display:'flex', gap:'6px', borderTop:'1px solid #e5e7eb', paddingTop:'10px' }}>
               <button onClick={deleteSelected}
-                style={{ flex:1, padding:'6px', border:'1px solid #fca5a5', borderRadius:'6px', cursor:'pointer', background:'#fff', color:'#dc2626', fontSize:'.8rem' }}>
+                style={{ flex:1, padding:'8px', border:'1px solid #fca5a5', borderRadius:'6px', cursor:'pointer', background:'#fff', color:'#dc2626', fontSize:'.82rem', fontWeight:500 }}>
                 🗑 Видалити
               </button>
               <button onClick={resetAll}
-                style={{ flex:1, padding:'6px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#f9fafb', fontSize:'.8rem' }}>
+                style={{ flex:1, padding:'8px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#f9fafb', fontSize:'.82rem' }}>
                 ↩ Скинути все
               </button>
             </div>
@@ -696,7 +771,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
 }
 
 const zoomBtn: React.CSSProperties  = { padding:'4px 10px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff' };
-const arrowBtn: React.CSSProperties = { width:'34px', height:'34px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'1rem', fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center' };
+const shiftBtn: React.CSSProperties = { padding:'5px 10px', border:'1px solid #bbf7d0', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'.78rem', fontWeight:500, color:'#166534' };
+const lenBtn: React.CSSProperties   = { flex:1, padding:'7px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontWeight:600, fontSize:'.82rem' };
 
 function LegendItem({ color, label }: { color:string; label:string }) {
   return (
