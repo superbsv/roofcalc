@@ -123,6 +123,7 @@ function getColumnRange(x: number, usefulWidth: number, slopeWidth: number, poly
 // ============================================
 function generateFullLayout(
   layoutOffset: number,
+  verticalOffset: number, // зсув сітки рядів по вертикалі (мм)
   slopeWidth: number,
   polygon: Point[],
   usefulWidth: number,
@@ -135,6 +136,9 @@ function generateFullLayout(
   let sheetNum = 1;
 
   const startCol = Math.floor((-layoutOffset / usefulWidth) - 1) + 1;
+  const step = maxSheetLength;
+  // Зсув сітки рядів у межах одного кроку
+  const vMod = ((verticalOffset % step) + step) % step;
 
   for (let col = startCol; ; col++) {
     const x = layoutOffset + col * usefulWidth;
@@ -144,27 +148,32 @@ function generateFullLayout(
     const range = getColumnRange(x, usefulWidth, slopeWidth, polygon);
     if (!range) continue;
 
-    // Реальна зона покриття колонки: від низу полігону мінус звис
-    // до верху полігону плюс ковзан
-    const bottomY = range.minY - eaveOverhang;   // початок листів (може бути < 0)
-    const topY    = range.maxY + ridgeGap;       // верх покриття
-    const colTotal = topY - bottomY;
-    if (colTotal <= 0) continue;
+    const bottomY = range.minY - eaveOverhang;
+    const topY    = range.maxY + ridgeGap;
+    if (topY - bottomY <= 0) continue;
 
-    // Стек листів знизу вгору в межах [bottomY, topY]
-    let currentY = bottomY;
+    // Сітка рядів зсунута на vMod. Перша межа може бути нижче bottomY.
+    let boundary = bottomY + vMod - step;
+    if (vMod === 0) boundary = bottomY;
     let row = 0;
-    while (currentY < topY - 0.5) {
-      const remaining = topY - currentY;
-      const rowLen = Math.min(maxSheetLength, remaining);
-      placements.push({
-        sheet_number: sheetNum++,
-        col_index: col, row_index: row++,
-        x, y: Math.round(currentY),
-        full_width: fullWidth, useful_width: usefulWidth,
-        length: Math.max(1, Math.round(rowLen)),
-      });
-      currentY += rowLen;
+
+    while (boundary < topY - 0.5) {
+      const sheetBottom = boundary;
+      const sheetTop    = boundary + step;
+      // Обрізаємо лист по зоні покриття колонки
+      const visBottom = Math.max(sheetBottom, bottomY);
+      const visTop    = Math.min(sheetTop, topY);
+      const visLen    = visTop - visBottom;
+      if (visLen > 0.5) {
+        placements.push({
+          sheet_number: sheetNum++,
+          col_index: col, row_index: row++,
+          x, y: Math.round(visBottom),
+          full_width: fullWidth, useful_width: usefulWidth,
+          length: Math.max(1, Math.round(visLen)),
+        });
+      }
+      boundary += step;
     }
   }
   return placements;
@@ -202,6 +211,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
 
   const [placements, setPlacements]   = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
   const [layoutOffset, setLayoutOffset] = useState(0);
+  const [verticalOffset, setVerticalOffset] = useState(0);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [manualMode, setManualMode]   = useState(false);
   const [selected, setSelected]       = useState<Set<number>>(new Set());
@@ -219,6 +229,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   useEffect(() => {
     setPlacements(calcResult.placements.map(p => ({ ...p })));
     setLayoutOffset(0);
+    setVerticalOffset(0);
     setManualMode(false);
     setSelected(new Set());
   }, [calcResult]);
@@ -246,22 +257,25 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     setLayoutOffset(newOffset);
     setManualMode(true);
     if (polygonPoints.length >= 3) {
-      const np = generateFullLayout(newOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap);
+      const np = generateFullLayout(newOffset, verticalOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap);
       setPlacements(np);
       onUpdate?.(np);
     }
     setSelected(new Set());
-  }, [layoutOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, onUpdate]);
+  }, [layoutOffset, verticalOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, onUpdate]);
 
-  // Вертикальний зсув ВСІХ листів
-  const shiftAllVertical = useCallback((deltaMm: number) => {
+  // Вертикальний зсув розкладки — перегенерація з обрізкою/додаванням листів
+  const shiftVerticalLayout = useCallback((deltaMm: number) => {
+    const newV = verticalOffset + deltaMm;
+    setVerticalOffset(newV);
     setManualMode(true);
-    setPlacements(prev => {
-      const updated = prev.map(p => ({ ...p, offset_y: (p.offset_y ?? 0) + deltaMm }));
-      onUpdate?.(updated.filter(p => !p.deleted));
-      return updated;
-    });
-  }, [onUpdate]);
+    if (polygonPoints.length >= 3) {
+      const np = generateFullLayout(layoutOffset, newV, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap);
+      setPlacements(np);
+      onUpdate?.(np);
+    }
+    setSelected(new Set());
+  }, [verticalOffset, layoutOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, onUpdate]);
 
   // ============================================
   // Зміна довжини виділеного листа з КОМПЕНСАЦІЄЮ
@@ -421,6 +435,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
 
   const resetAll = () => {
     setLayoutOffset(0);
+    setVerticalOffset(0);
     setManualMode(false);
     const orig = calcResult.placements.map(p => ({ ...p }));
     setPlacements(orig);
@@ -586,8 +601,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
             {STEPS.map(s => (
               <React.Fragment key={s.mm}>
-                <button onClick={()=>shiftAllVertical(-s.mm)} style={shiftBtn}>↓ {s.label}</button>
-                <button onClick={()=>shiftAllVertical(+s.mm)} style={shiftBtn}>↑ {s.label}</button>
+                <button onClick={()=>shiftVerticalLayout(-s.mm)} style={shiftBtn}>↓ {s.label}</button>
+                <button onClick={()=>shiftVerticalLayout(+s.mm)} style={shiftBtn}>↑ {s.label}</button>
               </React.Fragment>
             ))}
           </div>
