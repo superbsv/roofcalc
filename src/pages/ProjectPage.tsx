@@ -38,6 +38,9 @@ export default function ProjectPage({ projectId }: Props) {
     material_coating: '',
     material_thickness: 0.5,
   });
+  // Єдиний матеріал на весь проект
+  const [projectMaterialId, setProjectMaterialId] = useState<number>(0);
+  const [applyingMaterial, setApplyingMaterial]   = useState(false);
 
   // Load project
   useEffect(() => {
@@ -45,6 +48,9 @@ export default function ProjectPage({ projectId }: Props) {
       setProject(res.project);
       setSlopes(res.slopes);
       if (res.slopes.length) selectSlope(res.slopes[0]);
+      // Визначаємо матеріал проекту з першого ската що його має
+      const withMat = res.slopes.find(s => s.material_profile_id);
+      if (withMat?.material_profile_id) setProjectMaterialId(withMat.material_profile_id);
     }).catch(e => setError(e.message));
     materialsApi.list().then(res => setMaterials(res.profiles));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -75,6 +81,7 @@ export default function ProjectPage({ projectId }: Props) {
         eave_overhang: 50,
         ridge_gap: 50,
         laying_direction: 'right_left',
+        material_profile_id: projectMaterialId || undefined,
       });
       setSlopes(prev => [...prev, res.slope]);
       selectSlope(res.slope);
@@ -160,6 +167,34 @@ export default function ProjectPage({ projectId }: Props) {
     } catch {}
   };
 
+  // Застосувати матеріал до ВСІХ скатів проекту
+  const applyMaterialToAll = async (materialId: number) => {
+    setProjectMaterialId(materialId);
+    if (!materialId || !slopes.length) return;
+    setApplyingMaterial(true);
+    setError('');
+    try {
+      // Оновлюємо кожен скат
+      const updated: Slope[] = [];
+      for (const s of slopes) {
+        const res = await slopesApi.update(s.id, { material_profile_id: materialId });
+        updated.push(res.slope);
+      }
+      setSlopes(updated);
+      // Оновлюємо активний скат і його параметри
+      if (activeSlope) {
+        const act = updated.find(s => s.id === activeSlope.id);
+        if (act) {
+          setActiveSlope(act);
+          setSlopeParams(p => ({ ...p, material_profile_id: materialId }));
+        }
+      }
+    } catch (e: any) {
+      setError(e.message);
+    }
+    setApplyingMaterial(false);
+  };
+
   // Матеріали по типу
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const materialsByType = {
@@ -168,7 +203,7 @@ export default function ProjectPage({ projectId }: Props) {
     falts:   materials.filter(m => m.type === 'falts'),
   };
 
-  const selectedMaterial = materials.find(m => m.id === slopeParams.material_profile_id);
+  const selectedMaterial = materials.find(m => m.id === (projectMaterialId || slopeParams.material_profile_id));
 
   const totalPrice = specItems.reduce((s, i) => s + Number(i.total || 0), 0);
   const sheetItems = specItems.filter(i => i.type === 'sheet');
@@ -201,7 +236,34 @@ export default function ProjectPage({ projectId }: Props) {
             {project?.object_address}
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3" style={{alignItems:'center'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+            <label style={{fontSize:'.82rem',fontWeight:600,color:'var(--clr-text-2)',whiteSpace:'nowrap'}}>
+              Матеріал проекту:
+            </label>
+            <select className="form-control" style={{minWidth:'240px'}}
+              value={projectMaterialId}
+              onChange={e => applyMaterialToAll(+e.target.value)}
+              disabled={applyingMaterial}>
+              <option value={0}>— Оберіть матеріал —</option>
+              <optgroup label="Металочерепиця">
+                {materials.filter(m=>m.type==='tile').map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Профнастил">
+                {materials.filter(m=>m.type==='profile').map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Фальцева покрівля">
+                {materials.filter(m=>m.type==='falts').map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </optgroup>
+            </select>
+            {applyingMaterial && <span style={{fontSize:'.78rem',color:'var(--clr-text-3)'}}>застосування…</span>}
+          </div>
           <button className="btn btn-secondary" onClick={calculateAll} disabled={calculating}>
             {calculating ? '⏳ Рахуємо…' : '⚡ Перерахувати всі'}
           </button>
@@ -342,58 +404,12 @@ export default function ProjectPage({ projectId }: Props) {
               </div>
 
               <div style={{borderTop:'1px solid var(--clr-border)',paddingTop:'16px',marginTop:'8px'}}>
-                <div style={{fontWeight:600,fontSize:'.875rem',marginBottom:'12px'}}>Матеріал</div>
-                <div className="form-row form-row-2">
-                  <div className="form-group">
-                    <label className="form-label">Тип покриття</label>
-                    <select className="form-control" value={
-                        materials.find(m=>m.id===slopeParams.material_profile_id)?.type || ''
-                      }
-                      onChange={e => setSlopeParams(p => ({...p, material_profile_id: 0}))}>
-                      <option value="">Оберіть тип…</option>
-                      <option value="tile">Металочерепиця</option>
-                      <option value="profile">Профнастил</option>
-                      <option value="falts">Клік-фальц</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Профіль</label>
-                    <select className="form-control" value={slopeParams.material_profile_id}
-                      onChange={e => setSlopeParams(p => ({...p, material_profile_id: +e.target.value}))}>
-                      <option value={0}>Оберіть профіль…</option>
-                      {materials.map(m => (
-                        <option key={m.id} value={m.id}>{m.name} ({m.full_width}/{m.useful_width} мм)</option>
-                      ))}
-                    </select>
-                  </div>
-                  {selectedMaterial?.color_options?.length && (
-                    <div className="form-group">
-                      <label className="form-label">Колір</label>
-                      <select className="form-control" value={slopeParams.material_color}
-                        onChange={e => setSlopeParams(p => ({...p, material_color: e.target.value}))}>
-                        <option value="">Оберіть колір…</option>
-                        {selectedMaterial.color_options.map(c => <option key={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  )}
-                  {selectedMaterial?.coating_options?.length && (
-                    <div className="form-group">
-                      <label className="form-label">Покриття</label>
-                      <select className="form-control" value={slopeParams.material_coating}
-                        onChange={e => setSlopeParams(p => ({...p, material_coating: e.target.value}))}>
-                        <option value="">Оберіть…</option>
-                        {selectedMaterial.coating_options.map(c => <option key={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  )}
-                  {selectedMaterial?.thickness_options?.length && (
-                    <div className="form-group">
-                      <label className="form-label">Товщина, мм</label>
-                      <select className="form-control" value={slopeParams.material_thickness}
-                        onChange={e => setSlopeParams(p => ({...p, material_thickness: +e.target.value}))}>
-                        {selectedMaterial.thickness_options.map(t => <option key={t}>{t}</option>)}
-                      </select>
-                    </div>
+                <div style={{fontWeight:600,fontSize:'.875rem',marginBottom:'8px'}}>Матеріал</div>
+                <div style={{padding:'12px 14px',background:'var(--clr-brand-pale)',borderRadius:'8px',fontSize:'.85rem'}}>
+                  {selectedMaterial ? (
+                    <span>Матеріал проекту: <b>{selectedMaterial.name}</b> ({selectedMaterial.full_width}/{selectedMaterial.useful_width} мм)</span>
+                  ) : (
+                    <span style={{color:'var(--clr-text-3)'}}>Оберіть матеріал у верхній панелі «Матеріал проекту» — він застосується до всіх скатів.</span>
                   )}
                 </div>
               </div>
