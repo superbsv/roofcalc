@@ -40,6 +40,7 @@ export default function ProjectPage({ projectId }: Props) {
   });
   // Єдиний матеріал на весь проект
   const [projectMaterialId, setProjectMaterialId] = useState<number>(0);
+  const [manufacturer, setManufacturer] = useState<string>('');
   const [applyingMaterial, setApplyingMaterial]   = useState(false);
 
   // Load project
@@ -50,7 +51,13 @@ export default function ProjectPage({ projectId }: Props) {
       if (res.slopes.length) selectSlope(res.slopes[0]);
       // Визначаємо матеріал проекту з першого ската що його має
       const withMat = res.slopes.find(s => s.material_profile_id);
-      if (withMat?.material_profile_id) setProjectMaterialId(withMat.material_profile_id);
+      if (withMat?.material_profile_id) {
+        setProjectMaterialId(withMat.material_profile_id);
+        materialsApi.list().then(r => {
+          const m = r.profiles.find(x => x.id === withMat.material_profile_id);
+          if (m?.manufacturer) setManufacturer(m.manufacturer);
+        });
+      }
     }).catch(e => setError(e.message));
     materialsApi.list().then(res => setMaterials(res.profiles));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -205,6 +212,16 @@ export default function ProjectPage({ projectId }: Props) {
 
   const selectedMaterial = materials.find(m => m.id === (projectMaterialId || slopeParams.material_profile_id));
 
+  // Унікальні виробники
+  const manufacturers = Array.from(new Set(
+    materials.map(m => (m.manufacturer || '').trim()).filter(Boolean)
+  )).sort();
+
+  // Матеріали обраного виробника (або всі якщо виробник не обрано)
+  const filteredMaterials = manufacturer
+    ? materials.filter(m => (m.manufacturer || '').trim() === manufacturer)
+    : materials;
+
   const totalPrice = specItems.reduce((s, i) => s + Number(i.total || 0), 0);
   const sheetItems = specItems.filter(i => i.type === 'sheet');
 
@@ -236,7 +253,24 @@ export default function ProjectPage({ projectId }: Props) {
             {project?.object_address}
           </div>
         </div>
-        <div className="flex gap-3" style={{alignItems:'center'}}>
+        <div className="flex gap-3" style={{alignItems:'center',flexWrap:'wrap'}}>
+          {/* Завод виробник */}
+          <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+            <label style={{fontSize:'.82rem',fontWeight:600,color:'var(--clr-text-2)',whiteSpace:'nowrap'}}>
+              Завод виробник:
+            </label>
+            <select className="form-control" style={{minWidth:'180px'}}
+              value={manufacturer}
+              onChange={e => { setManufacturer(e.target.value); }}
+              disabled={applyingMaterial}>
+              <option value="">— Усі виробники —</option>
+              {manufacturers.map(mf => (
+                <option key={mf} value={mf}>{mf}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Матеріал проекту */}
           <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
             <label style={{fontSize:'.82rem',fontWeight:600,color:'var(--clr-text-2)',whiteSpace:'nowrap'}}>
               Матеріал проекту:
@@ -246,24 +280,31 @@ export default function ProjectPage({ projectId }: Props) {
               onChange={e => applyMaterialToAll(+e.target.value)}
               disabled={applyingMaterial}>
               <option value={0}>— Оберіть матеріал —</option>
-              <optgroup label="Металочерепиця">
-                {materials.filter(m=>m.type==='tile').map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </optgroup>
-              <optgroup label="Профнастил">
-                {materials.filter(m=>m.type==='profile').map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </optgroup>
-              <optgroup label="Фальцева покрівля">
-                {materials.filter(m=>m.type==='falts').map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </optgroup>
+              {filteredMaterials.filter(m=>m.type==='tile').length > 0 && (
+                <optgroup label="Металочерепиця">
+                  {filteredMaterials.filter(m=>m.type==='tile').map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              {filteredMaterials.filter(m=>m.type==='profile').length > 0 && (
+                <optgroup label="Профнастил">
+                  {filteredMaterials.filter(m=>m.type==='profile').map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              {filteredMaterials.filter(m=>m.type==='falts').length > 0 && (
+                <optgroup label="Фальцева покрівля">
+                  {filteredMaterials.filter(m=>m.type==='falts').map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
             {applyingMaterial && <span style={{fontSize:'.78rem',color:'var(--clr-text-3)'}}>застосування…</span>}
           </div>
+
           <button className="btn btn-secondary" onClick={calculateAll} disabled={calculating}>
             {calculating ? '⏳ Рахуємо…' : '⚡ Перерахувати всі'}
           </button>
