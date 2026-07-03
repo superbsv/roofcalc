@@ -202,6 +202,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
 
   const [placements, setPlacements]   = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
   const [layoutOffset, setLayoutOffset] = useState(0);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [manualMode, setManualMode]   = useState(false);
   const [selected, setSelected]       = useState<Set<number>>(new Set());
   const [zoom, setZoom]               = useState(1);
@@ -427,23 +428,20 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     setSelected(new Set());
   };
 
-  // ---- Колір листа ----
+  // ---- Колір листа (завжди з полігону, синхронно з правками) ----
   const sheetColor = (p: SheetPlacement, isSel: boolean): string => {
     if (isSel) return COLORS.selected;
-
-    if (!manualMode && !p.offset_x && !p.offset_y && !p.manual_length &&
-        p.intersect_area_m2 !== undefined && p.full_area_m2 !== undefined) {
+    if (polygonPoints.length >= 3) {
+      const wastePct = estimateWastePct(getX(p), getY(p), getLen(p), p.useful_width, p.full_width, polygonPoints, W, eaveOverhang, ridgeGap);
+      if (wastePct > 50) return COLORS.waste;  // великий відхід
+      if (wastePct > 5)  return COLORS.cut;    // обрізаний
+      return COLORS.full;                       // повний
+    }
+    // Fallback на дані PHP якщо полігону нема
+    if (p.intersect_area_m2 !== undefined && p.full_area_m2 !== undefined) {
       const wastePct = (p.waste_area_m2??0) / (p.full_area_m2??1) * 100;
       if (wastePct > 50) return COLORS.waste;
       if (p.intersect_area_m2 < p.full_area_m2 * 0.95) return COLORS.cut;
-      return COLORS.full;
-    }
-
-    if (polygonPoints.length >= 3) {
-      const wastePct = estimateWastePct(getX(p), getY(p), getLen(p), p.useful_width, p.full_width, polygonPoints, W, eaveOverhang, ridgeGap);
-      if (wastePct > 50) return COLORS.waste;
-      if (wastePct > 5)  return COLORS.cut;
-      return COLORS.full;
     }
     return COLORS.full;
   };
