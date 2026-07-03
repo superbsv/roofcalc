@@ -74,10 +74,11 @@ const STEPS = [
 ];
 
 // ============================================
-// Висота полігону в точці X (мм)
+// Діапазон [minY, maxY] полігону в точці X (мм)
+// Повертає null якщо x поза полігоном
 // ============================================
-function getPolygonHeightAtX(x: number, polygon: Point[]): number {
-  if (!polygon.length) return 0;
+function getPolygonRangeAtX(x: number, polygon: Point[]): { minY: number; maxY: number } | null {
+  if (!polygon.length) return null;
   const ys: number[] = [];
   const n = polygon.length;
   for (let i = 0; i < n; i++) {
@@ -93,21 +94,26 @@ function getPolygonHeightAtX(x: number, polygon: Point[]): number {
       ys.push(y1 + t * (y2 - y1));
     }
   }
-  if (ys.length < 2) return 0;
-  return Math.max(...ys) - Math.min(...ys);
+  if (ys.length < 2) return null;
+  return { minY: Math.min(...ys), maxY: Math.max(...ys) };
 }
 
-// Висота колонки з полігону (3 точки: ліва, середина, права)
-function getColumnHeight(x: number, usefulWidth: number, slopeWidth: number, polygon: Point[]): number {
+// Діапазон покриття колонки (об'єднання по 3 точках)
+function getColumnRange(x: number, usefulWidth: number, slopeWidth: number, polygon: Point[]): { minY: number; maxY: number } | null {
   const visLeft  = Math.max(0, x);
   const visRight = Math.min(slopeWidth, x + usefulWidth);
-  if (visRight <= visLeft) return 0;
+  if (visRight <= visLeft) return null;
   const visMid = (visLeft + visRight) / 2;
-  return Math.max(
-    getPolygonHeightAtX(visLeft,  polygon),
-    getPolygonHeightAtX(visMid,   polygon),
-    getPolygonHeightAtX(visRight, polygon),
-  );
+  const ranges = [
+    getPolygonRangeAtX(visLeft,  polygon),
+    getPolygonRangeAtX(visMid,   polygon),
+    getPolygonRangeAtX(visRight, polygon),
+  ].filter((r): r is { minY: number; maxY: number } => r !== null);
+  if (!ranges.length) return null;
+  return {
+    minY: Math.min(...ranges.map(r => r.minY)),
+    maxY: Math.max(...ranges.map(r => r.maxY)),
+  };
 }
 
 // ============================================
@@ -122,7 +128,8 @@ function generateFullLayout(
   usefulWidth: number,
   fullWidth: number,
   maxSheetLength: number,
-  eaveRidgeExtra: number,
+  eaveOverhang: number,   // карнизний звис (додається знизу)
+  ridgeGap: number,       // ковзан (додається зверху)
 ): SheetPlacement[] {
   const placements: SheetPlacement[] = [];
   let sheetNum = 1;
@@ -134,15 +141,21 @@ function generateFullLayout(
     if (x >= slopeWidth) break;
     if (x + usefulWidth <= 0) continue;
 
-    const colH = getColumnHeight(x, usefulWidth, slopeWidth, polygon);
-    if (colH <= 0) continue;
+    const range = getColumnRange(x, usefulWidth, slopeWidth, polygon);
+    if (!range) continue;
 
-    const colTotal = colH + eaveRidgeExtra;
+    // Реальна зона покриття колонки: від низу полігону мінус звис
+    // до верху полігону плюс ковзан
+    const bottomY = range.minY - eaveOverhang;   // початок листів (може бути < 0)
+    const topY    = range.maxY + ridgeGap;       // верх покриття
+    const colTotal = topY - bottomY;
+    if (colTotal <= 0) continue;
 
-    let currentY = 0;
+    // Стек листів знизу вгору в межах [bottomY, topY]
+    let currentY = bottomY;
     let row = 0;
-    while (currentY < colTotal - 0.5) {
-      const remaining = colTotal - currentY;
+    while (currentY < topY - 0.5) {
+      const remaining = topY - currentY;
       const rowLen = Math.min(maxSheetLength, remaining);
       placements.push({
         sheet_number: sheetNum++,
@@ -161,12 +174,13 @@ function generateFullLayout(
 function estimateWastePct(
   sheetX: number, sheetY: number, sheetLen: number,
   usefulWidth: number, fullWidth: number,
-  polygon: Point[], slopeWidth: number, eaveRidgeExtra: number,
+  polygon: Point[], slopeWidth: number, eaveOverhang: number, ridgeGap: number,
 ): number {
-  const colH = getColumnHeight(sheetX, usefulWidth, slopeWidth, polygon);
-  if (colH <= 0) return 100;
-  const totalNeeded = colH + eaveRidgeExtra;
-  const overlapH = Math.max(0, Math.min(sheetY + sheetLen, totalNeeded) - Math.max(sheetY, 0));
+  const range = getColumnRange(sheetX, usefulWidth, slopeWidth, polygon);
+  if (!range) return 100;
+  const coverBottom = range.minY - eaveOverhang;
+  const coverTop    = range.maxY + ridgeGap;
+  const overlapH = Math.max(0, Math.min(sheetY + sheetLen, coverTop) - Math.max(sheetY, coverBottom));
   const intersect = overlapH * usefulWidth;
   const full = sheetLen * fullWidth;
   if (full <= 0) return 100;
@@ -180,7 +194,11 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   const usefulWidth = calcResult.placements[0]?.useful_width ?? 1100;
   const fullWidth   = calcResult.placements[0]?.full_width   ?? 1185;
   const sheetLength = calcResult.sheet_length_mm;
-  const eaveRidgeExtra = Math.max(0, sheetLength - H);
+  // Звис і ковзан: беремо з різниці sheet_length та висоти полігону.
+  // eaveOverhang виносимо в низ (карниз), ridgeGap — зверху (ковзан).
+  const eaveRidgeTotal = Math.max(0, sheetLength - H);
+  const eaveOverhang = eaveRidgeTotal; // весь припуск — карнизний звис (як у KrovlyaProfy за замовч.)
+  const ridgeGap = 0;
 
   const [placements, setPlacements]   = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
   const [layoutOffset, setLayoutOffset] = useState(0);
@@ -227,12 +245,12 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     setLayoutOffset(newOffset);
     setManualMode(true);
     if (polygonPoints.length >= 3) {
-      const np = generateFullLayout(newOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveRidgeExtra);
+      const np = generateFullLayout(newOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap);
       setPlacements(np);
       onUpdate?.(np);
     }
     setSelected(new Set());
-  }, [layoutOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveRidgeExtra, onUpdate]);
+  }, [layoutOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, onUpdate]);
 
   // Вертикальний зсув ВСІХ листів
   const shiftAllVertical = useCallback((deltaMm: number) => {
@@ -422,7 +440,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     }
 
     if (polygonPoints.length >= 3) {
-      const wastePct = estimateWastePct(getX(p), getY(p), getLen(p), p.useful_width, p.full_width, polygonPoints, W, eaveRidgeExtra);
+      const wastePct = estimateWastePct(getX(p), getY(p), getLen(p), p.useful_width, p.full_width, polygonPoints, W, eaveOverhang, ridgeGap);
       if (wastePct > 50) return COLORS.waste;
       if (wastePct > 5)  return COLORS.cut;
       return COLORS.full;
