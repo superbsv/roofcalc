@@ -136,6 +136,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   const [scale, setScale]           = useState(60);
   const [offset, setOffset]         = useState<Point>([60, 40]);
   const [dragIdx, setDragIdx]       = useState(-1);
+  const [hoverIdx, setHoverIdx]     = useState(-1);
   const [showLayout, setShowLayout] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState<number | null>(null);
 
@@ -173,7 +174,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     drawPoints(ctx, H);
     if (mode === 'draw' && !closed) drawCursorInfo(ctx, H);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, closed, mouse, scale, offset, mode, showLayout, calcResult]);
+  }, [points, closed, mouse, scale, offset, mode, showLayout, calcResult, hoverIdx, dragIdx]);
 
   useEffect(() => { render(); }, [render]);
 
@@ -357,11 +358,28 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   function drawPoints(ctx: CanvasRenderingContext2D, H: number) {
     points.forEach((p, i) => {
       const [sx, sy] = w2s(p[0], p[1], H);
+      const isActive = i === dragIdx || i === hoverIdx;
+      // Кільце навколо активної точки
+      if (isActive) {
+        ctx.beginPath();
+        ctx.arc(sx, sy, 10, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(21,101,192,0.15)';
+        ctx.fill();
+        ctx.strokeStyle = COLORS.dim; ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
       ctx.beginPath();
-      ctx.arc(sx, sy, i === 0 && !closed ? 6 : 4, 0, Math.PI * 2);
-      ctx.fillStyle   = i === 0 ? COLORS.pointFirst : COLORS.point;
+      ctx.arc(sx, sy, isActive ? 7 : (i === 0 && !closed ? 6 : 4), 0, Math.PI * 2);
+      ctx.fillStyle   = i === 0 ? COLORS.pointFirst : (isActive ? COLORS.dim : COLORS.point);
       ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+      // Координати активної точки
+      if (isActive) {
+        ctx.font = '11px Inter, system-ui, sans-serif';
+        ctx.fillStyle = COLORS.dim;
+        const label = `(${p[0].toFixed(3)}; ${p[1].toFixed(3)})`;
+        ctx.fillText(label, sx + 12, sy - 8);
+      }
     });
   }
 
@@ -422,11 +440,27 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     const H = cv.height;
     const [wx, wy] = s2w(sx, sy, H);
     setMouse([sx, sy]);
-    if (mode === 'move' && dragIdx >= 0) {
+
+    if (dragIdx >= 0) {
+      // Перетягуємо точку (прив'язка до 1мм вже в s2w)
       const next = [...points];
       next[dragIdx] = [wx, wy];
       setPoints(next);
       notifyChange(next);
+      return;
+    }
+
+    // Підсвічування точки під курсором (в режимі move, коли контур замкнено)
+    if (mode === 'move' && points.length > 0) {
+      let found = -1;
+      const R = 12; // збільшена зона наведення
+      points.forEach((p, i) => {
+        const [px, py] = w2s(p[0], p[1], H);
+        if ((sx-px)**2 + (sy-py)**2 < R*R) found = i;
+      });
+      setHoverIdx(found);
+    } else if (hoverIdx !== -1) {
+      setHoverIdx(-1);
     }
   };
 
@@ -454,16 +488,22 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       const next = [...points, [wx, wy] as Point];
       setPoints(next);
     } else {
+      // Режим редагування — хапаємо найближчу точку (зона 14px)
       let found = -1;
+      let bestDist = Infinity;
       points.forEach((p, i) => {
         const [px, py] = w2s(p[0], p[1], H);
-        if ((sx-px)**2 + (sy-py)**2 < 64) found = i;
+        const d = (sx-px)**2 + (sy-py)**2;
+        if (d < 196 && d < bestDist) { found = i; bestDist = d; }
       });
       setDragIdx(found);
     }
   };
 
-  const onMouseUp = () => setDragIdx(-1);
+  const onMouseUp = () => {
+    if (dragIdx >= 0) notifyChange(points);
+    setDragIdx(-1);
+  };
 
   // Колесо миші — масштабування
   const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -568,7 +608,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
           </button>
           <button className={`btn btn-sm${mode==='move'?' btn-primary':' btn-secondary'}`}
             style={{width:'100%',justifyContent:'flex-start'}} onClick={() => setMode('move')}>
-            ↕ Редагувати
+            ✥ Редагувати точки
           </button>
           <button className="btn btn-sm btn-danger"
             style={{width:'100%',justifyContent:'flex-start'}} onClick={clearAll}>
@@ -590,7 +630,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       <div className="editor-canvas-wrap" ref={wrapRef}>
         <canvas
           ref={canvasRef}
-          style={{display:'block',width:'100%',height:'100%',cursor:mode==='draw'?'crosshair':'default'}}
+          style={{display:'block',width:'100%',height:'100%',cursor:mode==='draw'?'crosshair':(dragIdx>=0?'grabbing':(hoverIdx>=0?'grab':'default'))}}
           onMouseMove={onMouseMove}
           onMouseDown={onMouseDown}
           onMouseUp={onMouseUp}
