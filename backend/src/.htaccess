@@ -1,0 +1,8 @@
+# Доступ з вебу до коду бекенду заборонено — PHP підключає ці файли напряму з диска
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>

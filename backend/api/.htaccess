@@ -1,0 +1,9 @@
+Options -Indexes
+Options -MultiViews
+
+AddHandler application/x-httpd-php74lts .php
+
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [QSA,L]
