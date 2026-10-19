@@ -25,6 +25,9 @@ jobs:
           cp -r backend/src build/src
           cp -r backend/api build/api
           find build/src build/api -name '.env' -delete
+          # маніфест md5 PHP-файлів — після викладки /api/ping?check=1 перевіряє, що файли дійшли цілими
+          (cd build && find src api -name '*.php' -not -path 'src/lib/*' | sort | while read f; do printf '%s\t%s\n' "$f" "$(md5sum "$f" | cut -d' ' -f1)"; done) \
+            | python3 -c "import sys,json; print(json.dumps(dict(l.rstrip('\n').split('\t') for l in sys.stdin)))" > build/src/deploy-manifest.json
       - name: Deploy to FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
@@ -35,9 +38,18 @@ jobs:
           port: 21
           local-dir: ./build/
           server-dir: /roofkit.com.ua/www/
+          state-name: .ftp-deploy-sync-state-v2.json
           dangerous-clean-slate: false
           exclude: |
             **/.git*
             **/.git*/**
             **/.env
-
+      - name: Verify deployed PHP files
+        run: |
+          for i in 1 2 3; do
+            r=$(curl -fsS "https://roofkit.com.ua/api/ping?check=1" || true)
+            echo "$r"
+            echo "$r" | grep -q '"status":"ok"' && exit 0
+            sleep 10
+          done
+          echo "::error::Файли на сервері не збігаються зі збіркою — перезапустіть викладку"; exit 1

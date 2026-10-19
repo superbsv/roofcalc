@@ -161,7 +161,23 @@ try {
     echo json_encode($results);
     break;
         case $uri==='/ping':
-            echo json_encode(['status'=>'ok','php'=>PHP_VERSION,'time'=>date('c')]); break;
+            $out = ['status'=>'ok','php'=>PHP_VERSION,'time'=>date('c')];
+            // ?check=1 — перевірка, що всі PHP-файли викладені повністю (порівняння з маніфестом збірки)
+            if (!empty($_GET['check'])) {
+                $mf = SRC_PATH . '/deploy-manifest.json';
+                $list = is_file($mf) ? json_decode((string)file_get_contents($mf), true) : null;
+                $bad = [];
+                if (is_array($list)) {
+                    foreach ($list as $rel => $md5) {
+                        $f = BASE_PATH . '/' . $rel;
+                        if (!is_file($f) || md5_file($f) !== $md5) $bad[] = $rel;
+                    }
+                }
+                $out['files'] = is_array($list) ? count($list) : 0;
+                $out['bad'] = $bad;
+                if ($bad || !is_array($list)) $out['status'] = 'mismatch';
+            }
+            echo json_encode($out, JSON_UNESCAPED_UNICODE); break;
         default:
             http_response_code(404);
             echo json_encode(['error'=>'Не знайдено: '.$method.' '.$uri], JSON_UNESCAPED_UNICODE);
