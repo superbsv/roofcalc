@@ -725,7 +725,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
                     fill={isSel?COLORS.selected:COLORS.text} fontSize={8} opacity={0.7}>
                     №{p.sheet_number}
                   </text>}
-                  {p.manual_length && <text x={x1+3} y={y1-h+10} fill="#FF7A00" fontSize={9}>✎</text>}
+                  {p.manual_length && <text x={x1+3} y={y1-h+10} fill="#FF7A1A" fontSize={9}>✎</text>}
                 </g>
               );
             })}

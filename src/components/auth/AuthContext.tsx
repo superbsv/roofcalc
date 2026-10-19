@@ -5,7 +5,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, authApi, superApi } from '../../api/client';
-import BrandMark from '../brand/BrandMark';
+import BrandMark, { BrandWordmark } from '../brand/BrandMark';
 import { ThemeToggle } from '../theme/theme';
 import RegisterPage from '../../pages/RegisterPage';
 import LandingPage from '../../pages/LandingPage';
@@ -150,9 +150,9 @@ function LoginForm({ onRegister, onHome }: { onRegister: () => void; onHome: () 
       <ThemeToggle className="theme-toggle-floating" />
       <div className="login-card">
         <div className="login-logo">
-          <div className="login-logo-mark"><BrandMark size={56} /></div>
-          <div className="login-brand">ROOFKIT</div>
-          <div className="login-sub">Калькулятор покрівельних матеріалів</div>
+          <div className="login-logo-mark"><BrandMark size={120} /></div>
+          <div className="login-brand"><BrandWordmark size={1.7} /></div>
+          <div className="login-sub">Розрахунок покрівлі — точно, швидко, зрозуміло</div>
         </div>
 
         <form onSubmit={handle}>
@@ -200,8 +200,8 @@ function LoginForm({ onRegister, onHome }: { onRegister: () => void; onHome: () 
         </div>
 
         <div style={{marginTop:'24px',textAlign:'center',fontSize:'.75rem',color:'var(--clr-text-3)'}}>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={onHome}>← Про RoofKit</button><br />
-          © {new Date().getFullYear()} RoofKit · ABT. Всі права захищено.
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onHome}>← Про ROOFKIT</button><br />
+          © {new Date().getFullYear()} ROOFKIT · розробка ABT
         </div>
       </div>
     </div>

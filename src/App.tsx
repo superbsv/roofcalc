@@ -81,7 +81,7 @@ function Shell() {
         </button>
 
         <a href="/" className="header-logo" onClick={e => { e.preventDefault(); navigate({type:'projects'}); }}>
-          <div className="header-logo-icon"><BrandMark /></div>
+          <div className="header-logo-icon"><BrandMark size={44} /></div>
           <span><BrandWordmark /></span>
         </a>
 
@@ -232,8 +232,8 @@ function Shell() {
         )}
 
         <div style={{marginTop:'auto',padding:'16px 12px',borderTop:'1px solid var(--clr-border)',fontSize:'.7rem',color:'var(--clr-text-3)'}}>
-          <div style={{marginBottom:'4px',fontWeight:600,color:'var(--clr-text-2)'}}>ABT · Advanced Building Technologies</div>
-          <div>Калькулятор покрівлі v1.0</div>
+          <div style={{marginBottom:'4px',fontWeight:700,color:'var(--clr-text-2)'}}>ROOFKIT · калькулятор покрівлі</div>
+          <div>v1.0 · розробка ABT</div>
           <a href="https://artbudtrading.com.ua" target="_blank" rel="noopener noreferrer"
             style={{color:'var(--clr-brand)',fontSize:'.7rem'}}>
             artbudtrading.com.ua

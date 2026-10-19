@@ -79,7 +79,7 @@ export default function ProjectsPage({ onOpenProject }: Props) {
           <div className="page-subtitle">Всього: {total} проектів</div>
         </div>
         <button className="btn btn-primary btn-lg" onClick={createProject} disabled={creating}>
-          {creating ? 'Створення…' : '+ Новий розрахунок'}
+          {creating ? 'Створення…' : '+ Створити розрахунок'}
         </button>
       </div>
 
@@ -117,7 +117,7 @@ export default function ProjectsPage({ onOpenProject }: Props) {
                 </td></tr>
               ) : !projects.length ? (
                 <tr><td colSpan={7} style={{textAlign:'center',padding:'32px',color:'var(--clr-text-3)'}}>
-                  Проектів поки немає. Натисніть «Новий розрахунок»
+                  Проектів поки немає. Натисніть «Створити розрахунок»
                 </td></tr>
               ) : projects.map(p => {
                 const [statusLabel, statusClass] = STATUS_LABELS[p.status] || ['', 'badge-gray'];

@@ -28,18 +28,18 @@ type Palette = {
 };
 const PALETTES: Record<Theme, Palette> = {
   dark: {
-    grid: '#1E1E1E', axis: '#3A3A3A', polygon: '#F4F4F2', polygonFill: 'rgba(255,122,0,0.10)',
-    point: '#FF7A00', pointFirst: '#FF5A5A',
-    sheet: ['rgba(191,195,199,0.20)','rgba(191,195,199,0.34)'], sheetBorder: ['#BFC3C7','#8A8F95'],
-    dim: '#BFC3C7', tooltip: '#0D0D0D', cursorLen: '#FF7A00',
-    label: '#A3A8AD', tooltipBg: 'rgba(13,13,13,0.92)', tooltipText: '#FFFFFF', pointStroke: '#0D0D0D',
+    grid: '#1E1E1E', axis: '#344154', polygon: '#F5F7FA', polygonFill: 'rgba(255,122,0,0.10)',
+    point: '#FF7A1A', pointFirst: '#FF5A5A',
+    sheet: ['rgba(191,195,199,0.20)','rgba(191,195,199,0.34)'], sheetBorder: ['#C3CBD5','#7C8A9C'],
+    dim: '#C3CBD5', tooltip: '#0B1119', cursorLen: '#FF7A1A',
+    label: '#94A3B8', tooltipBg: 'rgba(13,13,13,0.92)', tooltipText: '#FFFFFF', pointStroke: '#0B1119',
   },
   light: {
-    grid: '#E8E8E4', axis: '#C2C4C6', polygon: '#1A1A1A', polygonFill: 'rgba(255,122,0,0.10)',
-    point: '#FF7A00', pointFirst: '#C8322F',
+    grid: '#E8E8E4', axis: '#C2C4C6', polygon: '#151E29', polygonFill: 'rgba(255,122,0,0.10)',
+    point: '#FF7A1A', pointFirst: '#C8322F',
     sheet: ['rgba(78,82,88,0.14)','rgba(78,82,88,0.26)'], sheetBorder: ['#4E5258','#2E3135'],
-    dim: '#4E5258', tooltip: '#1A1A1A', cursorLen: '#C25E00',
-    label: '#63676C', tooltipBg: 'rgba(26,26,26,0.92)', tooltipText: '#FFFFFF', pointStroke: '#FFFFFF',
+    dim: '#4E5258', tooltip: '#151E29', cursorLen: '#C25E00',
+    label: '#64748B', tooltipBg: 'rgba(26,26,26,0.92)', tooltipText: '#FFFFFF', pointStroke: '#FFFFFF',
   },
 };
 
@@ -233,7 +233,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
 
     // Підписи довжин сторін
     if (closed) {
-      ctx.font = '11px "Noto Sans", system-ui, sans-serif';
+      ctx.font = '11px "JetBrains Mono", ui-monospace, sans-serif';
       ctx.fillStyle = COLORS.dim;
       for (let i = 0; i < points.length; i++) {
         const a = points[i], b = points[(i + 1) % points.length];
@@ -250,7 +250,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     if (!closed || points.length < 3) return;
     const angs = interiorAngles(points);
     ctx.save();
-    ctx.font = '600 11px "Noto Sans", system-ui, sans-serif';
+    ctx.font = '600 11px "JetBrains Mono", ui-monospace, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     angs.forEach((a, i) => {
       if (Math.abs(a.deg - 180) < 0.05) return;
@@ -297,13 +297,13 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
         if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
       });
       ctx.closePath();
-      ctx.fillStyle = theme === 'dark' ? '#111111' : '#FAFAF8';
+      ctx.fillStyle = theme === 'dark' ? '#0F1722' : '#FAFAF8';
       ctx.fill();
       ctx.setLineDash([6, 4]);
       ctx.strokeStyle = COLORS.polygon; ctx.lineWidth = 1.5; ctx.stroke();
       ctx.setLineDash([]);
       const [lx, ly] = w2s(h[0][0] / 1000, h[0][1] / 1000, H);
-      ctx.font = '10px "Noto Sans", system-ui, sans-serif';
+      ctx.font = '10px "JetBrains Mono", ui-monospace, sans-serif';
       ctx.fillStyle = COLORS.label;
       ctx.fillText(`Виріз ${hi + 1}`, lx + 4, ly - 4);
     });
@@ -316,7 +316,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     const mx = mouse[0], my = mouse[1];
 
     ctx.save();
-    ctx.font = '11px "Noto Sans", system-ui, sans-serif';
+    ctx.font = '11px "JetBrains Mono", ui-monospace, sans-serif';
 
     // Перехрестя на курсорі
     ctx.strokeStyle = 'rgba(255,122,0,0.6)';
@@ -386,7 +386,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       ctx.strokeStyle = COLORS.pointStroke; ctx.lineWidth = 1.5; ctx.stroke();
       // Координати активної точки
       if (isActive) {
-        ctx.font = '11px "Noto Sans", system-ui, sans-serif';
+        ctx.font = '11px "JetBrains Mono", ui-monospace, sans-serif';
         ctx.fillStyle = COLORS.dim;
         const label = `(${p[0].toFixed(3)}; ${p[1].toFixed(3)})`;
         ctx.fillText(label, sx + 12, sy - 8);
@@ -394,7 +394,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
           // Довжини прилеглих сторін — як при точному доведенні вершини у КП
           const n = points.length, pi = (i - 1 + n) % n, ni = (i + 1) % n;
           const len = (a: Point, b: Point) => Math.hypot(b[0] - a[0], b[1] - a[1]).toFixed(3);
-          ctx.font = '600 12px "Noto Sans", system-ui, sans-serif';
+          ctx.font = '600 12px "JetBrains Mono", ui-monospace, sans-serif';
           ctx.fillStyle = COLORS.pointFirst;
           ctx.fillText(`${sideLetter(pi)} = ${len(points[pi], p)}   ${sideLetter(i)} = ${len(p, points[ni])}`, sx + 12, sy + 16);
         }
@@ -427,7 +427,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       ctx.lineWidth = 0.7;
       ctx.strokeRect(px, py - ph, pw, ph);
       if (pw > 28 && ph > 14) {
-        ctx.font = '9px "Noto Sans", system-ui, sans-serif';
+        ctx.font = '9px "JetBrains Mono", ui-monospace, sans-serif';
         ctx.fillStyle = COLORS.sheetBorder[ci];
         ctx.fillText(`${pl.col_index+1},${pl.row_index+1}`, px + 3, py - ph + 11);
       }

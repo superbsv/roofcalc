@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react';
 import { authApi, PlanDef } from '../api/client';
 import { useAuth } from '../components/auth/AuthContext';
-import BrandMark from '../components/brand/BrandMark';
+import { BrandLogo } from '../components/brand/BrandMark';
 import { ThemeToggle } from '../components/theme/theme';
 
 const limitText = (v: number | null | undefined, one: string, many: string) => (v ? `${v} ${v === 1 ? one : many}` : `без ліміту ${many}`);
@@ -53,7 +53,7 @@ export default function RegisterPage({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="reg">
       <header className="reg-head">
-        <a className="reg-brand" href="/" style={{ color: 'inherit', textDecoration: 'none' }}><BrandMark size={34} /><span>ROOFKIT</span></a>
+        <a className="reg-brand" href="/" style={{ color: 'inherit', textDecoration: 'none' }}><BrandLogo size={40} text={1.1} /></a>
         <div className="flex gap-3" style={{ alignItems: 'center' }}>
           <ThemeToggle />
           <button type="button" className="btn btn-secondary btn-sm" onClick={onLogin}>Увійти</button>

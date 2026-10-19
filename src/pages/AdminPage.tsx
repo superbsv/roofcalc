@@ -72,7 +72,7 @@ function UsersTab() {
   };
 
   const roleColors: Record<string,[string,string]> = {
-    admin:['#0D0D0D','#FF7A00'], manager:['var(--clr-info)','var(--clr-info-bg)'],
+    admin:['#0B1119','#FF7A1A'], manager:['var(--clr-info)','var(--clr-info-bg)'],
     dealer:['var(--clr-warning)','var(--clr-warning-bg)'], production:['var(--clr-text-2)','var(--clr-surface-2)'], viewer:['var(--clr-text-3)','var(--clr-surface-2)'],
   };
   const roleLabels: Record<string,string> = { admin:'Адміністратор',manager:'Менеджер',dealer:'Дилер',production:'Виробництво',viewer:'Перегляд' };

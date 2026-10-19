@@ -8,7 +8,7 @@ import { tenantApi, teamApi, TenantInfo, TenantSettings, TeamUser } from '../api
 import { useAuth } from '../components/auth/AuthContext';
 
 const ROLES: Record<string, string> = { admin: 'Адміністратор', manager: 'Менеджер', dealer: 'Дилер', production: 'Виробництво', viewer: 'Лише перегляд' };
-const COLORS = ['#FF7A00', '#2F6BC2', '#1E7A46', '#B42318', '#1A1A1A'];
+const COLORS = ['#FF7A1A', '#2F6BC2', '#1E7A46', '#B42318', '#151E29'];
 const dateUa = (d?: string | null) => (d ? d.slice(0, 10).split('-').reverse().join('.') : '—');
 
 export default function TenantSettingsPage() {
@@ -118,10 +118,10 @@ export default function TenantSettingsPage() {
               <div className="form-label">Колір у PDF
                 <div className="tset-colors" role="radiogroup" aria-label="Колір у PDF">
                   {COLORS.map(c => (
-                    <button key={c} type="button" role="radio" aria-checked={(f.brand_color || '#FF7A00').toUpperCase() === c} aria-label={c}
-                      className={`tset-swatch${(f.brand_color || '#FF7A00').toUpperCase() === c ? ' on' : ''}`} style={{ background: c }} onClick={() => set('brand_color', c)} />
+                    <button key={c} type="button" role="radio" aria-checked={(f.brand_color || '#FF7A1A').toUpperCase() === c} aria-label={c}
+                      className={`tset-swatch${(f.brand_color || '#FF7A1A').toUpperCase() === c ? ' on' : ''}`} style={{ background: c }} onClick={() => set('brand_color', c)} />
                   ))}
-                  <input type="color" aria-label="Свій колір" value={f.brand_color || '#FF7A00'} onChange={e => set('brand_color', e.target.value)} />
+                  <input type="color" aria-label="Свій колір" value={f.brand_color || '#FF7A1A'} onChange={e => set('brand_color', e.target.value)} />
                 </div>
               </div>
               <label className="form-label">Наступний № замовлення<input className="form-control" type="number" min={1} value={f.next_order_no || 1} onChange={e => set('next_order_no', +e.target.value)} /></label>

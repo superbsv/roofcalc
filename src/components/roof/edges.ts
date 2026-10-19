@@ -4,12 +4,12 @@ import { Theme } from '../theme/theme';
 
 export const EDGE_TYPES: { key: EdgeType; label: string; color: Record<Theme, string> }[] = [
   { key: 'eave',     label: 'Карниз',        color: { dark: '#6E9BD8', light: '#2F6BC2' } },
-  { key: 'ridge',    label: 'Конек',         color: { dark: '#F4F4F2', light: '#1A1A1A' } },
-  { key: 'hip',      label: 'Хребет',        color: { dark: '#FF7A00', light: '#C25E00' } },
+  { key: 'ridge',    label: 'Конек',         color: { dark: '#F5F7FA', light: '#151E29' } },
+  { key: 'hip',      label: 'Хребет',        color: { dark: '#FF7A1A', light: '#C25E00' } },
   { key: 'valley',   label: 'Ендова',        color: { dark: '#5FD39A', light: '#1E7A46' } },
-  { key: 'end',      label: 'Фронтон',       color: { dark: '#BFC3C7', light: '#63676C' } },
+  { key: 'end',      label: 'Фронтон',       color: { dark: '#C3CBD5', light: '#64748B' } },
   { key: 'abutment', label: 'Примикання',    color: { dark: '#C79BFF', light: '#6B3FB5' } },
-  { key: 'none',     label: 'Без доборних',  color: { dark: '#5A5E63', light: '#A3A8AD' } },
+  { key: 'none',     label: 'Без доборних',  color: { dark: '#5A5E63', light: '#94A3B8' } },
 ];
 
 export const edgeLabel = (t: EdgeType) => EDGE_TYPES.find(e => e.key === t)?.label ?? t;

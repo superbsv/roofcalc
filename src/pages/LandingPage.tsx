@@ -4,7 +4,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { authApi, PlanDef } from '../api/client';
-import BrandMark from '../components/brand/BrandMark';
+import { BrandLogo } from '../components/brand/BrandMark';
 import { ThemeToggle } from '../components/theme/theme';
 import { PlanCards } from './RegisterPage';
 
@@ -21,6 +21,14 @@ const FEATURES: { t: string; d: string; i: React.ReactNode }[] = [
     i: <><circle cx="11" cy="11" r="4" /><circle cx="22" cy="12" r="3" /><path d="M4 26 C4 19 18 19 18 26" /><path d="M18 22 C19 18 28 18 28 24" /></> },
   { t: 'Матеріали', d: 'Каталог металочерепиці, профнастилу і фальцу вже всередині. Додавайте власні профілі або копіюйте з каталогу.',
     i: <><path d="M4 12 Q8 6 12 12 T20 12 T28 12" /><path d="M4 20 Q8 14 12 20 T20 20 T28 20" /></> },
+];
+
+const FAQ: [string, string][] = [
+  ['Чим ROOFKIT відрізняється від Кровлі Профі?', 'Порядок роботи той самий: замовлення, матеріал, скати, укладка, специфікація. Але ROOFKIT працює в браузері, українською, з командою і спільною базою розрахунків — без встановлення і ліцензійних ключів.'],
+  ['Де зберігаються мої розрахунки?', 'На захищеному сервері, у кабінеті вашої компанії. Інші компанії їх не бачать. Працювати можна з будь-якого комп\'ютера.'],
+  ['Чи можна додати власні матеріали?', 'Так. Каталог металочерепиці, профнастилу і фальцу вже всередині, а свої профілі можна створити з нуля або скопіювати з каталогу і змінити параметри.'],
+  ['Що буде після пробного періоду?', 'Кабінет переходить у режим перегляду: усі розрахунки зберігаються. Щоб продовжити роботу, оберіть тариф.'],
+  ['Скільки людей може працювати в одному кабінеті?', 'Залежить від тарифу. Адміністратор додає менеджерів і переглядачів, кожен бачить свої розрахунки, керівник — усі.'],
 ];
 
 const STEPS = ['Замовлення', 'Матеріал', 'Скати', 'Укладка', 'Специфікація'];
@@ -63,16 +71,17 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
   return (
     <div className="land">
       <header className="land-head">
-        <a className="land-brand" href="/" aria-label="RoofKit — на головну"><BrandMark size={32} /><span>ROOFKIT</span></a>
+        <a className="land-brand" href="/" aria-label="RoofKit — на головну"><BrandLogo size={40} text={1.1} /></a>
         <nav className="land-nav" aria-label="Розділи">
           <a href="#features">Можливості</a>
           <a href="#steps">Як працює</a>
           <a href="#plans">Тарифи</a>
+          <a href="#faq">Питання</a>
         </nav>
         <div className="land-actions">
           <ThemeToggle />
           <button type="button" className="btn btn-secondary btn-sm" onClick={onLogin}>Увійти</button>
-          <button type="button" className="btn btn-primary btn-sm land-hide-sm" onClick={onRegister}>Спробувати</button>
+          <button type="button" className="btn btn-primary btn-sm land-hide-sm" onClick={onRegister}>Створити розрахунок</button>
         </div>
       </header>
 
@@ -80,13 +89,13 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
         <div className="land-hero-in">
           <div className="land-hero-text">
             <div className="land-kicker">Калькулятор покрівлі онлайн</div>
-            <h1>Розрахунок даху з розкроєм і специфікацією — за 10 хвилин</h1>
-            <p>Металочерепиця, профнастил, фальц. Скати, укладка листів, доборні елементи і PDF для клієнта з вашим логотипом. Звична логіка Кровлі Профі — українською, у браузері, без встановлення.</p>
+            <h1>Розрахунок покрівлі — точно, швидко, зрозуміло</h1>
+            <p>Від геометрії даху до готової специфікації. Металочерепиця, профнастил, фальц: скати, укладка листів, доборні елементи і PDF для клієнта з вашим логотипом. Звична логіка Кровлі Профі — українською, у браузері.</p>
             <div className="land-cta">
-              <button type="button" className="btn btn-primary btn-lg" onClick={onRegister}>Почати {trialDays} днів безкоштовно</button>
+              <button type="button" className="btn btn-primary btn-lg" onClick={onRegister}>Створити розрахунок</button>
               <button type="button" className="btn btn-secondary btn-lg" onClick={onLogin}>У мене вже є кабінет</button>
             </div>
-            <div className="land-note">Без картки. Після пробного періоду розрахунки зберігаються.</div>
+            <div className="land-note">{trialDays} днів безкоштовно, без картки. Після пробного періоду розрахунки зберігаються.</div>
           </div>
           <HeroScheme />
         </div>
@@ -128,13 +137,22 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
         </section>
       )}
 
+      <section id="faq" className="land-sec">
+        <h2>Питання</h2>
+        <div className="land-faq">
+          {FAQ.map(([q, a]) => (
+            <details key={q}><summary>{q}</summary><p>{a}</p></details>
+          ))}
+        </div>
+      </section>
+
       <section className="land-final">
-        <h2>Спробуйте на своєму наступному замовленні</h2>
+        <h2>Від геометрії даху до готової специфікації</h2>
         <button type="button" className="btn btn-primary btn-lg" onClick={onRegister}>Створити кабінет</button>
       </section>
 
       <footer className="land-foot">
-        <span>© {new Date().getFullYear()} RoofKit · розробка ABT — Advanced Building Technologies</span>
+        <span>© {new Date().getFullYear()} ROOFKIT · розробка ABT — Advanced Building Technologies</span>
         <a href="https://artbudtrading.com.ua" target="_blank" rel="noopener noreferrer">artbudtrading.com.ua</a>
       </footer>
     </div>
