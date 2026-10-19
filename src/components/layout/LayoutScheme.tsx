@@ -53,14 +53,14 @@ interface Props {
 }
 
 const COLORS = {
-  full:     '#3b82f6',
-  cut:      '#f59e0b',
-  waste:    '#ef4444',
-  selected: '#7c3aed',
-  polygon:  '#dc2626',
-  grid:     '#e5e7eb',
-  text:     '#1e40af',
-  bg:       '#f8fafc',
+  full:     '#BFC3C7',
+  cut:      '#6E9BD8',
+  waste:    '#E5484D',
+  selected: '#FF7A00',
+  polygon:  '#F4F4F2',
+  grid:     '#232323',
+  text:     '#F4F4F2',
+  bg:       '#111111',
 };
 
 const PADDING = 80;
@@ -562,31 +562,31 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px', flexWrap:'wrap', gap:'8px' }}>
         <div>
           <h3 style={{ margin:0, fontSize:'1rem' }}>Схема розкладки — {slopeName}</h3>
-          <div style={{ fontSize:'.8rem', color:'#6b7280', marginTop:'2px' }}>
+          <div style={{ fontSize:'.8rem', color:'var(--clr-text-3)', marginTop:'2px' }}>
             {calcResult.profile_name} · {visiblePlacements.length} листів · {calcResult.slope_area_m2.toFixed(2)} м²
-            {layoutOffset !== 0 && <span style={{ color:'#f59e0b' }}> · Зсув: {layoutOffset>0?'+':''}{layoutOffset}мм</span>}
+            {layoutOffset !== 0 && <span style={{ color:'var(--clr-brand)' }}> · Зсув: {layoutOffset>0?'+':''}{layoutOffset}мм</span>}
             {hasSelection && <span style={{ color:COLORS.selected, fontWeight:600 }}> · Виділено: {selected.size} шт</span>}
           </div>
         </div>
         <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
-          <button onClick={selectAll} style={{ padding:'6px 12px', background:COLORS.selected, color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', fontWeight:600, fontSize:'.82rem' }}>☑ Виділити всі</button>
-          {hasSelection && <button onClick={()=>setSelected(new Set())} style={{ padding:'6px 12px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'.82rem' }}>✕ Зняти</button>}
+          <button onClick={selectAll} style={{ padding:'6px 12px', background:COLORS.selected, color:'#0D0D0D', border:'none', borderRadius:'6px', cursor:'pointer', fontWeight:600, fontSize:'.82rem' }}>☑ Виділити всі</button>
+          {hasSelection && <button onClick={()=>setSelected(new Set())} style={{ padding:'6px 12px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', color:'var(--clr-text)', fontSize:'.82rem' }}>✕ Зняти</button>}
           <button onClick={()=>setZoom(z=>Math.max(0.3,z-0.1))} style={zoomBtn}>−</button>
           <span style={{ fontSize:'.85rem', minWidth:'40px', textAlign:'center' }}>{Math.round(zoom*100)}%</span>
           <button onClick={()=>setZoom(z=>Math.min(3,z+0.1))} style={zoomBtn}>+</button>
           <button onClick={()=>setZoom(1)} style={zoomBtn}>⟳</button>
-          <button onClick={resetAll} style={{ ...zoomBtn, color:'#dc2626', borderColor:'#fca5a5' }}>↩ Скинути</button>
+          <button onClick={resetAll} style={{ ...zoomBtn, color:'var(--clr-error)', borderColor:'#5A2424' }}>↩ Скинути</button>
         </div>
       </div>
 
-      <div style={{ fontSize:'.8rem', color:'#9ca3af', marginBottom:'8px' }}>
+      <div style={{ fontSize:'.8rem', color:'var(--clr-text-3)', marginBottom:'8px' }}>
         💡 Клік — виділити лист · Shift+клік — додати · Тягни мишу — виділити область
       </div>
 
       {/* Панель зсуву всієї розкладки */}
-      <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'10px 14px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap' }}>
+      <div style={{ background:'var(--clr-surface)', border:'1px solid var(--clr-border)', borderRadius:'8px', padding:'10px 14px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap' }}>
         <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
-          <span style={{ fontSize:'.82rem', fontWeight:600, color:'#166534', whiteSpace:'nowrap' }}>🔄 По горизонталі:</span>
+          <span style={{ fontSize:'.82rem', fontWeight:600, color:'var(--clr-text-2)', whiteSpace:'nowrap' }}>По горизонталі:</span>
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
             {STEPS.map(s => (
               <React.Fragment key={s.mm}>
@@ -597,7 +597,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
           </div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
-          <span style={{ fontSize:'.82rem', fontWeight:600, color:'#166534', whiteSpace:'nowrap' }}>По вертикалі:</span>
+          <span style={{ fontSize:'.82rem', fontWeight:600, color:'var(--clr-text-2)', whiteSpace:'nowrap' }}>По вертикалі:</span>
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
             {STEPS.map(s => (
               <React.Fragment key={s.mm}>
@@ -610,7 +610,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
       </div>
 
       {/* SVG */}
-      <div style={{ overflowX:'auto', overflowY:'auto', maxHeight:'580px', border:'1px solid #e5e7eb', borderRadius:'10px', background:COLORS.bg }}>
+      <div style={{ overflowX:'auto', overflowY:'auto', maxHeight:'580px', border:'1px solid var(--clr-border)', borderRadius:'8px', background:COLORS.bg }}>
         <svg ref={svgRef} width={SVG_W*zoom} height={SVG_H*zoom} viewBox={`0 0 ${SVG_W} ${SVG_H}`}
           style={{ display:'block' }}
           onMouseDown={onSvgMouseDown} onMouseMove={onSvgMouseMove} onMouseUp={onSvgMouseUp} onClick={onSvgClick}>
@@ -626,7 +626,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
               <rect x={PADDING} y={PADDING-20} width={W*scale} height={(H+20)*scale+20}/>
             </clipPath>
             <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-              <path d="M0,0 L6,3 L0,6 Z" fill="#9ca3af"/>
+              <path d="M0,0 L6,3 L0,6 Z" fill="#6B6F74"/>
             </marker>
           </defs>
 
@@ -654,7 +654,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
                     fill={isSel?COLORS.selected:COLORS.text} fontSize={8} opacity={0.7}>
                     №{p.sheet_number}
                   </text>}
-                  {p.manual_length && <text x={x1+3} y={y1-h+10} fill="#dc2626" fontSize={9}>✎</text>}
+                  {p.manual_length && <text x={x1+3} y={y1-h+10} fill="#FF7A00" fontSize={9}>✎</text>}
                 </g>
               );
             })}
@@ -664,19 +664,19 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
 
           {rubberBand && (
             <rect x={rubberBand.x1} y={rubberBand.y1} width={rubberBand.x2-rubberBand.x1} height={rubberBand.y2-rubberBand.y1}
-              fill="rgba(124,58,237,0.1)" stroke={COLORS.selected} strokeWidth="1" strokeDasharray="4 2"/>
+              fill="rgba(255,122,0,0.1)" stroke={COLORS.selected} strokeWidth="1" strokeDasharray="4 2"/>
           )}
 
-          <line x1={tx(0)} y1={PADDING-20} x2={tx(W)} y2={PADDING-20} stroke="#9ca3af" strokeWidth="1" markerEnd="url(#arrow)"/>
-          <text x={tx(W/2)} y={PADDING-28} textAnchor="middle" fill="#374151" fontSize="11" fontWeight="600">{(W/1000).toFixed(2)} м</text>
-          <line x1={PADDING-20} y1={ty(0)} x2={PADDING-20} y2={ty(H)} stroke="#9ca3af" strokeWidth="1"/>
-          <text x={PADDING-35} y={ty(H/2)} textAnchor="middle" fill="#374151" fontSize="11" fontWeight="600"
+          <line x1={tx(0)} y1={PADDING-20} x2={tx(W)} y2={PADDING-20} stroke="#6B6F74" strokeWidth="1" markerEnd="url(#arrow)"/>
+          <text x={tx(W/2)} y={PADDING-28} textAnchor="middle" fill="#C9CCD0" fontSize="11" fontWeight="600">{(W/1000).toFixed(2)} м</text>
+          <line x1={PADDING-20} y1={ty(0)} x2={PADDING-20} y2={ty(H)} stroke="#6B6F74" strokeWidth="1"/>
+          <text x={PADDING-35} y={ty(H/2)} textAnchor="middle" fill="#C9CCD0" fontSize="11" fontWeight="600"
             transform={`rotate(-90,${PADDING-35},${ty(H/2)})`}>{(H/1000).toFixed(2)} м</text>
           {Array.from({length:Math.ceil(W/1000)+1},(_,i)=>i).map(i=>(
-            <text key={`lx${i}`} x={tx(i*1000)} y={PADDING+H*scale+18} textAnchor="middle" fill="#6b7280" fontSize="9">{i}</text>
+            <text key={`lx${i}`} x={tx(i*1000)} y={PADDING+H*scale+18} textAnchor="middle" fill="#A3A8AD" fontSize="9">{i}</text>
           ))}
           {Array.from({length:Math.ceil(H/1000)+1},(_,i)=>i).map(i=>(
-            <text key={`ly${i}`} x={PADDING-8} y={ty(i*1000)+3} textAnchor="end" fill="#6b7280" fontSize="9">{i}</text>
+            <text key={`ly${i}`} x={PADDING-8} y={ty(i*1000)+3} textAnchor="end" fill="#A3A8AD" fontSize="9">{i}</text>
           ))}
         </svg>
       </div>
@@ -690,13 +690,13 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
       </div>
 
       {/* Таблиця */}
-      <div style={{ marginTop:'16px', background:'#fff', border:'1px solid #e5e7eb', borderRadius:'8px', overflow:'hidden' }}>
-        <div style={{ padding:'10px 16px', background:'#f9fafb', borderBottom:'1px solid #e5e7eb', fontWeight:600, fontSize:'.85rem' }}>
+      <div style={{ marginTop:'16px', background:'var(--clr-surface)', border:'1px solid var(--clr-border)', borderRadius:'8px', overflow:'hidden' }}>
+        <div style={{ padding:'10px 16px', background:'var(--clr-surface-2)', borderBottom:'1px solid var(--clr-border)', fontWeight:600, fontSize:'.85rem' }}>
           Специфікація листів
         </div>
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'.85rem' }}>
           <thead>
-            <tr style={{ background:'#f3f4f6' }}>
+            <tr style={{ background:'var(--clr-surface-2)' }}>
               <th style={{ padding:'8px 12px', textAlign:'left' }}>Довжина</th>
               <th style={{ padding:'8px 12px', textAlign:'center' }}>Кількість</th>
               <th style={{ padding:'8px 12px', textAlign:'center' }}>Корисна площа</th>
@@ -707,7 +707,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
             {uniqueLengths.map(len => {
               const sheets = visiblePlacements.filter(p=>getLen(p)===len);
               return (
-                <tr key={len} style={{ borderTop:'1px solid #f3f4f6' }}>
+                <tr key={len} style={{ borderTop:'1px solid var(--clr-border)' }}>
                   <td style={{ padding:'8px 12px', fontWeight:500 }}>{(len/1000).toFixed(3)} м</td>
                   <td style={{ padding:'8px 12px', textAlign:'center' }}>{sheets.length} шт</td>
                   <td style={{ padding:'8px 12px', textAlign:'center' }}>{sheets.reduce((s,p)=>s+(p.intersect_area_m2??0),0).toFixed(3)} м²</td>
@@ -715,7 +715,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
                 </tr>
               );
             })}
-            <tr style={{ borderTop:'2px solid #e5e7eb', fontWeight:600, background:'#f9fafb' }}>
+            <tr style={{ borderTop:'1px solid var(--clr-border-dark)', fontWeight:600, background:'var(--clr-surface-2)' }}>
               <td style={{ padding:'8px 12px' }}>Всього</td>
               <td style={{ padding:'8px 12px', textAlign:'center' }}>{visiblePlacements.length} шт</td>
               <td style={{ padding:'8px 12px', textAlign:'center' }}>{visiblePlacements.reduce((s,p)=>s+(p.intersect_area_m2??0),0).toFixed(3)} м²</td>
@@ -729,29 +729,29 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
       {hasSelection && (
         <div onMouseDown={onPanelMouseDown}
           style={{ position:'fixed', left:panelPos.x, top:panelPos.y, zIndex:500,
-            background:'#fff', border:`2px solid ${COLORS.selected}`, borderRadius:'10px',
-            boxShadow:'0 8px 32px rgba(0,0,0,0.25)', width:'250px', userSelect:'none' }}>
-          <div style={{ background:COLORS.selected, color:'#fff', padding:'7px 12px', borderRadius:'8px 8px 0 0',
+            background:'var(--clr-surface)', color:'var(--clr-text)', border:`2px solid ${COLORS.selected}`, borderRadius:'10px',
+            boxShadow:'0 8px 32px rgba(0,0,0,0.6)', width:'250px', userSelect:'none' }}>
+          <div style={{ background:COLORS.selected, color:'#0D0D0D', padding:'7px 12px', borderRadius:'8px 8px 0 0',
             cursor:'move', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <span style={{ fontWeight:600, fontSize:'.82rem' }}>✏ Виділено: {selected.size} шт</span>
             <button onClick={()=>setSelected(new Set())}
-              style={{ background:'none', border:'none', color:'#fff', cursor:'pointer', fontSize:'1rem', lineHeight:1 }}>✕</button>
+              style={{ background:'none', border:'none', color:'#0D0D0D', cursor:'pointer', fontSize:'1rem', lineHeight:1 }}>✕</button>
           </div>
           <div style={{ padding:'12px' }}>
 
             {/* Крок зміни (мм) */}
             <div style={{ marginBottom:'12px' }}>
-              <div style={{ fontSize:'.72rem', fontWeight:600, color:'#6b7280', marginBottom:'4px' }}>
+              <div style={{ fontSize:'.72rem', fontWeight:600, color:'var(--clr-text-3)', marginBottom:'4px' }}>
                 Крок зміни, мм:
               </div>
               <div style={{ display:'flex', gap:'4px' }}>
                 <input type="number" value={stepMm} min={1} max={1000}
                   onChange={e => setStepMm(Math.max(1, Number(e.target.value) || 1))}
-                  style={{ flex:1, padding:'5px 8px', border:'1px solid #d1d5db', borderRadius:'6px', fontSize:'.85rem', textAlign:'center' }}/>
+                  style={{ flex:1, padding:'5px 8px', border:'1px solid var(--clr-border-dark)', background:'var(--abt-black)', color:'var(--clr-text)', borderRadius:'6px', fontSize:'.85rem', textAlign:'center' }}/>
                 {[1, 10, 100].map(v => (
                   <button key={v} onClick={()=>setStepMm(v)}
-                    style={{ padding:'4px 8px', border: stepMm===v ? `1.5px solid ${COLORS.selected}` : '1px solid #d1d5db',
-                      borderRadius:'6px', cursor:'pointer', background: stepMm===v ? '#f5f3ff' : '#fff', fontSize:'.75rem' }}>
+                    style={{ padding:'4px 8px', border: stepMm===v ? `1.5px solid ${COLORS.selected}` : '1px solid var(--clr-border-dark)',
+                      borderRadius:'6px', cursor:'pointer', background: stepMm===v ? 'var(--clr-brand-pale)' : 'var(--clr-surface-2)', color:'var(--clr-text)', fontSize:'.75rem' }}>
                     {v}
                   </button>
                 ))}
@@ -760,7 +760,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
 
             {/* Довжина ЗВЕРХУ */}
             <div style={{ marginBottom:'10px' }}>
-              <div style={{ fontSize:'.72rem', fontWeight:600, color:'#6b7280', marginBottom:'4px' }}>
+              <div style={{ fontSize:'.72rem', fontWeight:600, color:'var(--clr-text-3)', marginBottom:'4px' }}>
                 ⬆ Довжина зверху (верхній край):
               </div>
               <div style={{ display:'flex', gap:'4px' }}>
@@ -771,26 +771,26 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
 
             {/* Довжина ЗНИЗУ */}
             <div style={{ marginBottom:'12px' }}>
-              <div style={{ fontSize:'.72rem', fontWeight:600, color:'#6b7280', marginBottom:'4px' }}>
+              <div style={{ fontSize:'.72rem', fontWeight:600, color:'var(--clr-text-3)', marginBottom:'4px' }}>
                 ⬇ Довжина знизу (нижній край):
               </div>
               <div style={{ display:'flex', gap:'4px' }}>
                 <button onClick={()=>changeLengthBottom(-stepMm)} style={lenBtn}>− {stepMm}мм</button>
                 <button onClick={()=>changeLengthBottom(+stepMm)} style={lenBtn}>+ {stepMm}мм</button>
               </div>
-              <div style={{ fontSize:'.68rem', color:'#9ca3af', marginTop:'3px' }}>
+              <div style={{ fontSize:'.68rem', color:'var(--clr-text-3)', marginTop:'3px' }}>
                 Сусідній лист компенсує зміну (стик рухається)
               </div>
             </div>
 
             {/* Дії */}
-            <div style={{ display:'flex', gap:'6px', borderTop:'1px solid #e5e7eb', paddingTop:'10px' }}>
+            <div style={{ display:'flex', gap:'6px', borderTop:'1px solid var(--clr-border)', paddingTop:'10px' }}>
               <button onClick={deleteSelected}
-                style={{ flex:1, padding:'8px', border:'1px solid #fca5a5', borderRadius:'6px', cursor:'pointer', background:'#fff', color:'#dc2626', fontSize:'.82rem', fontWeight:500 }}>
+                style={{ flex:1, padding:'8px', border:'1px solid #5A2424', borderRadius:'6px', cursor:'pointer', background:'var(--clr-error-bg)', color:'var(--clr-error)', fontSize:'.82rem', fontWeight:500 }}>
                 🗑 Видалити
               </button>
               <button onClick={resetAll}
-                style={{ flex:1, padding:'8px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#f9fafb', fontSize:'.82rem' }}>
+                style={{ flex:1, padding:'8px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', color:'var(--clr-text)', fontSize:'.82rem' }}>
                 ↩ Скинути все
               </button>
             </div>
@@ -801,13 +801,13 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   );
 }
 
-const zoomBtn: React.CSSProperties  = { padding:'4px 10px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff' };
-const shiftBtn: React.CSSProperties = { padding:'5px 10px', border:'1px solid #bbf7d0', borderRadius:'6px', cursor:'pointer', background:'#fff', fontSize:'.78rem', fontWeight:500, color:'#166534' };
-const lenBtn: React.CSSProperties   = { flex:1, padding:'7px', border:'1px solid #d1d5db', borderRadius:'6px', cursor:'pointer', background:'#fff', fontWeight:600, fontSize:'.82rem' };
+const zoomBtn: React.CSSProperties  = { padding:'4px 10px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', color:'var(--clr-text)' };
+const shiftBtn: React.CSSProperties = { padding:'5px 10px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', fontSize:'.78rem', fontWeight:500, color:'var(--clr-text)' };
+const lenBtn: React.CSSProperties   = { flex:1, padding:'7px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', color:'var(--clr-text)', fontWeight:600, fontSize:'.82rem' };
 
 function LegendItem({ color, label }: { color:string; label:string }) {
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'.78rem', color:'#374151' }}>
+    <div style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'.78rem', color:'var(--clr-text-2)' }}>
       <div style={{ width:'14px', height:'14px', background:color, opacity:0.6, borderRadius:'3px', border:`1px solid ${color}` }}/>
       {label}
     </div>

@@ -14,18 +14,19 @@ interface Props {
   gridScale?: number;
 }
 
+// Палітра полотна в стилі ABT (canvas не читає CSS-змінні, тому hex)
 const COLORS = {
-  grid:       '#E2E8F0',
-  axis:       '#CBD5E0',
-  polygon:    '#1B5E2E',
-  polygonFill:'rgba(27,94,46,0.08)',
-  point:      '#1B5E2E',
-  pointFirst: '#C62828',
-  sheet:      ['rgba(21,101,192,0.18)','rgba(27,94,46,0.18)'],
-  sheetBorder:['#1565C0','#1B5E2E'],
-  dim:        '#1565C0',
-  tooltip:    '#1a1a2e',
-  cursorLen:  '#1565C0',
+  grid:       '#1E1E1E',
+  axis:       '#3A3A3A',
+  polygon:    '#F4F4F2',
+  polygonFill:'rgba(255,122,0,0.10)',
+  point:      '#FF7A00',
+  pointFirst: '#FF5A5A',
+  sheet:      ['rgba(191,195,199,0.20)','rgba(191,195,199,0.34)'],
+  sheetBorder:['#BFC3C7','#8A8F95'],
+  dim:        '#BFC3C7',
+  tooltip:    '#0D0D0D',
+  cursorLen:  '#FF7A00',
 };
 
 interface TplParam { key: string; label: string; default: number; }
@@ -236,7 +237,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     }
 
     // Підписи по X (на всю ширину)
-    ctx.fillStyle = '#718096';
+    ctx.fillStyle = '#A3A8AD';
     ctx.font = '10px Inter, system-ui, sans-serif';
     const labelY = Math.min(H - 4, axisY + 14);
     // Знаходимо першу мітку зліва
@@ -308,7 +309,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     ctx.font = '11px Inter, system-ui, sans-serif';
 
     // Перехрестя на курсорі
-    ctx.strokeStyle = 'rgba(21,101,192,0.5)';
+    ctx.strokeStyle = 'rgba(255,122,0,0.6)';
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 3]);
     ctx.beginPath(); ctx.moveTo(mx, 0); ctx.lineTo(mx, H); ctx.stroke();
@@ -333,7 +334,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     if (bx + textW > W - 4) bx = mx - textW - 14;
     if (by < 4) by = my + 14;
 
-    ctx.fillStyle = 'rgba(26,26,46,0.85)';
+    ctx.fillStyle = 'rgba(13,13,13,0.92)';
     ctx.beginPath();
     ctx.roundRect?.(bx, by, textW, textH, 4);
     ctx.fill();
@@ -342,7 +343,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     ctx.fillText(coordStr, bx + 8, by + 13);
 
     if (lenStr) {
-      ctx.fillStyle = '#93c5fd';
+      ctx.fillStyle = '#FFB15C';
       ctx.fillText(lenStr, bx + 8 + ctx.measureText(coordStr).width, by + 13);
     }
 
@@ -363,7 +364,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       if (isActive) {
         ctx.beginPath();
         ctx.arc(sx, sy, 10, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(21,101,192,0.15)';
+        ctx.fillStyle = 'rgba(255,122,0,0.15)';
         ctx.fill();
         ctx.strokeStyle = COLORS.dim; ctx.lineWidth = 1.5;
         ctx.stroke();
@@ -372,7 +373,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       ctx.arc(sx, sy, isActive ? 7 : (i === 0 && !closed ? 6 : 4), 0, Math.PI * 2);
       ctx.fillStyle   = i === 0 ? COLORS.pointFirst : (isActive ? COLORS.dim : COLORS.point);
       ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = '#0D0D0D'; ctx.lineWidth = 1.5; ctx.stroke();
       // Координати активної точки
       if (isActive) {
         ctx.font = '11px Inter, system-ui, sans-serif';
@@ -408,7 +409,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       ctx.lineWidth = 0.7;
       ctx.strokeRect(px, py - ph, pw, ph);
       if (pw > 28 && ph > 14) {
-        ctx.font = '9px Inter, system-ui, sans-serif';
+        ctx.font = '9px "Noto Sans", system-ui, sans-serif';
         ctx.fillStyle = COLORS.sheetBorder[ci];
         ctx.fillText(`${pl.col_index+1},${pl.row_index+1}`, px + 3, py - ph + 11);
       }
@@ -579,7 +580,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     <div className="editor-wrap">
       {/* Sidebar */}
       <div className="editor-sidebar">
-        <div style={{padding:'8px 12px 4px',fontSize:'.65rem',fontWeight:600,color:'#8896A5',textTransform:'uppercase',letterSpacing:'.5px'}}>
+        <div style={{padding:'8px 12px 4px',fontSize:'.65rem',fontWeight:600,color:'var(--clr-text-3)',textTransform:'uppercase',letterSpacing:'.5px'}}>
           Шаблони
         </div>
         <div className="tpl-grid">
@@ -598,25 +599,25 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
           ))}
         </div>
 
-        <div style={{padding:'8px 12px 4px',marginTop:'8px',fontSize:'.65rem',fontWeight:600,color:'#8896A5',textTransform:'uppercase',letterSpacing:'.5px'}}>
+        <div style={{padding:'8px 12px 4px',marginTop:'8px',fontSize:'.65rem',fontWeight:600,color:'var(--clr-text-3)',textTransform:'uppercase',letterSpacing:'.5px'}}>
           Режим
         </div>
         <div style={{padding:'0 8px',display:'flex',flexDirection:'column',gap:'4px'}}>
           <button className={`btn btn-sm${mode==='draw'?' btn-primary':' btn-secondary'}`}
             style={{width:'100%',justifyContent:'flex-start'}} onClick={() => setMode('draw')}>
-            ✏ Малювати
+            Малювати
           </button>
           <button className={`btn btn-sm${mode==='move'?' btn-primary':' btn-secondary'}`}
             style={{width:'100%',justifyContent:'flex-start'}} onClick={() => setMode('move')}>
-            ✥ Редагувати точки
+            Редагувати точки
           </button>
           <button className="btn btn-sm btn-danger"
             style={{width:'100%',justifyContent:'flex-start'}} onClick={clearAll}>
-            🗑 Очистити
+            Очистити
           </button>
         </div>
 
-        <div style={{padding:'8px 12px',marginTop:'8px',fontSize:'.7rem',color:'#8896A5',lineHeight:1.6,borderTop:'1px solid var(--clr-border)'}}>
+        <div style={{padding:'8px 12px',marginTop:'8px',fontSize:'.7rem',color:'var(--clr-text-3)',lineHeight:1.6,borderTop:'1px solid var(--clr-border)'}}>
           <b style={{color:'var(--clr-text-2)'}}>Управління:</b><br/>
           ЛКМ — точка<br/>
           ПКМ / Enter — замкнути<br/>
@@ -663,7 +664,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       <div className="editor-panel">
         {closed && points.length >= 3 && (
           <div>
-            <div style={{fontSize:'.72rem',fontWeight:600,color:'#8896A5',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'8px'}}>
+            <div style={{fontSize:'.72rem',fontWeight:600,color:'var(--clr-text-3)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'8px'}}>
               Геометрія ската
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
@@ -695,7 +696,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
 
         {calcResult && !calcResult.errors?.length && (
           <div>
-            <div style={{fontSize:'.72rem',fontWeight:600,color:'#8896A5',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'8px'}}>
+            <div style={{fontSize:'.72rem',fontWeight:600,color:'var(--clr-text-3)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'8px'}}>
               Результат розрахунку
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>
@@ -718,7 +719,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
 
         {calcResult?.warnings?.length ? (
           <div>
-            <div style={{fontSize:'.72rem',fontWeight:600,color:'#8896A5',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'6px'}}>
+            <div style={{fontSize:'.72rem',fontWeight:600,color:'var(--clr-text-3)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'6px'}}>
               Попередження
             </div>
             {calcResult.warnings.map((w, i) => (
@@ -745,19 +746,19 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       {/* Модальне вікно шаблону */}
       {tplModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000}}>
-          <div style={{background:'#fff',borderRadius:'12px',padding:'24px',width:'360px',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+          <div style={{background:'var(--clr-surface)',color:'var(--clr-text)',border:'1px solid var(--clr-border)',borderRadius:'8px',padding:'24px',width:'360px',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,0.6)'}}>
             <h3 style={{margin:'0 0 4px',fontSize:'1rem'}}>📐 {TEMPLATES[tplIdx].name}</h3>
-            <div style={{fontSize:'.8rem',color:'#6b7280',marginBottom:'16px'}}>Введіть розміри ската</div>
+            <div style={{fontSize:'.8rem',color:'var(--clr-text-3)',marginBottom:'16px'}}>Введіть розміри ската</div>
 
-            <div style={{textAlign:'center',marginBottom:'16px',background:'#f8fafc',borderRadius:'8px',padding:'12px'}}>
-              <svg viewBox="0 0 42 30" width="120" height="86" style={{color:'#1B5E2E'}}>
+            <div style={{textAlign:'center',marginBottom:'16px',background:'var(--clr-canvas)',borderRadius:'8px',padding:'12px'}}>
+              <svg viewBox="0 0 42 30" width="120" height="86" style={{color:'var(--clr-brand)'}}>
                 <g dangerouslySetInnerHTML={{__html: ICON_SVG[TEMPLATES[tplIdx].icon]}} />
               </svg>
             </div>
 
             {TEMPLATES[tplIdx].params.map(param => (
               <div key={param.key} style={{marginBottom:'12px'}}>
-                <label style={{display:'block',fontSize:'.8rem',fontWeight:500,marginBottom:'4px',color:'#374151'}}>
+                <label style={{display:'block',fontSize:'.8rem',fontWeight:500,marginBottom:'4px',color:'var(--clr-text-2)'}}>
                   {param.label}
                 </label>
                 <input
@@ -766,18 +767,18 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
                   min="0.001"
                   value={tplValues[param.key] ?? String(param.default)}
                   onChange={e => setTplValues(v => ({...v, [param.key]: e.target.value}))}
-                  style={{width:'100%',padding:'8px 12px',border:'1px solid #d1d5db',borderRadius:'6px',fontSize:'.9rem',boxSizing:'border-box'}}
+                  style={{width:'100%',padding:'8px 12px',border:'1px solid var(--clr-border-dark)',background:'var(--abt-black)',color:'var(--clr-text)',borderRadius:'6px',fontSize:'.9rem',boxSizing:'border-box'}}
                 />
               </div>
             ))}
 
             <div style={{display:'flex',gap:'8px',justifyContent:'flex-end',marginTop:'8px'}}>
               <button onClick={() => setTplModal(false)}
-                style={{padding:'8px 16px',border:'1px solid #d1d5db',borderRadius:'6px',cursor:'pointer',background:'#fff'}}>
+                style={{padding:'8px 16px',border:'1px solid var(--clr-border-dark)',borderRadius:'6px',cursor:'pointer',background:'var(--clr-surface-2)',color:'var(--clr-text)'}}>
                 Скасувати
               </button>
               <button onClick={applyTemplate}
-                style={{padding:'8px 16px',background:'#2563eb',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:600}}>
+                style={{padding:'8px 16px',background:'var(--clr-brand)',color:'var(--clr-on-brand)',border:'none',borderRadius:'6px',cursor:'pointer',fontWeight:700}}>
                 Застосувати
               </button>
             </div>

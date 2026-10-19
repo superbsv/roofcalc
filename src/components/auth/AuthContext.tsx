@@ -5,6 +5,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, authApi } from '../../api/client';
+import BrandMark from '../brand/BrandMark';
 
 interface AuthCtx {
   user: User | null;
@@ -74,8 +75,8 @@ export function LoginPage() {
     <div className="login-page">
       <div className="login-card">
         <div className="login-logo">
-          <div className="login-logo-mark">🏠</div>
-          <div className="login-brand">ArtBudTrading</div>
+          <div className="login-logo-mark"><BrandMark size={56} /></div>
+          <div className="login-brand">ABT</div>
           <div className="login-sub">Калькулятор покрівельних матеріалів</div>
         </div>
 

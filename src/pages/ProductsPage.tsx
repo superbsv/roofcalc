@@ -106,13 +106,13 @@ function ForbiddenRanges({ value, onChange }: { value: string; onChange: (v: str
             onChange={e => set(i, 1, Number(e.target.value))}
             placeholder="до" style={{ flex:1 }} />
           <button onClick={() => remove(i)}
-            style={{ width:'32px', height:'36px', border:'1px solid #fca5a5', borderRadius:'6px', background:'#fff', color:'#dc2626', cursor:'pointer', flexShrink:0 }}>
+            style={{ width:'32px', height:'36px', border:'1px solid #5A2424', borderRadius:'6px', background:'var(--clr-error-bg)', color:'var(--clr-error)', cursor:'pointer', flexShrink:0 }}>
             ✕
           </button>
         </div>
       ))}
       <button onClick={add}
-        style={{ padding:'6px 12px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', background:'#fff', cursor:'pointer', fontSize:'.82rem', marginTop:'4px' }}>
+        style={{ padding:'6px 12px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', background:'var(--clr-surface-2)', color:'var(--clr-text)', cursor:'pointer', fontSize:'.82rem', marginTop:'4px' }}>
         + Додати діапазон
       </button>
       {ranges.length > 0 && (
@@ -231,7 +231,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
                 {m.manufacturer && `${m.manufacturer} · `}{m.useful_width} мм
               </div>
               <div style={{ fontSize:'.7rem', marginTop:'2px' }}>
-                <span style={{ background: m.is_active ? '#dcfce7' : '#fee2e2', color: m.is_active ? '#166534' : '#991b1b', padding:'1px 6px', borderRadius:'10px' }}>
+                <span style={{ background: m.is_active ? 'var(--clr-success-bg)' : 'var(--clr-error-bg)', color: m.is_active ? 'var(--clr-success)' : 'var(--clr-error)', padding:'1px 6px', borderRadius:'10px' }}>
                   {m.is_active ? 'Активний' : 'Неактивний'}
                 </span>
               </div>
@@ -262,7 +262,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
             </div>
 
             {error   && <div className="alert alert-error"  style={{ marginBottom:'16px' }}>⚠️ {error}</div>}
-            {success && <div style={{ background:'#dcfce7', color:'#166534', padding:'10px 16px', borderRadius:'8px', marginBottom:'16px' }}>✅ {success}</div>}
+            {success && <div style={{ background:'var(--clr-success-bg)', color:'var(--clr-success)', padding:'10px 16px', borderRadius:'8px', marginBottom:'16px' }}>{success}</div>}
 
             {/* Основна інформація */}
             <Section title="Основна інформація">
@@ -293,7 +293,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
 
             {/* Геометрія листа */}
             <Section title="Геометрія листа">
-              <div style={{ marginBottom:'12px', padding:'12px', background:'#f0f9ff', borderRadius:'8px', fontSize:'.8rem', color:'#0369a1' }}>
+              <div style={{ marginBottom:'12px', padding:'12px', background:'var(--clr-info-bg)', borderRadius:'8px', fontSize:'.8rem', color:'var(--clr-info)' }}>
                 💡 Схема: [—бокове перекриття—|———корисна ширина———|—бокове перекриття—] = повна ширина
               </div>
               <Row>

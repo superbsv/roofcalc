@@ -14,7 +14,15 @@ import {
 
 interface Props { projectId: number; }
 
-type Tab = 'editor' | 'params' | 'results' | 'layout' | 'spec';
+// Чотири кроки роботи, як у макеті ABT: 01 Скати → 02 Розкладка → 03 Доборні → 04 Звіт
+type Tab = 'slopes' | 'layout' | 'dobor' | 'report';
+
+const TABS: [Tab, string, string][] = [
+  ['slopes', '01', 'Скати'],
+  ['layout', '02', 'Розкладка'],
+  ['dobor',  '03', 'Доборні'],
+  ['report', '04', 'Звіт'],
+];
 
 export default function ProjectPage({ projectId }: Props) {
   const [project,   setProject]   = useState<Project | null>(null);
@@ -23,7 +31,7 @@ export default function ProjectPage({ projectId }: Props) {
   const [specItems, setSpecItems] = useState<SpecItem[]>([]);
   const [activeSlope,  setActiveSlope]  = useState<Slope | null>(null);
   const [calcResult,   setCalcResult]   = useState<CalcResult | null>(null);
-  const [tab,          setTab]          = useState<Tab>('editor');
+  const [tab,          setTab]          = useState<Tab>('slopes');
   const [calculating,  setCalculating]  = useState(false);
   const [saving,       setSaving]       = useState(false);
   const [error,        setError]        = useState('');
@@ -143,7 +151,7 @@ export default function ProjectPage({ projectId }: Props) {
       setCalcResult(res.result);
       setSlopes(prev => prev.map(s => s.id === activeSlope.id
         ? { ...s, calc_result: res.result } : s));
-      setTab('results');
+      setTab('layout');
     } catch (e: any) { setError(e.message); }
     setCalculating(false);
   };
@@ -162,7 +170,7 @@ export default function ProjectPage({ projectId }: Props) {
       }
       const spec = await specApi.get(projectId);
       setSpecItems(spec.items);
-      setTab('spec');
+      setTab('report');
     } catch (e: any) { setError(e.message); }
     setCalculating(false);
   };
@@ -306,20 +314,20 @@ export default function ProjectPage({ projectId }: Props) {
           </div>
 
           <button className="btn btn-secondary" onClick={calculateAll} disabled={calculating}>
-            {calculating ? '⏳ Рахуємо…' : '⚡ Перерахувати всі'}
+            {calculating ? 'Рахуємо…' : 'Перерахувати всі'}
           </button>
           <a className="btn btn-secondary" href={exportApi.pdf(projectId)} target="_blank" rel="noopener noreferrer">
-            📄 PDF
+            PDF
           </a>
           <a className="btn btn-secondary" href={exportApi.excel(projectId)} target="_blank" rel="noopener noreferrer">
-            📊 Excel
+            Excel
           </a>
         </div>
       </div>
 
-      {error && <div className="alert alert-error">⚠ {error}</div>}
+      {error && <div className="alert alert-error">{error}</div>}
 
-      <div style={{display:'grid',gridTemplateColumns:'220px 1fr',gap:'16px',flex:1,minHeight:0}}>
+      <div style={{display:'grid',gridTemplateColumns:'220px minmax(0,1fr)',gap:'16px',flex:1,minHeight:0}}>
         {/* Slopes list */}
         <div className="card" style={{padding:'12px',overflow:'auto'}}>
           <div className="flex items-center justify-between mb-4" style={{marginBottom:'12px'}}>
@@ -360,27 +368,21 @@ export default function ProjectPage({ projectId }: Props) {
         </div>
 
         {/* Right side */}
-        <div style={{display:'flex',flexDirection:'column',gap:'12px',minHeight:0}}>
-          {/* Tabs */}
+        <div style={{display:'flex',flexDirection:'column',gap:'12px',minHeight:0,minWidth:0}}>
+          {/* Tabs — 4 кроки */}
           <div className="tabs" style={{marginBottom:0}}>
-            {([
-              ['editor','✏ Редактор'],
-              ['params','⚙ Параметри'],
-              ['results','📐 Результат'],
-              ['layout','📐 Схема'],
-              ['spec','📋 Специфікація'],
-            ] as [Tab, string][]).map(([t, lbl]) => (
+            {TABS.map(([t, num, lbl]) => (
               <button
                 key={t}
                 className={`tab-btn${tab === t ? ' active' : ''}`}
-                onClick={() => { setTab(t); if (t === 'spec') loadSpec(); }}
-              >{lbl}</button>
+                onClick={() => { setTab(t); if (t === 'dobor' || t === 'report') loadSpec(); }}
+              ><span className="tab-num">{num}</span>{lbl}</button>
             ))}
           </div>
 
-          {/* TAB: EDITOR */}
-          {tab === 'editor' && (
-            <div style={{flex:1,minHeight:0}}>
+          {/* 01 СКАТИ: контур + параметри */}
+          {tab === 'slopes' && (
+            <div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',gap:'12px',overflow:'auto'}}>
               {activeSlope ? (
                 <>
                   <SlopeEditor
@@ -388,15 +390,67 @@ export default function ProjectPage({ projectId }: Props) {
                     calcResult={calcResult}
                     onPolygonChange={onPolygonChange}
                   />
-                  <div className="flex gap-3 mt-4" style={{marginTop:'12px'}}>
-                    <button className="btn btn-accent" onClick={calculate} disabled={calculating || !activeSlope.polygon_points?.length}>
-                      {calculating ? '⏳ Розрахунок…' : '🔢 Розрахувати скат'}
-                    </button>
-                    <span style={{fontSize:'.8rem',color:'var(--clr-text-3)',alignSelf:'center'}}>
-                      {activeSlope.polygon_points?.length >= 3
-                        ? `✓ Контур замкнуто (${activeSlope.polygon_points.length} точок)`
-                        : 'Намалюйте контур ската'}
-                    </span>
+                  <div className="card">
+                    <div className="card-header">
+                      <span className="card-title">Параметри ската</span>
+                      <span style={{fontSize:'.8rem',color:'var(--clr-text-3)'}}>
+                        {activeSlope.polygon_points?.length >= 3
+                          ? `Контур замкнуто · ${activeSlope.polygon_points.length} точок`
+                          : 'Намалюйте контур ската або оберіть шаблон'}
+                      </span>
+                    </div>
+                    <div className="form-row form-row-3">
+                      <div className="form-group">
+                        <label className="form-label">Назва ската</label>
+                        <input className="form-control" value={slopeParams.name}
+                          onChange={e => setSlopeParams(p => ({...p, name: e.target.value}))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Кут нахилу, °</label>
+                        <input className="form-control" type="number" min={1} max={80}
+                          value={slopeParams.slope_angle}
+                          onChange={e => setSlopeParams(p => ({...p, slope_angle: +e.target.value}))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Напрямок укладки</label>
+                        <select className="form-control" value={slopeParams.laying_direction}
+                          onChange={e => setSlopeParams(p => ({...p, laying_direction: e.target.value as any}))}>
+                          <option value="right_left">Справа наліво</option>
+                          <option value="left_right">Зліва направо</option>
+                          <option value="bottom_top">Знизу вгору</option>
+                          <option value="top_bottom">Згори вниз</option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Карнизний звис, мм</label>
+                        <input className="form-control" type="number" min={0} max={300}
+                          value={slopeParams.eave_overhang}
+                          onChange={e => setSlopeParams(p => ({...p, eave_overhang: +e.target.value}))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Припуск під конек, мм</label>
+                        <input className="form-control" type="number" min={0} max={200}
+                          value={slopeParams.ridge_gap}
+                          onChange={e => setSlopeParams(p => ({...p, ridge_gap: +e.target.value}))} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Матеріал</label>
+                        <div className="form-control" style={{background:'var(--clr-surface-2)',fontSize:'.85rem',color: selectedMaterial ? 'var(--clr-text)' : 'var(--clr-text-3)'}}>
+                          {selectedMaterial
+                            ? `${selectedMaterial.name} · ${selectedMaterial.full_width}/${selectedMaterial.useful_width} мм`
+                            : 'Оберіть угорі «Матеріал проекту»'}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-3" style={{flexWrap:'wrap'}}>
+                      <button className="btn btn-secondary" onClick={saveParams} disabled={saving}>
+                        {saving ? 'Збереження…' : 'Зберегти параметри'}
+                      </button>
+                      <button className="btn btn-primary" onClick={async () => { await saveParams(); await calculate(); }}
+                        disabled={calculating || saving || !(activeSlope.polygon_points?.length >= 3)}>
+                        {calculating ? 'Розрахунок…' : 'Розкласти листи →'}
+                      </button>
+                    </div>
                   </div>
                 </>
               ) : (
@@ -405,79 +459,18 @@ export default function ProjectPage({ projectId }: Props) {
             </div>
           )}
 
-          {/* TAB: PARAMS */}
-          {tab === 'params' && activeSlope && (
-            <div className="card" style={{overflow:'auto'}}>
-              <div className="form-row form-row-2">
-                <div className="form-group">
-                  <label className="form-label">Назва ската</label>
-                  <input className="form-control" value={slopeParams.name}
-                    onChange={e => setSlopeParams(p => ({...p, name: e.target.value}))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Кут нахилу, °</label>
-                  <input className="form-control" type="number" min={1} max={80}
-                    value={slopeParams.slope_angle}
-                    onChange={e => setSlopeParams(p => ({...p, slope_angle: +e.target.value}))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Карнизний свес, мм</label>
-                  <input className="form-control" type="number" min={0} max={300}
-                    value={slopeParams.eave_overhang}
-                    onChange={e => setSlopeParams(p => ({...p, eave_overhang: +e.target.value}))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Припуск під конек, мм</label>
-                  <input className="form-control" type="number" min={0} max={200}
-                    value={slopeParams.ridge_gap}
-                    onChange={e => setSlopeParams(p => ({...p, ridge_gap: +e.target.value}))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Напрямок укладки</label>
-                  <select className="form-control" value={slopeParams.laying_direction}
-                    onChange={e => setSlopeParams(p => ({...p, laying_direction: e.target.value as any}))}>
-                    <option value="right_left">Справа наліво</option>
-                    <option value="left_right">Зліва направо</option>
-                    <option value="bottom_top">Знизу вгору</option>
-                    <option value="top_bottom">Згори вниз</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{borderTop:'1px solid var(--clr-border)',paddingTop:'16px',marginTop:'8px'}}>
-                <div style={{fontWeight:600,fontSize:'.875rem',marginBottom:'8px'}}>Матеріал</div>
-                <div style={{padding:'12px 14px',background:'var(--clr-brand-pale)',borderRadius:'8px',fontSize:'.85rem'}}>
-                  {selectedMaterial ? (
-                    <span>Матеріал проекту: <b>{selectedMaterial.name}</b> ({selectedMaterial.full_width}/{selectedMaterial.useful_width} мм)</span>
-                  ) : (
-                    <span style={{color:'var(--clr-text-3)'}}>Оберіть матеріал у верхній панелі «Матеріал проекту» — він застосується до всіх скатів.</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-3 mt-4">
-                <button className="btn btn-primary" onClick={saveParams} disabled={saving}>
-                  {saving ? 'Збереження…' : 'Зберегти параметри'}
-                </button>
-                <button className="btn btn-accent" onClick={calculate} disabled={calculating}>
-                  {calculating ? '⏳ Розрахунок…' : '🔢 Розрахувати'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* TAB: RESULTS */}
-          {tab === 'results' && (
-            <div style={{overflow:'auto'}}>
-              {calcResult && !calcResult.errors?.length ? (
+          {/* 02 РОЗКЛАДКА: схема + підсумки + листи */}
+          {tab === 'layout' && (
+            <div style={{overflow:'auto',display:'flex',flexDirection:'column',gap:'12px'}}>
+              {calcResult && !calcResult.errors?.length && activeSlope ? (
                 <>
-                  <div className="metrics-grid">
+                  <div className="metrics-grid" style={{marginBottom:0,gridTemplateColumns:'repeat(auto-fit, minmax(110px, 1fr))'}}>
                     {[
-                      ['Листів всього', calcResult.total_sheets],
+                      ['Листів', calcResult.total_sheets],
                       ['Площа ската', `${calcResult.slope_area_m2} м²`],
                       ['По ширині', `${calcResult.cols_count} шт`],
-                      ['По довжині', `${calcResult.rows_count} ряд`],
-                      ['Довжина листа', `${calcResult.sheet_length_mm} мм`],
+                      ['Рядів', calcResult.rows_count],
+                      ['Площа листів', `${(calcResult.total_full_area_m2 ?? calcResult.order_area_m2 ?? 0).toFixed(2)} м²`],
                       ['Відходи', `${calcResult.waste_pct}%`],
                     ].map(([l,v]) => (
                       <div key={l as string} className="metric-card">
@@ -488,101 +481,111 @@ export default function ProjectPage({ projectId }: Props) {
                   </div>
 
                   {calcResult.warnings?.map((w,i) => (
-                    <div key={i} className="alert alert-warning mb-4" style={{marginBottom:'8px'}}>⚠ {w}</div>
+                    <div key={i} className="alert alert-warning">{w}</div>
                   ))}
 
-                  <div className="card" style={{marginBottom:'12px'}}>
-                    <div className="card-header">
-                      <span className="card-title">Листи по довжинах</span>
-                    </div>
-                    <div className="table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Довжина</th><th>Ширина повна</th>
-                            <th>Кількість</th><th>Площа (замовлення)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {calcResult.sheets_by_length?.map((g, i) => (
-                            <tr key={i}>
-                              <td className="font-mono">{g.length_mm} мм</td>
-                              <td className="font-mono">{g.full_width_mm} мм</td>
-                              <td><b>{g.count} шт</b></td>
-                              <td>{g.full_area_m2?.toFixed(2)} м²</td>
-                            </tr>
-                          ))}
-                          <tr className="tr-total">
-                            <td colSpan={2}>Всього</td>
-                            <td><b>{calcResult.total_sheets} шт</b></td>
-                            <td>{calcResult.total_full_area_m2?.toFixed(2) || calcResult.order_area_m2?.toFixed(2)} м²</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                  <LayoutScheme
+                    calcResult={calcResult}
+                    polygonPoints={activeSlope.polygon_points || []}
+                    slopeName={activeSlope.name}
+                  />
 
-                  {calcResult.accessories?.items?.length ? (
-                    <div className="card">
-                      <div className="card-header">
-                        <span className="card-title">Доборні елементи та кріплення</span>
-                      </div>
-                      <table>
-                        <thead>
-                          <tr><th>Назва</th><th>Кількість</th><th>Ціна</th><th>Сума</th></tr>
-                        </thead>
-                        <tbody>
-                          {calcResult.accessories.items.map((a, i) => (
-                            <tr key={i}>
-                              <td>{a.name}</td>
-                              <td>{a.quantity} {a.unit}</td>
-                              <td>{Number(a.price).toFixed(2)} грн</td>
-                              <td><b>{Number(a.total).toFixed(2)} грн</b></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : null}
                 </>
               ) : calcResult?.errors?.length ? (
                 <div className="alert alert-error">
-                  {calcResult.errors.map((e, i) => <div key={i}>✗ {e}</div>)}
+                  {calcResult.errors.map((e, i) => <div key={i}>{e}</div>)}
                 </div>
               ) : (
                 <div className="alert alert-info">
-                  Перейдіть на вкладку «Редактор» і натисніть «Розрахувати скат»
+                  Скат ще не розкладено. На кроці «01 Скати» натисніть «Розкласти листи».
                 </div>
               )}
             </div>
           )}
 
-          {/* TAB: SPECIFICATION */}
-{tab === 'layout' && calcResult && activeSlope && (
-  <div style={{overflow:'auto'}}>
-    <LayoutScheme
-      calcResult={calcResult}
-      polygonPoints={activeSlope.polygon_points || []}
-      slopeName={activeSlope.name}
-    />
-  </div>
-)}
-          {tab === 'spec' && (
+          {/* 03 ДОБОРНІ: довжини ребер + елементи */}
+          {tab === 'dobor' && (
+            <div style={{overflow:'auto',display:'flex',flexDirection:'column',gap:'12px'}}>
+              {calcResult?.accessories ? (
+                <div className="card">
+                  <div className="card-header">
+                    <span className="card-title">Ребра · {activeSlope?.name}</span>
+                  </div>
+                  <div className="metrics-grid" style={{marginBottom:0}}>
+                    {[
+                      ['Карниз', calcResult.accessories.eave_length_m],
+                      ['Конек', calcResult.accessories.ridge_length_m],
+                      ['Торці', calcResult.accessories.end_length_m],
+                      ['Ендова', calcResult.accessories.valley_length_m],
+                    ].map(([l,v]) => (
+                      <div key={l as string} className="metric-card">
+                        <div className="metric-value">{Number(v || 0).toFixed(2)} м</div>
+                        <div className="metric-label">{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {accItems.length || fastItems.length ? (
+                [['Доборні елементи', accItems], ['Кріплення', fastItems]].map(([title, items]) => (items as SpecItem[]).length ? (
+                  <div key={title as string} className="spec-section" style={{marginBottom:0}}>
+                    <div className="spec-section-title">{title as string} · уся покрівля</div>
+                    <div className="table-wrap">
+                      <table style={{border:'1px solid var(--clr-border)',borderTop:'none'}}>
+                        <thead><tr><th>Найменування</th><th>Од.</th><th>К-сть</th></tr></thead>
+                        <tbody>
+                          {(items as SpecItem[]).map(item => (
+                            <tr key={item.id}>
+                              <td>{item.name}</td>
+                              <td>{item.unit}</td>
+                              <td><b>{Number(item.quantity).toFixed(item.unit === 'шт' ? 0 : 2)}</b></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null)
+              ) : calcResult?.accessories?.items?.length ? (
+                <div className="card">
+                  <div className="card-header"><span className="card-title">Доборні та кріплення · {activeSlope?.name}</span></div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead><tr><th>Назва</th><th>Кількість</th></tr></thead>
+                      <tbody>
+                        {calcResult.accessories.items.map((a, i) => (
+                          <tr key={i}><td>{a.name}</td><td><b>{a.quantity} {a.unit}</b></td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="alert alert-info">
+                  Доборні з'являться після розрахунку. Натисніть угорі «Перерахувати всі».
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 04 ЗВІТ: специфікація + експорт */}
+          {tab === 'report' && (
             <div style={{overflow:'auto'}}>
               {specItems.length ? (
                 <>
                   <div className="metrics-grid" style={{marginBottom:'16px'}}>
                     <div className="metric-card">
-                      <div className="metric-value">{totalPrice.toLocaleString('uk-UA', {maximumFractionDigits:0})} грн</div>
-                      <div className="metric-label">Загальна сума</div>
-                    </div>
-                    <div className="metric-card">
-                      <div className="metric-value">{sheetItems.reduce((s,i)=>s+Number(i.quantity),0)}</div>
+                      <div className="metric-value" style={{color:'var(--clr-brand)'}}>{sheetItems.reduce((s,i)=>s+Number(i.quantity),0)}</div>
                       <div className="metric-label">Листів всього</div>
                     </div>
                     <div className="metric-card">
                       <div className="metric-value">{slopes.filter(s=>s.calc_result).length}/{slopes.length}</div>
                       <div className="metric-label">Розраховано скатів</div>
+                    </div>
+                    <div className="metric-card">
+                      <div className="metric-value">{totalPrice.toLocaleString('uk-UA', {maximumFractionDigits:0})} грн</div>
+                      <div className="metric-label">Загальна сума</div>
                     </div>
                   </div>
 
@@ -594,7 +597,7 @@ export default function ProjectPage({ projectId }: Props) {
                     <div key={title as string} className="spec-section">
                       <div className="spec-section-title">{title as string}</div>
                       <div className="table-wrap">
-                        <table style={{border:'1px solid var(--clr-brand-border)',borderTop:'none'}}>
+                        <table style={{border:'1px solid var(--clr-border)',borderTop:'none'}}>
                           <thead>
                             <tr>
                               <th>Найменування</th><th>Од.</th>
@@ -621,21 +624,21 @@ export default function ProjectPage({ projectId }: Props) {
                     </div>
                   ) : null)}
 
-                  <div className="flex gap-3 mt-4">
+                  <div className="flex gap-3 mt-4" style={{flexWrap:'wrap'}}>
                     <a className="btn btn-primary" href={exportApi.pdf(projectId)} target="_blank" rel="noopener noreferrer">
-                      📄 КП для клієнта (PDF)
+                      КП для клієнта · PDF
                     </a>
                     <a className="btn btn-secondary" href={exportApi.excel(projectId)} target="_blank" rel="noopener noreferrer">
-                      📊 Excel для менеджера
+                      Excel для менеджера
                     </a>
                     <a className="btn btn-secondary" href={exportApi.productionPdf(projectId)} target="_blank" rel="noopener noreferrer">
-                      🏭 Виробничий PDF
+                      Виробничий PDF
                     </a>
                   </div>
                 </>
               ) : (
                 <div className="alert alert-info">
-                  Спочатку розрахуйте всі скати кнопкою «⚡ Перерахувати всі»
+                  Спочатку розрахуйте всі скати кнопкою «Перерахувати всі»
                 </div>
               )}
             </div>

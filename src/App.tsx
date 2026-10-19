@@ -6,6 +6,7 @@ import ProjectsPage from './pages/ProjectsPage';
 import ProjectPage  from './pages/ProjectPage';
 import AdminPage    from './pages/AdminPage';
 import ProductsPage from './pages/ProductsPage';
+import BrandMark, { BrandWordmark } from './components/brand/BrandMark';
 
 type Page =
   | { type: 'projects' }
@@ -70,8 +71,8 @@ function Shell() {
         </button>
 
         <a href="/" className="header-logo" onClick={e => { e.preventDefault(); navigate({type:'projects'}); }}>
-          <div className="header-logo-icon">🏠</div>
-          <span>ArtBudTrading</span>
+          <div className="header-logo-icon"><BrandMark /></div>
+          <span><BrandWordmark /></span>
         </a>
 
         <nav className="header-nav">
@@ -91,7 +92,7 @@ function Shell() {
               <div style={{fontSize:'.7rem',opacity:.7}}>{roleLabel[user.role]}</div>
             </div>
           </div>
-          <button className="btn btn-ghost btn-sm" style={{color:'rgba(255,255,255,.7)'}} onClick={logout}>
+          <button className="btn btn-ghost btn-sm" onClick={logout}>
             Вийти
           </button>
         </div>
@@ -147,9 +148,9 @@ function Shell() {
             {productsOpen && (
               <div style={{paddingLeft:'16px'}}>
                 {[
-                  {cat:'tile' as const,   label:'🏠 Металочерепиця'},
-                  {cat:'profile' as const,label:'📋 Профнастил'},
-                  {cat:'falts' as const,  label:'🔧 Фальцева покрівля'},
+                  {cat:'tile' as const,   label:'Металочерепиця'},
+                  {cat:'profile' as const,label:'Профнастил'},
+                  {cat:'falts' as const,  label:'Фальцева покрівля'},
                 ].map(({cat, label}) => (
                   <div
                     key={cat}
@@ -191,7 +192,7 @@ function Shell() {
         )}
 
         <div style={{marginTop:'auto',padding:'16px 12px',borderTop:'1px solid var(--clr-border)',fontSize:'.7rem',color:'var(--clr-text-3)'}}>
-          <div style={{marginBottom:'4px',fontWeight:500,color:'var(--clr-text-2)'}}>ArtBudTrading</div>
+          <div style={{marginBottom:'4px',fontWeight:600,color:'var(--clr-text-2)'}}>ABT · Advanced Building Technologies</div>
           <div>Калькулятор покрівлі v1.0</div>
           <a href="https://artbudtrading.com.ua" target="_blank" rel="noopener noreferrer"
             style={{color:'var(--clr-brand)',fontSize:'.7rem'}}>

@@ -72,8 +72,8 @@ function UsersTab() {
   };
 
   const roleColors: Record<string,[string,string]> = {
-    admin:['#1B5E2E','#E8F5EC'], manager:['#1565C0','#E3F2FD'],
-    dealer:['#E65100','#FFF3E0'], production:['#6A1B9A','#F3E5F5'], viewer:['#546E7A','#ECEFF1'],
+    admin:['#0D0D0D','#FF7A00'], manager:['#CFE0FF','#12203A'],
+    dealer:['#FFD6A8','#2B1E0E'], production:['#E2CCFF','#24163A'], viewer:['#C9CCD0','#2C2C2C'],
   };
   const roleLabels: Record<string,string> = { admin:'Адміністратор',manager:'Менеджер',dealer:'Дилер',production:'Виробництво',viewer:'Перегляд' };
 
@@ -88,7 +88,7 @@ function UsersTab() {
           <thead><tr><th>Ім'я</th><th>Логін / Email</th><th>Роль</th><th>Компанія</th><th>Статус</th><th>Останній вхід</th><th></th></tr></thead>
           <tbody>
             {users.map(u => {
-              const [color, bg] = roleColors[u.role] || ['#000','#fff'];
+              const [color, bg] = roleColors[u.role] || ['#F4F4F2','#2C2C2C'];
               return (
                 <tr key={u.id}>
                   <td><b>{u.name}</b></td>
