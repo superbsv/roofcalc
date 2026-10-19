@@ -271,8 +271,14 @@ export default function ProjectPage({ projectId }: Props) {
       const cur = slopesRef.current.find(s => s.id === activeId);
       // Перетягування вершини не змінює кількість сторін — доборні на сторонах зберігаємо
       const keep = cur?.edge_types?.length === p.length && (cur?.polygon_points?.length || 0) === p.length;
-      const r = await slopesApi.update(activeId, { polygon_points: p, edge_types: p.length >= 3 ? (keep ? cur!.edge_types : autoEdgeTypes(p)) : [] });
+      // Координати не можуть бути від'ємними: контур (разом з вирізами) зсуваємо до осей
+      const n = normalizeToAxes(p, cur?.holes || []);
+      const r = await slopesApi.update(activeId, {
+        polygon_points: n.pts, ...(n.shifted ? { holes: n.holes } : {}),
+        edge_types: p.length >= 3 ? (keep ? cur!.edge_types : autoEdgeTypes(p)) : [],
+      });
       replaceSlope({ ...r.slope, calc_result: undefined });
+      if (n.shifted) setEditorRev(x => x + 1);
     } catch (e: any) { setError(e.message); }
   }, [activeId]);
 
@@ -300,7 +306,8 @@ export default function ProjectPage({ projectId }: Props) {
     const cur = sideLengthMm(pts[i], pts[(i + 1) % pts.length]) / 1000;
     if (!Number.isFinite(v) || v <= 0 || Math.abs(v - cur) < 0.0005) return;
     const next = setSideLength(pts, i, Math.round(v * 1000)).map(([x, y]) => [Math.round(x), Math.round(y)] as Point);
-    run('side', async () => { await patchSlope(active.id, { polygon_points: next, edge_types: edgeTypes }); setEditorRev(x => x + 1); });
+    const n = normalizeToAxes(next, holes);
+    run('side', async () => { await patchSlope(active.id, { polygon_points: n.pts, holes: n.holes, edge_types: edgeTypes }); setEditorRev(x => x + 1); });
   };
 
   const addHole = () => active && run('hole', async () => {
@@ -787,7 +794,7 @@ export default function ProjectPage({ projectId }: Props) {
               ) : (
                 <>
                   {res.warnings?.map((w, i) => <div key={i} className="alert alert-warning">{w}</div>)}
-                  <LayoutScheme calcResult={res as any} polygonPoints={pts} slopeName={active.name} />
+                  <LayoutScheme calcResult={res as any} polygonPoints={pts} holes={holes} slopeName={active.name} />
                   <div className="kp-infobar">
                     <dl>
                       <dt>Замовлення</dt><dd>№{settings.order_no} від {dateUa(settings.order_date)}</dd>
@@ -882,6 +889,16 @@ export default function ProjectPage({ projectId }: Props) {
 }
 
 // ---------- Допоміжне ----------
+
+// Зсув контуру і вирізів так, щоб жодна координата не була від'ємною (лівий нижній кут — на осях)
+function normalizeToAxes(pts: Point[], holes: Point[][]): { pts: Point[]; holes: Point[][]; shifted: boolean } {
+  if (pts.length < 3) return { pts, holes, shifted: false };
+  const minX = Math.min(...pts.map(p => p[0])), minY = Math.min(...pts.map(p => p[1]));
+  const dx = minX < 0 ? -minX : 0, dy = minY < 0 ? -minY : 0;
+  if (!dx && !dy) return { pts, holes, shifted: false };
+  const mv = (p: Point): Point => [Math.round(p[0] + dx), Math.round(p[1] + dy)];
+  return { pts: pts.map(mv), holes: holes.map(h => h.map(mv)), shifted: true };
+}
 
 function polyArea(p: Point[]): number {
   let a = 0;

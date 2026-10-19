@@ -469,7 +469,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       const step = e.shiftKey ? 0.001 : 0.01;
       const snap = (v: number) => Math.round(v / step) * step;
       const next = [...points];
-      next[dragIdx] = [snap(wx), snap(wy)];
+      next[dragIdx] = [Math.max(0, snap(wx)), Math.max(0, snap(wy))]; // в мінус по осях не можна
       setPoints(next);
       return;
     }
@@ -557,7 +557,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
           setClosed(true); notifyChange(points); return;
         }
       }
-      const next = [...points, [wx, wy] as Point];
+      const next = [...points, [Math.max(0, wx), Math.max(0, wy)] as Point];
       setPoints(next);
     } else {
       // Режим редагування — хапаємо найближчу точку (зона 14px)

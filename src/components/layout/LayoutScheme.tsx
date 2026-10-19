@@ -49,6 +49,7 @@ interface CalcResult {
 interface Props {
   calcResult: CalcResult;
   polygonPoints: Point[];
+  holes?: Point[][];
   slopeName: string;
   onUpdate?: (placements: SheetPlacement[]) => void;
 }
@@ -182,23 +183,54 @@ function generateFullLayout(
 }
 
 // Оцінка % відходу листа відносно полігону
-function estimateWastePct(
-  sheetX: number, sheetY: number, sheetLen: number,
-  usefulWidth: number, fullWidth: number,
-  polygon: Point[], slopeWidth: number, eaveOverhang: number, ridgeGap: number,
-): number {
-  const range = getColumnRange(sheetX, usefulWidth, slopeWidth, polygon);
-  if (!range) return 100;
-  const coverBottom = range.minY - eaveOverhang;
-  const coverTop    = range.maxY + ridgeGap;
-  const overlapH = Math.max(0, Math.min(sheetY + sheetLen, coverTop) - Math.max(sheetY, coverBottom));
-  const intersect = overlapH * usefulWidth;
-  const full = sheetLen * fullWidth;
-  if (full <= 0) return 100;
-  return Math.max(0, (1 - intersect / full) * 100);
+// Площа перетину прямокутника з многокутником (відсікання Сазерленда–Ходжмена)
+function rectPolyArea(x0: number, y0: number, x1: number, y1: number, poly: Point[]): number {
+  let out: Point[] = poly.map(p => [p[0], p[1]] as Point);
+  const clip = (inside: (p: Point) => boolean, cut: (a: Point, b: Point) => Point) => {
+    const src = out; out = [];
+    for (let i = 0; i < src.length; i++) {
+      const a = src[i], b = src[(i + 1) % src.length];
+      const ia = inside(a), ib = inside(b);
+      if (ia) out.push(a);
+      if (ia !== ib) out.push(cut(a, b));
+    }
+  };
+  const atX = (x: number) => (a: Point, b: Point): Point => [x, a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])];
+  const atY = (y: number) => (a: Point, b: Point): Point => [a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]), y];
+  clip(p => p[0] >= x0, atX(x0)); if (out.length < 3) return 0;
+  clip(p => p[0] <= x1, atX(x1)); if (out.length < 3) return 0;
+  clip(p => p[1] >= y0, atY(y0)); if (out.length < 3) return 0;
+  clip(p => p[1] <= y1, atY(y1)); if (out.length < 3) return 0;
+  let a = 0;
+  for (let i = 0; i < out.length; i++) { const q = out[(i + 1) % out.length]; a += out[i][0] * q[1] - q[0] * out[i][1]; }
+  return Math.abs(a) / 2;
 }
 
-export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onUpdate }: Props) {
+// Стан листа за реальним перетином з площиною ската (з урахуванням вирізів).
+// Карнизний звис (частина листа нижче краю ската в колонці) обрізкою не вважається.
+function sheetState(x: number, y: number, len: number, usefulWidth: number, polygon: Point[], holes: Point[][]): 'full' | 'cut' | 'waste' {
+  const ys: number[] = [];
+  const n = polygon.length;
+  for (const sx of [x + 1, x + usefulWidth / 2, x + usefulWidth - 1]) {
+    for (let i = 0; i < n; i++) {
+      const a = polygon[i], b = polygon[(i + 1) % n];
+      if (a[0] === b[0] || sx < Math.min(a[0], b[0]) || sx > Math.max(a[0], b[0])) continue;
+      ys.push(a[1] + (b[1] - a[1]) * (sx - a[0]) / (b[0] - a[0]));
+    }
+  }
+  const bottom = ys.length ? Math.max(y, Math.min(...ys)) : y;
+  const top = y + len;
+  const rect = usefulWidth * Math.max(0, top - bottom);
+  if (rect <= 0) return 'waste';
+  let inter = rectPolyArea(x, bottom, x + usefulWidth, top, polygon);
+  holes.forEach(h => { if (h.length >= 3) inter -= rectPolyArea(x, bottom, x + usefulWidth, top, h); });
+  const k = Math.max(0, inter) / rect;
+  if (k < 0.5) return 'waste';
+  if (k < 0.985) return 'cut';
+  return 'full';
+}
+
+export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate }: Props) {
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
 
@@ -449,10 +481,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
   const sheetColor = (p: SheetPlacement, isSel: boolean): string => {
     if (isSel) return COLORS.selected;
     if (polygonPoints.length >= 3) {
-      const wastePct = estimateWastePct(getX(p), getY(p), getLen(p), p.useful_width, p.full_width, polygonPoints, W, eaveOverhang, ridgeGap);
-      if (wastePct > 50) return COLORS.waste;  // великий відхід
-      if (wastePct > 5)  return COLORS.cut;    // обрізаний
-      return COLORS.full;                       // повний
+      const st = sheetState(getX(p), getY(p), getLen(p), p.useful_width, polygonPoints, holes);
+      return st === 'waste' ? COLORS.waste : st === 'cut' ? COLORS.cut : COLORS.full;
     }
     // Fallback на дані PHP якщо полігону нема
     if (p.intersect_area_m2 !== undefined && p.full_area_m2 !== undefined) {
@@ -646,7 +676,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
               return (
                 <g key={p.sheet_number} onClick={e=>handleSheetClick(e,p.sheet_number)} style={{cursor:'pointer'}}>
                   <rect x={x1} y={y1-h} width={w} height={h}
-                    fill={color} fillOpacity={isSel?0.45:0.25}
+                    fill={color} fillOpacity={isSel?0.5:0.35}
                     stroke={color} strokeWidth={isSel?2.5:1}/>
                   {h>20 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
                     fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(9,Math.min(13,h/4))} fontWeight="600">
