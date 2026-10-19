@@ -38,11 +38,11 @@ class Plans
                     if (isset($plans[$k]) && is_array($p)) $plans[$k] = array_merge($plans[$k], self::clean($p));
                 }
             }
-            // Разово (2026-10): стартові ціни тарифів, якщо в збережених тарифах ціни ще не задані
-            $mark = Database::fetchOne("SELECT key_name FROM app_settings WHERE key_name = 'platform_plans_prices_v1'");
+            // Разово (2026-10): ціни тарифів, погоджені власником (далі змінюються в панелі «Тарифи»)
+            $mark = Database::fetchOne("SELECT key_name FROM app_settings WHERE key_name = 'platform_plans_prices_v2'");
             if (!$mark) {
                 foreach (['start', 'pro', 'business'] as $k) {
-                    if (empty($plans[$k]['price'])) $plans[$k]['price'] = self::DEFAULTS[$k]['price'];
+                    $plans[$k]['price'] = self::DEFAULTS[$k]['price'];
                     foreach (['price_year', 'price_from'] as $f) {
                         if (!isset($plans[$k][$f]) && isset(self::DEFAULTS[$k][$f])) $plans[$k][$f] = self::DEFAULTS[$k][$f];
                     }
@@ -51,7 +51,7 @@ class Plans
                     $json = json_encode($plans, JSON_UNESCAPED_UNICODE);
                     Database::query("UPDATE app_settings SET value = ?, updated_at = NOW() WHERE key_name = 'platform_plans'", [$json]);
                 }
-                Database::query("INSERT INTO app_settings (key_name, value, type, description, updated_at) VALUES ('platform_plans_prices_v1', '1', 'string', 'Стартові ціни тарифів застосовано', NOW())");
+                Database::query("INSERT INTO app_settings (key_name, value, type, description, updated_at) VALUES ('platform_plans_prices_v2', '1', 'string', 'Ціни тарифів 2026-10 застосовано', NOW())");
             }
         } catch (\Throwable $e) {}
         return self::$cache = $plans;
