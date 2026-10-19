@@ -157,17 +157,21 @@ class SheetLayoutEngine
 
         // 1. Колонки і потрібні довжини
         $bbox = GeometryEngine::boundingBox($this->polygon);
-        $cols = (int)ceil($bbox['width'] / $this->usefulWidth);
         // Укладка справа наліво: перша колонка прилягає до правого краю ската, неповна — зліва
         // (і навпаки для «зліва направо"). Нумерація листів — у напрямку укладки.
+        // Зсув сітки колонок (кнопки ←/→ на схемі): + вправо, − вліво, мм
         $rtl = $this->direction !== 'left_right';
-        $order = range(0, max(0, $cols - 1));
+        $shift = (int)($this->slope['layout_shift'] ?? 0);
+        $uw = $this->usefulWidth;
+        $extra = (int)ceil(abs($shift) / $uw) + 1;
+        $cols = (int)ceil($bbox['width'] / $uw) + $extra;
 
         $columns = [];
-        foreach ($order as $c) {
+        for ($c = -$extra; $c <= $cols; $c++) {
             $x = $rtl
-                ? $bbox['maxX'] - ($c + 1) * $this->usefulWidth
-                : $bbox['minX'] + $c * $this->usefulWidth;
+                ? $bbox['maxX'] + $shift - ($c + 1) * $uw
+                : $bbox['minX'] + $shift + $c * $uw;
+            if ($x >= $bbox['maxX'] || $x + $uw <= $bbox['minX']) continue;
             $r = $this->columnRange($x, $x + $this->usefulWidth);
             if ($r === null) continue;
             $need = ($r[1] - $r[0]) + $this->k - $this->pk;
@@ -264,6 +268,7 @@ class SheetLayoutEngine
             'rounding_mm'        => $this->round,
             'joint_y_mm'         => $this->jointY,
             'joint_range_mm'     => $this->jointRange,
+            'layout_shift_mm'    => (int)($this->slope['layout_shift'] ?? 0),
             'joint_custom'       => isset($this->slope['joint_y']) && $this->slope['joint_y'] !== null && $this->slope['joint_y'] !== '',
             'warnings'           => array_values(array_unique($this->warnings)),
             'errors'             => [],
@@ -345,7 +350,10 @@ class SheetLayoutEngine
         }
 
         // фактична лінія після округлення нижнього листа найнижчої колонки
-        $actual = $minBottom + max($this->lmin, min($maxLower, $this->stdLen($joint - $minBottom, $maxLower)));
+        // (лінію, задану кнопками ↑/↓, ставимо на найближчу допустиму довжину — інакше вона «стрибала б» лише вгору)
+        $actual = $minBottom + max($this->lmin, min($maxLower, $user !== null
+            ? $this->nearestStd($joint - $minBottom, $maxLower)
+            : $this->stdLen($joint - $minBottom, $maxLower)));
         $joint = $actual;
         foreach ($columns as $i => $col) {
             $need = $col['need'];
@@ -369,6 +377,15 @@ class SheetLayoutEngine
         $this->jointRange = ($rows === 2 && $lo <= $hi) ? [$lo, $hi] : null;
         $this->warnings[] = sprintf('Скат довший за лист — укладка у %d ряди, лінія стику на висоті %.3f м, нахлест %d мм', $rows, $joint / 1000, $this->pz);
         return $out;
+    }
+
+    // Найближча стандартна довжина (для лінії стику, яку рухає користувач)
+    private function nearestStd(int $len, int $max): int
+    {
+        $step = $this->wave > 0 ? $this->wave : $this->round;
+        $base = $this->wave > 0 ? $this->pz : 0;
+        $l = (int)(round(($len - $base) / $step) * $step + $base);
+        return min(max($l, $this->lmin), $max);
     }
 
     // Стандартна довжина: металочерепиця — хвиля × n + ПЗ (малюнок суміщається), інші — округлення
@@ -631,7 +648,11 @@ class SheetLayoutEngine
     {
         $ys = [];
         $n = count($this->polygon);
-        foreach ([$x0 + 1, ($x0 + $x1) / 2, $x1 - 1] as $x) {
+        // колонка може частково виходити за скат (зсув сітки) — пробні точки беремо в межах ската
+        $pxs = array_column($this->polygon, 0);
+        $x0 = max($x0, (float)min($pxs)); $x1 = min($x1, (float)max($pxs));
+        if ($x1 - $x0 < 1) return null;
+        foreach ([$x0 + 0.5, ($x0 + $x1) / 2, $x1 - 0.5] as $x) {
             for ($i = 0; $i < $n; $i++) {
                 [$ax, $ay] = $this->polygon[$i];
                 [$bx, $by] = $this->polygon[($i + 1) % $n];

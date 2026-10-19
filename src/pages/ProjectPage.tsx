@@ -387,9 +387,19 @@ export default function ProjectPage({ projectId }: Props) {
   });
 
   // Лінія стику рядів (одна на весь скат): null — посередині
-  const jointStep = (materials.find(x => x.id === active?.material_profile_id)?.wave_step || 100);
+  const jointStep = (materials.find(x => x.id === active?.material_profile_id)?.wave_step || 1); // мінімальний крок лінії стику
   const setJoint = (mm: number | null) => active && run('calc', async () => {
     await patchSlope(active.id, { joint_y: mm });
+    await calcSlope(active.id);
+  });
+
+  const setShift = (mm: number) => active && run('calc', async () => {
+    await patchSlope(active.id, { layout_shift: mm });
+    await calcSlope(active.id);
+  });
+
+  const resetLayout = () => active && run('calc', async () => {
+    await patchSlope(active.id, { layout_shift: 0, joint_y: null });
     await calcSlope(active.id);
   });
 
@@ -745,17 +755,6 @@ export default function ProjectPage({ projectId }: Props) {
             </label>
             {!fixedCt && <RoundPicker key={`r${active.id}-${res?.rounding_mm ?? ''}`} value={active.round_step ?? null}
               current={res?.rounding_mm ?? (material?.round_step || 10)} wave={material?.wave_step || 0} disabled={!!busy} onChange={setRound} />}
-            {res?.joint_y_mm != null && (
-              <div className="kp-joint" role="group" aria-label="Лінія стику рядів">
-                <span>Лінія стику, м</span>
-                <button className="btn btn-secondary btn-sm" onClick={() => setJoint(res.joint_y_mm! - jointStep)} disabled={!!busy} aria-label="Опустити лінію стику">▼</button>
-                <input key={`j${active.id}-${res.joint_y_mm}`} className="form-control" inputMode="decimal" defaultValue={m3(res.joint_y_mm)}
-                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                  onBlur={e => { const v = parseFloat(e.target.value.replace(',', '.')); if (Number.isFinite(v) && Math.round(v * 1000) !== res.joint_y_mm) setJoint(Math.round(v * 1000)); }} />
-                <button className="btn btn-secondary btn-sm" onClick={() => setJoint(res.joint_y_mm! + jointStep)} disabled={!!busy} aria-label="Підняти лінію стику">▲</button>
-                {res.joint_custom && <button className="btn btn-ghost btn-sm" onClick={() => setJoint(null)} disabled={!!busy}>Посередині</button>}
-              </div>
-            )}
             <div className="kp-tools">
               <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>Друк</button>
               {!showExplorer && <button className="btn btn-secondary btn-sm" onClick={() => setShowExplorer(true)}>Провідник</button>}
@@ -799,7 +798,8 @@ export default function ProjectPage({ projectId }: Props) {
                 <>
                   {res.warnings?.map((w, i) => <div key={i} className="alert alert-warning">{w}</div>)}
                   <LayoutScheme calcResult={res as any} polygonPoints={pts} holes={holes} slopeName={active.name}
-                    jointY={res.joint_y_mm ?? null} jointRange={res.joint_range_mm ?? null} onJointChange={mm => setJoint(mm)} />
+                    jointY={res.joint_y_mm ?? null} jointRange={res.joint_range_mm ?? null} onJointChange={mm => setJoint(mm)}
+                    jointStep={jointStep} shiftX={res.layout_shift_mm ?? 0} onShiftX={mm => setShift(mm)} onReset={resetLayout} />
                   <div className="kp-infobar">
                     <dl>
                       <dt>Замовлення</dt><dd>№{settings.order_no} від {dateUa(settings.order_date)}</dd>

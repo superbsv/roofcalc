@@ -54,7 +54,11 @@ interface Props {
   slopeName: string;
   jointY?: number | null;                       // лінія стику рядів, мм
   jointRange?: [number, number] | null;
-  onJointChange?: (mm: number) => void;         // перетягування лінії стику
+  onJointChange?: (mm: number) => void;         // зсув лінії стику кнопками ↑/↓
+  jointStep?: number;                           // мінімальний крок лінії (хвиля металочерепиці), мм
+  shiftX?: number;                              // поточний зсув сітки колонок, мм
+  onShiftX?: (mm: number) => void;             // новий зсув сітки колонок (перерахунок на сервері)
+  onReset?: () => void;                         // скинути зсув і лінію стику
   onUpdate?: (placements: SheetPlacement[]) => void;
 }
 
@@ -236,7 +240,7 @@ function sheetState(x: number, y: number, len: number, usefulWidth: number, poly
   return 'full';
 }
 
-export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange }: Props) {
+export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset }: Props) {
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
 
@@ -260,29 +264,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   const [selected, setSelected]       = useState<Set<number>>(new Set());
   const [zoom, setZoom]               = useState(1);
   const [stepMm, setStepMm]           = useState(100); // крок зміни (як в KrovlyaProfy)
-
-  // Перетягування лінії стику
-  const [jointDrag, setJointDrag] = useState<number | null>(null);
-  useEffect(() => { setJointDrag(null); }, [jointY]);
-  const startJointDrag = (e: React.MouseEvent) => {
-    if (!onJointChange || jointY == null) return;
-    e.stopPropagation(); e.preventDefault();
-    const svg = svgRef.current; if (!svg) return;
-    let cur = jointY;
-    const move = (ev: MouseEvent) => {
-      const rect = svg.getBoundingClientRect();
-      const f = SVG_W / rect.width;
-      const sy = (ev.clientY - rect.top) * f;
-      let mm = Math.round((vy1 - (sy - PADDING) / scale) / 10) * 10;
-      if (jointRange) mm = Math.max(jointRange[0], Math.min(jointRange[1], mm));
-      cur = mm; setJointDrag(mm);
-    };
-    const up = () => {
-      window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up);
-      if (cur !== jointY) onJointChange(cur); else setJointDrag(null);
-    };
-    window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
-  };
 
   const [rubberBand, setRubberBand] = useState<{x1:number;y1:number;x2:number;y2:number}|null>(null);
   const svgRef     = useRef<SVGSVGElement>(null);
@@ -336,6 +317,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   // Горизонтальний зсув — повна перегенерація
   // ============================================
   const shiftLayout = useCallback((deltaMm: number) => {
+    if (onShiftX) { onShiftX(shiftX + deltaMm); return; } // сітка колонок рахується на сервері
     const newOffset = layoutOffset + deltaMm;
     setLayoutOffset(newOffset);
     setManualMode(true);
@@ -345,10 +327,15 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       onUpdate?.(np);
     }
     setSelected(new Set());
-  }, [layoutOffset, verticalOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, rtl, onUpdate]);
+  }, [layoutOffset, verticalOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, rtl, onUpdate, onShiftX, shiftX]);
 
   // Вертикальний зсув розкладки — перегенерація з обрізкою/додаванням листів
   const shiftVerticalLayout = useCallback((deltaMm: number) => {
+    // Одна лінія стику на весь скат: ↑/↓ рухають її (для металочерепиці — щонайменше на крок хвилі)
+    if (onJointChange) {
+      if (jointY != null) onJointChange(jointY + Math.sign(deltaMm) * Math.max(Math.abs(deltaMm), jointStep));
+      return;
+    }
     const newV = verticalOffset + deltaMm;
     setVerticalOffset(newV);
     setManualMode(true);
@@ -358,7 +345,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       onUpdate?.(np);
     }
     setSelected(new Set());
-  }, [verticalOffset, layoutOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, rtl, onUpdate]);
+  }, [verticalOffset, layoutOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, rtl, onUpdate, onJointChange, jointY, jointStep]);
 
   // ============================================
   // Зміна довжини виділеного листа з КОМПЕНСАЦІЄЮ
@@ -517,6 +504,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   };
 
   const resetAll = () => {
+    onReset?.();
     setLayoutOffset(0);
     setVerticalOffset(0);
     setManualMode(false);
@@ -645,7 +633,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           <h3 style={{ margin:0, fontSize:'1rem' }}>Схема розкладки — {slopeName}</h3>
           <div style={{ fontSize:'.8rem', color:'var(--clr-text-3)', marginTop:'2px' }}>
             {calcResult.profile_name} · {visiblePlacements.length} листів · {calcResult.slope_area_m2.toFixed(2)} м²
-            {layoutOffset !== 0 && <span style={{ color:'var(--clr-brand)' }}> · Зсув: {layoutOffset>0?'+':''}{layoutOffset}мм</span>}
+            {jointY != null && <span> · Лінія стику: <b style={{ color:'var(--clr-text)' }}>{(jointY/1000).toFixed(3)} м</b>{jointRange ? ` (можна ${(jointRange[0]/1000).toFixed(3)}–${(jointRange[1]/1000).toFixed(3)})` : ''}</span>}
+            {(onShiftX ? shiftX : layoutOffset) !== 0 && <span style={{ color:'var(--clr-brand)' }}> · Зсув: {(onShiftX ? shiftX : layoutOffset)>0?'+':''}{onShiftX ? shiftX : layoutOffset} мм</span>}
             {hasSelection && <span style={{ color:COLORS.selected, fontWeight:600 }}> · Виділено: {selected.size} шт</span>}
           </div>
         </div>
@@ -678,9 +667,12 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           </div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
-          <span style={{ fontSize:'.82rem', fontWeight:600, color:'var(--clr-text-2)', whiteSpace:'nowrap' }}>По вертикалі:</span>
+          <span style={{ fontSize:'.82rem', fontWeight:600, color:'var(--clr-text-2)', whiteSpace:'nowrap' }}
+            title={onJointChange ? 'Рухає лінію стику рядів — усі листи ската діляться по ній' : undefined}>
+            {onJointChange ? 'Лінія стику:' : 'По вертикалі:'}</span>
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-            {STEPS.map(s => (
+            {onJointChange && jointY == null && <span style={{ fontSize:'.78rem', color:'var(--clr-text-3)' }}>скат в один ряд — стику немає</span>}
+            {!(onJointChange && jointY == null) && STEPS.map(s => (
               <React.Fragment key={s.mm}>
                 <button onClick={()=>shiftVerticalLayout(-s.mm)} style={shiftBtn}>↓ {s.label}</button>
                 <button onClick={()=>shiftVerticalLayout(+s.mm)} style={shiftBtn}>↑ {s.label}</button>
@@ -736,20 +728,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           </g>
 
           <path d={polyPath} fill="none" stroke={COLORS.polygon} strokeWidth="2"/>
-          {/* Лінія стику рядів — одна на весь скат, перетягується мишею */}
-          {jointY != null && (() => {
-            const jy = ty(jointDrag ?? jointY);
-            return (
-              <g style={{ cursor: onJointChange ? 'ns-resize' : 'default' }} onMouseDown={startJointDrag}>
-                <line x1={tx(vx0) - 10} x2={tx(vx1) + 10} y1={jy} y2={jy} stroke="var(--clr-brand)" strokeWidth="2.5" strokeDasharray="10 5" />
-                <line x1={tx(vx0) - 10} x2={tx(vx1) + 10} y1={jy} y2={jy} stroke="transparent" strokeWidth="16" />
-                <rect x={tx(vx1) + 12} y={jy - 11} width="78" height="22" rx="4" fill="var(--clr-brand)" />
-                <text x={tx(vx1) + 51} y={jy + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--clr-on-brand)">
-                  {((jointDrag ?? jointY) / 1000).toFixed(3)} м
-                </text>
-              </g>
-            );
-          })()}
           {/* Внутрішні кути площини */}
           {polygonPoints.length >= 3 && interiorAngles(polygonPoints).map((a, i) => {
             if (Math.abs(a.deg - 180) < 0.05) return null;
