@@ -1025,7 +1025,7 @@ tr:hover td { background: var(--clr-surface-2); }
 .kp-sides-head { display: grid; grid-template-columns: 74px 1fr; font-size: .7rem; color: var(--clr-text-3); font-weight: 700; padding-left: 26px; }
 .kp-side { display: grid; grid-template-columns: 22px 58px minmax(0, 1fr); gap: 4px; align-items: center; font-size: .82rem; }
 .kp-side b { font-family: var(--font-mono); }
-.kp-side-len { font-family: var(--font-mono); background: var(--clr-surface-2); border: 1px solid var(--clr-border); border-radius: 4px; padding: 3px 4px; text-align: right; font-size: .78rem; }
+.kp-side-len { width: 100%; min-width: 0; color: var(--clr-text); font-family: var(--font-mono); background: var(--clr-surface-2); border: 1px solid var(--clr-border); border-radius: 4px; padding: 3px 4px; text-align: right; font-size: .78rem; }
 .kp-side select { padding: 3px 6px; font-size: .78rem; }
 .kp-side-ro { font-size: .8rem; font-family: var(--font-mono); }
 .kp-side-ro span { font-family: var(--font-body); color: var(--clr-text-3); }
@@ -1160,3 +1160,7 @@ tr:hover td { background: var(--clr-surface-2); }
 .kp-params:has(.kp-left-text) label { grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr); }
 .kp-cell { width: 100%; border: 0; background: transparent; color: var(--clr-text); font: inherit; padding: 2px 0; outline: none; }
 .kp-cell:focus { box-shadow: inset 0 -2px 0 var(--clr-brand); }
+.kp-prompt { position: absolute; z-index: 20; width: 220px; background: var(--clr-surface); border: 1px solid var(--clr-brand); border-radius: 8px; box-shadow: var(--shadow-md); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.kp-prompt label { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; color: var(--clr-text-2); font-weight: 600; }
+.kp-prompt .form-control { font-family: var(--font-mono); text-align: right; }
+.kp-prompt-btns { display: flex; justify-content: flex-end; gap: 6px; }

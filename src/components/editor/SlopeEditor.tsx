@@ -7,7 +7,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { TEMPLATES, buildTemplate, templateIconPoints, sideLetter } from '../roof/templates';
 import { useTheme, Theme } from '../theme/theme';
 import { Point, Slope, SheetPlacement, CalcResult, EdgeType } from '../../api/client';
-import { edgeColor, interiorAngles, fmtAngle } from '../roof/edges';
+import { edgeColor, interiorAngles, fmtAngle, setSideLength, setVertexAngle } from '../roof/edges';
 
 interface Props {
   slope: Slope | null;
@@ -59,6 +59,17 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   const [scale, setScale]           = useState(60);
   const [offset, setOffset]         = useState<Point>([60, 40]);
   const [dragIdx, setDragIdx]       = useState(-1);
+  const [hoverEdge, setHoverEdge]   = useState(-1);
+  // Точне введення: клік по стороні — довжина, клік по вершині — внутрішній кут
+  const [prompt, setPrompt] = useState<{ kind: 'side' | 'angle'; idx: number; x: number; y: number; value: string } | null>(null);
+  const downRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const promptInput = useRef<HTMLInputElement>(null);
+  const promptKey = prompt ? `${prompt.kind}${prompt.idx}` : '';
+  useEffect(() => {
+    if (!promptKey) return;
+    const t = setTimeout(() => { promptInput.current?.focus(); promptInput.current?.select(); }, 0);
+    return () => clearTimeout(t);
+  }, [promptKey]);
   const [hoverIdx, setHoverIdx]     = useState(-1);
   const [showLayout, setShowLayout] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState<number | null>(null);
@@ -97,10 +108,19 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     drawHoles(ctx, H);
     drawEdgeTypes(ctx, H);
     drawAngles(ctx, H);
+    if (closed && (hoverEdge >= 0 || prompt?.kind === 'side')) {
+      const ei = prompt?.kind === 'side' ? prompt.idx : hoverEdge;
+      const a = points[ei], b = points[(ei + 1) % points.length];
+      if (a && b) {
+        const [ax, ay] = w2s(a[0], a[1], H), [bx, by] = w2s(b[0], b[1], H);
+        ctx.save(); ctx.strokeStyle = COLORS.pointFirst; ctx.lineWidth = 4; ctx.globalAlpha = .6;
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.restore();
+      }
+    }
     drawPoints(ctx, H);
     if (mode === 'draw' && !closed) drawCursorInfo(ctx, H);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, closed, mouse, scale, offset, mode, showLayout, calcResult, hoverIdx, dragIdx, theme, edgeTypes, holes]);
+  }, [points, closed, mouse, scale, offset, mode, showLayout, calcResult, hoverIdx, dragIdx, theme, edgeTypes, holes, hoverEdge, prompt]);
 
   useEffect(() => { render(); }, [render]);
 
@@ -440,6 +460,10 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     const [wx, wy] = s2w(sx, sy, H);
     setMouse([sx, sy]);
 
+    if (dragIdx >= 0 && downRef.current && !downRef.current.moved) {
+      if (Math.hypot(sx - downRef.current.x, sy - downRef.current.y) < 4) return; // ще клік, не перетягування
+      downRef.current.moved = true;
+    }
     if (dragIdx >= 0) {
       // Перетягуємо вершину: крок 1 см, із Shift — 1 мм. Зберігаємо при відпусканні кнопки.
       const step = e.shiftKey ? 0.001 : 0.01;
@@ -459,10 +483,37 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
         if ((sx-px)**2 + (sy-py)**2 < R*R) found = i;
       });
       setHoverIdx(found);
+      setHoverEdge(found >= 0 || !closed ? -1 : edgeAt(sx, sy, H));
     } else if (hoverIdx !== -1) {
       setHoverIdx(-1);
     }
   };
+
+  // Сторона під курсором (відстань до відрізка < 7 px)
+  function edgeAt(sx: number, sy: number, H: number): number {
+    let best = -1, bestD = 49;
+    for (let i = 0; i < points.length; i++) {
+      const [ax, ay] = w2s(points[i][0], points[i][1], H);
+      const [bx, by] = w2s(points[(i + 1) % points.length][0], points[(i + 1) % points.length][1], H);
+      const L2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1;
+      const t = Math.max(0, Math.min(1, ((sx - ax) * (bx - ax) + (sy - ay) * (by - ay)) / L2));
+      const d = (sx - ax - t * (bx - ax)) ** 2 + (sy - ay - t * (by - ay)) ** 2;
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }
+
+  function applyPrompt() {
+    if (!prompt) return;
+    const v = parseFloat(prompt.value.replace(',', '.'));
+    if (!Number.isFinite(v) || v <= 0) return;
+    const next = prompt.kind === 'side' ? setSideLength(points, prompt.idx, v) : (v < 360 ? setVertexAngle(points, prompt.idx, v) : points);
+    const r = (x: number) => Math.round(x * 1000) / 1000;
+    const rounded = next.map(([x, y]) => [r(x), r(y)] as Point);
+    setPoints(rounded);
+    setPrompt(null);
+    notifyChange(rounded);
+  }
 
   const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (readOnly) return;
@@ -486,7 +537,17 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
         const d = (sx-px)**2 + (sy-py)**2;
         if (d < 196 && d < bestDist) { found = i; bestDist = d; }
       });
-      setDragIdx(found);
+      setPrompt(null);
+      if (found >= 0) {
+        downRef.current = { x: sx, y: sy, moved: false };
+        setDragIdx(found);
+        return;
+      }
+      const ei = closed && !readOnly ? edgeAt(sx, sy, H) : -1;
+      if (ei >= 0) {
+        const a = points[ei], b = points[(ei + 1) % points.length];
+        setPrompt({ kind: 'side', idx: ei, x: sx, y: sy, value: Math.hypot(b[0] - a[0], b[1] - a[1]).toFixed(3) });
+      }
       return;
     }
     if (mode === 'draw') {
@@ -512,6 +573,15 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   };
 
   const onMouseUp = () => {
+    if (dragIdx >= 0 && downRef.current && !downRef.current.moved) {
+      // Клік по вершині без перетягування — ввести кут
+      const ang = interiorAngles(points)[dragIdx];
+      if (ang) setPrompt({ kind: 'angle', idx: dragIdx, x: downRef.current.x, y: downRef.current.y, value: (Math.round(ang.deg * 10) / 10).toString() });
+      downRef.current = null;
+      setDragIdx(-1);
+      return;
+    }
+    downRef.current = null;
     if (dragIdx >= 0) {
       const orig = slope?.polygon_points?.[dragIdx];
       const p = points[dragIdx];
@@ -540,14 +610,17 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     if (e.key === 'Enter' && !closed && points.length >= 3) {
       setClosed(true); notifyChange(points);
     }
-    if (e.key === 'Escape') { setPoints([]); setClosed(false); setShowLayout(false); }
+    if (e.key === 'Escape') {
+      if (prompt) { setPrompt(null); return; }
+      if (!closed) { setPoints([]); setShowLayout(false); }   // готовий контур Esc не стирає
+    }
     if (e.key === 'z' && e.ctrlKey) {
       e.preventDefault();
       if (closed) setClosed(false);
       else setPoints(p => p.slice(0, -1));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, closed]);
+  }, [points, closed, prompt]);
 
   useEffect(() => {
     window.addEventListener('keydown', onKeyDown);
@@ -644,7 +717,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       <div className="editor-canvas-wrap" ref={wrapRef}>
         <canvas
           ref={canvasRef}
-          style={{display:'block',width:'100%',height:'100%',cursor:dragIdx>=0?'grabbing':(hoverIdx>=0?'grab':(mode==='draw'&&!closed?'crosshair':'default'))}}
+          style={{display:'block',width:'100%',height:'100%',cursor:dragIdx>=0?'grabbing':(hoverIdx>=0?'grab':(hoverEdge>=0?'pointer':(mode==='draw'&&!closed?'crosshair':'default')))}}
           onMouseMove={onMouseMove}
           onMouseDown={onMouseDown}
           onMouseUp={onMouseUp}
@@ -672,6 +745,21 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
           </span>
         </div>
         <div className="editor-coords">{coordsText}</div>
+        {prompt && (
+          <div className="kp-prompt" style={{ left: Math.max(8, Math.min(prompt.x + 12, (wrapRef.current?.clientWidth || 600) - 230)), top: Math.max(8, Math.min(prompt.y + 12, (wrapRef.current?.clientHeight || 400) - 130)) }}
+            onMouseDown={e => e.stopPropagation()}>
+            <label>
+              <span>{prompt.kind === 'side' ? `Довжина сторони ${sideLetter(prompt.idx)}, м` : 'Внутрішній кут у вершині, °'}</span>
+              <input ref={promptInput} className="form-control" inputMode="decimal" value={prompt.value}
+                onChange={e => setPrompt(p => p && ({ ...p, value: e.target.value }))}
+                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') applyPrompt(); if (e.key === 'Escape') setPrompt(null); }} />
+            </label>
+            <div className="kp-prompt-btns">
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPrompt(null)}>Скасувати</button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={applyPrompt}>OK</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Right panel */}

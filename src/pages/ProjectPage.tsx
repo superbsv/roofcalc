@@ -15,7 +15,7 @@ import {
   Project, ProjectSettings, Slope, MaterialProfile, Point, EdgeType, CalcMode, AccessoryType,
   projectsApi, slopesApi, materialsApi, specApi, SpecItem, exportApi,
 } from '../api/client';
-import { EDGE_TYPES, autoEdgeTypes, edgeColor, sideLengthMm, rectHole, mirrorElement } from '../components/roof/edges';
+import { EDGE_TYPES, autoEdgeTypes, edgeColor, sideLengthMm, rectHole, mirrorElement, setSideLength } from '../components/roof/edges';
 import { useTheme } from '../components/theme/theme';
 import { CALC_TYPES, calcTypeInfo } from '../components/roof/calcTypes';
 import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter } from '../components/roof/templates';
@@ -292,6 +292,16 @@ export default function ProjectPage({ projectId }: Props) {
     const next = [...edgeTypes]; next[i] = t;
     await patchSlope(active.id, { edge_types: next });
   });
+
+  // Довжина сторони з таблиці (як поле «Розмір» у КП)
+  const setSide = (i: number, val: string) => {
+    if (!active) return;
+    const v = parseFloat(val.replace(',', '.'));
+    const cur = sideLengthMm(pts[i], pts[(i + 1) % pts.length]) / 1000;
+    if (!Number.isFinite(v) || v <= 0 || Math.abs(v - cur) < 0.0005) return;
+    const next = setSideLength(pts, i, Math.round(v * 1000)).map(([x, y]) => [Math.round(x), Math.round(y)] as Point);
+    run('side', async () => { await patchSlope(active.id, { polygon_points: next, edge_types: edgeTypes }); setEditorRev(x => x + 1); });
+  };
 
   const addHole = () => active && run('hole', async () => {
     const mm = (v: string) => Math.round(parseFloat(v.replace(',', '.')) * 1000) || 0;
@@ -678,7 +688,10 @@ export default function ProjectPage({ projectId }: Props) {
                   {pts.map((a, i) => (
                     <div key={i} className="kp-side">
                       <b>{sideLetter(i)} =</b>
-                      <span className="kp-side-len">{m3(sideLengthMm(a, pts[(i + 1) % pts.length]))}</span>
+                      <input key={`${active.id}-${editorRev}-${i}-${a[0]},${a[1]}-${pts[(i + 1) % pts.length].join(",")}`} className="kp-side-len" inputMode="decimal" aria-label={`Довжина сторони ${sideLetter(i)}, м`}
+                        defaultValue={m3(sideLengthMm(a, pts[(i + 1) % pts.length]))}
+                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                        onBlur={e => setSide(i, e.target.value)} />
                       <select className="form-control form-control-sm" value={edgeTypes[i]} aria-label={`Доборний елемент сторони ${sideLetter(i)}`}
                         style={{ boxShadow: edgeTypes[i] !== 'none' ? `inset 3px 0 0 ${edgeColor(edgeTypes[i], theme)}` : undefined }}
                         onChange={e => setEdge(i, e.target.value as EdgeType)}>
@@ -686,7 +699,7 @@ export default function ProjectPage({ projectId }: Props) {
                       </select>
                     </div>
                   ))}
-                  <div className="text-xs text-muted" style={{ marginTop: 6 }}>Перетягніть вершину лівою кнопкою миші, щоб змінити розміри: крок 1 см, із Shift — 1 мм.</div>
+                  <div className="text-xs text-muted" style={{ marginTop: 6 }}>Розмір сторони можна ввести тут або клацнувши по стороні на кресленні. Клік по вершині — ввести внутрішній кут. Вершину можна перетягнути мишею (крок 1 см, із Shift — 1 мм).</div>
                   <dl className="kp-mini">
                     <dt>Площа ската</dt><dd>{f2(polyArea(pts) / 1e6, 3)} м²</dd>
                     {holes.length > 0 && <><dt>Вирізи</dt><dd>{holes.length} шт</dd></>}

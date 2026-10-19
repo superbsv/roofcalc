@@ -76,3 +76,80 @@ export function interiorAngles(pts: Point[]): { deg: number; start: number; swee
 }
 
 export const fmtAngle = (deg: number) => `${(Math.round(deg * 10) / 10).toString().replace('.', ',')}°`;
+
+// ---------- Точне введення розмірів (клік по стороні / по куту) ----------
+const EPS = 1e-6;
+
+// Змінити довжину сторони i (від вершини i до i+1). Нерухомою лишається ліва/нижня вершина сторони,
+// друга зсувається вздовж сторони разом із вершинами на тій самій вертикалі (для горизонтальної сторони)
+// або горизонталі (для решти) — так прямокутник лишається прямокутником, а верх трапеції — горизонтальним.
+export function setSideLength(pts: Point[], i: number, len: number): Point[] {
+  const n = pts.length;
+  if (n < 3 || !(len > 0)) return pts;
+  const a = pts[i], b = pts[(i + 1) % n];
+  const cur = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (cur < EPS) return pts;
+  const horiz = Math.abs(b[1] - a[1]) < EPS * Math.max(1, cur);
+  const moveB = horiz ? b[0] >= a[0] : (b[1] > a[1] || (Math.abs(b[1] - a[1]) < EPS && b[0] > a[0]));
+  const fixed = moveB ? a : b, mv = moveB ? b : a;
+  const ux = (mv[0] - fixed[0]) / cur, uy = (mv[1] - fixed[1]) / cur;
+  const d = len - cur;
+  const tol = Math.max(1e-6, cur * 1e-6);
+  return pts.map(p => {
+    if (p === fixed) return p;
+    const inGroup = p === mv || (horiz ? Math.abs(p[0] - mv[0]) < tol : Math.abs(p[1] - mv[1]) < tol);
+    return inGroup ? [p[0] + ux * d, p[1] + uy * d] as Point : p;
+  });
+}
+
+// Задати внутрішній кут у вершині i. Сторона до нижчої сусідньої вершини лишається, вища сусідня вершина
+// ковзає по своїй горизонталі (висота ската і горизонтальність конька зберігаються).
+// Якщо обидві сусідні вершини на рівні вершини — повертається сторона до наступної вершини зі збереженням довжини.
+export function setVertexAngle(pts: Point[], i: number, deg: number): Point[] {
+  const n = pts.length;
+  if (n < 3 || !(deg > 0 && deg < 360)) return pts;
+  const angs = interiorAngles(pts);
+  const { start, sweep } = angs[i];
+  let area = 0;
+  for (let k = 0; k < n; k++) { const a = pts[k], b = pts[(k + 1) % n]; area += a[0] * b[1] - b[0] * a[1]; }
+  const ccw = area > 0;
+  const v = pts[i];
+  const pi = (i - 1 + n) % n, ni = (i + 1) % n;
+  const startIdx = ccw ? ni : pi, endIdx = ccw ? pi : ni;   // сектор кута: від start-сусіда проти год. стрілки до end-сусіда
+  const t = deg * Math.PI / 180;
+  // Вершина на горизонтальній стороні (конек / карниз): сама вершина ковзає по цій горизонталі,
+  // інша сусідня вершина нерухома — висота і горизонтальність сторони зберігаються.
+  const flatP = Math.abs(pts[pi][1] - v[1]) < EPS, flatN = Math.abs(pts[ni][1] - v[1]) < EPS;
+  if (flatP !== flatN) {
+    const oIdx = flatP ? ni : pi, hIdx = flatP ? pi : ni;
+    const o = pts[oIdx], h = pts[hIdx];
+    const hdx = Math.sign(h[0] - v[0]) || 1;               // напрям горизонтальної сторони від вершини
+    const dy = Math.abs(o[1] - v[1]);
+    const phi = Math.atan2(dy, (o[0] - v[0]) * hdx) * 180 / Math.PI;   // нерефлексний кут між сторонами
+    const reflex = Math.abs(angs[i].deg - phi) > 1e-3 && Math.abs(angs[i].deg - (360 - phi)) < Math.abs(angs[i].deg - phi);
+    const target = reflex ? 360 - deg : deg;
+    if (!(target > 0.01 && target < 179.99)) return pts;
+    const nx = o[0] - hdx * dy / Math.tan(target * Math.PI / 180);
+    const out = pts.map(p => [p[0], p[1]] as Point);
+    out[i] = [nx, v[1]];
+    return out;
+  }
+  if (flatP && flatN) return pts;
+  // рухаємо вищу сусідню вершину
+  const mvIdx = pts[startIdx][1] > pts[endIdx][1] ? startIdx : endIdx;
+  const dir = mvIdx === endIdx ? start + t : start + sweep - t;
+  const m = pts[mvIdx];
+  const out = pts.map(p => [p[0], p[1]] as Point);
+  const s = Math.sin(dir), c = Math.cos(dir);
+  if (Math.abs(m[1] - v[1]) > EPS && Math.abs(s) > 1e-9 && Math.sign(s) === Math.sign(m[1] - v[1])) {
+    const k = (m[1] - v[1]) / s;                 // перетин променя з горизонталлю вершини
+    const nx = v[0] + c * k;
+    const dx = nx - m[0];
+    // вершини на тій самій горизонталі, що утворюють з нею одну сторону, теж не рухаємо — лише цю вершину
+    out[mvIdx] = [m[0] + dx, m[1]];
+  } else {
+    const L = Math.hypot(m[0] - v[0], m[1] - v[1]);
+    out[mvIdx] = [v[0] + c * L, v[1] + s * L];
+  }
+  return out;
+}
