@@ -1051,10 +1051,11 @@ function Specification({ project, settings, slopes, material, items, projectId, 
 
         {lenRows.length > 0 && (
           <div className="kp-lens">
-            <table className="kp-table">
+            <table className="kp-table kp-lens-col">
+              <thead><tr><th>Довжина, м</th><th>К-сть, шт</th></tr></thead>
               <tbody>
-                <tr><th>Довжина, м</th>{lenRows.map(([l]) => <td key={l}>{m3(l)}</td>)}</tr>
-                <tr><th>К-сть, шт</th>{lenRows.map(([l, c]) => <td key={l}>{c}</td>)}</tr>
+                {lenRows.map(([l, c]) => <tr key={l}><td>{m3(l)}</td><td>{c}</td></tr>)}
+                <tr className="tr-total"><td>Всього</td><td>{lenRows.reduce((a, r) => a + r[1], 0)}</td></tr>
               </tbody>
             </table>
             <div className="kp-paper-line">Погонних метрів: <b>{f2(tot.pm, 3)}</b></div>
