@@ -109,12 +109,13 @@ function getColumnRange(x: number, usefulWidth: number, slopeWidth: number, poly
   const visLeft  = Math.max(0, x);
   const visRight = Math.min(slopeWidth, x + usefulWidth);
   if (visRight <= visLeft) return null;
-  const visMid = (visLeft + visRight) / 2;
-  const ranges = [
-    getPolygonRangeAtX(visLeft,  polygon),
-    getPolygonRangeAtX(visMid,   polygon),
-    getPolygonRangeAtX(visRight, polygon),
-  ].filter((r): r is { minY: number; maxY: number } => r !== null);
+  // Межі колонки + усі вершини контуру всередині колонки (вершина/гребінь між краями —
+  // саме там найвища чи найнижча точка, інакше лист не дотягується до неї)
+  const xs = [visLeft, (visLeft + visRight) / 2, visRight];
+  for (const [px] of polygon) if (px > visLeft && px < visRight) xs.push(px);
+  const ranges = xs
+    .map(sx => getPolygonRangeAtX(sx, polygon))
+    .filter((r): r is { minY: number; maxY: number } => r !== null);
   if (!ranges.length) return null;
   return {
     minY: Math.min(...ranges.map(r => r.minY)),
