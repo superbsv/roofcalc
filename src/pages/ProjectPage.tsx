@@ -20,6 +20,7 @@ import { useTheme } from '../components/theme/theme';
 import { CALC_TYPES, calcTypeInfo } from '../components/roof/calcTypes';
 import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter } from '../components/roof/templates';
 import { materialLabel } from '../components/roof/materials';
+import TemplateSketch from '../components/roof/TemplateSketch';
 
 interface Props { projectId: number; }
 
@@ -84,6 +85,7 @@ export default function ProjectPage({ projectId }: Props) {
   const [cutouts, setCutouts] = useState(false);
   const [hole, setHole] = useState({ x: '1.000', y: '1.000', w: '0.600', h: '0.600' });
   const [tpl, setTpl] = useState<{ t: Template; v: Record<string, string> } | null>(null);
+  const [tplFocus, setTplFocus] = useState<string | null>(null);
   const [clip, setClip] = useState<Slope | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
   const [showExplorer, setShowExplorer] = useState(true);
@@ -760,14 +762,13 @@ export default function ProjectPage({ projectId }: Props) {
             <div className="kp-modal-head"><span className="kp-counter"><b>{slopeNo}</b></span><span>{tpl.t.name}</span>
               <button className="kp-x" onClick={() => setTpl(null)} aria-label="Закрити">×</button></div>
             <div className="kp-modal-body">
-              <svg viewBox="0 0 40 28" className="kp-modal-pic" aria-hidden="true">
-                <polygon points={templateIconPoints(tpl.t)} fill="var(--clr-brand-pale)" stroke="var(--clr-brand)" strokeWidth=".8" />
-              </svg>
+              <TemplateSketch t={tpl.t} values={tpl.v} focus={tplFocus} />
               <div className="kp-modal-fields">
                 <div className="kp-h3">Розмір, м:</div>
                 {tpl.t.params.map((p, i) => (
                   <label key={p.key}><span>{p.label}</span>
                     <input className="form-control" inputMode="decimal" autoFocus={i === 0} value={tpl.v[p.key] ?? ''}
+                      onFocus={() => setTplFocus(p.key)} onBlur={() => setTplFocus(null)}
                       onChange={e => setTpl(v => v && ({ ...v, v: { ...v.v, [p.key]: e.target.value } }))}
                       onKeyDown={e => e.key === 'Enter' && applyTemplate()} />
                   </label>
