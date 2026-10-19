@@ -33,7 +33,11 @@ async function request<T>(
     throw new Error('Не авторизовано');
   }
 
-  const data = await res.json();
+  // Сервер може повернути не-JSON (помилка хостингу, HTML) — показуємо зрозуміле повідомлення
+  const text = await res.text();
+  let data: any;
+  try { data = text ? JSON.parse(text) : {}; }
+  catch { throw new Error(`Помилка сервера (${res.status}). Спробуйте ще раз або зверніться в підтримку.`); }
   if (!res.ok) throw new Error((data.error || 'Помилка сервера') + (data.detail ? `: ${data.detail}` : ''));
   return data as T;
 }

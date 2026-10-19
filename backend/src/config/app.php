@@ -16,9 +16,11 @@ if (file_exists($envFile)) {
     }
 }
 
-$base = realpath(__DIR__ . '/../../..');
-if (!$base) $base = __DIR__ . '/../../..';
-define('APP_BASE', $base);
+// Корінь сайту (там, де index.html, api/, src/, vendor/). Конфіг підключається кілька разів — константу задаємо один раз
+if (!defined('APP_BASE')) {
+    $base = realpath(__DIR__ . '/../..');
+    define('APP_BASE', $base ?: __DIR__ . '/../..');
+}
 
 return [
     'db' => [
@@ -38,7 +40,7 @@ return [
         'env'      => isset($_ENV['APP_ENV'])   ? $_ENV['APP_ENV']   : 'production',
         'debug'    => (isset($_ENV['APP_DEBUG']) ? $_ENV['APP_DEBUG'] : 'true') === 'true',
         'url'      => isset($_ENV['APP_URL'])   ? $_ENV['APP_URL']   : '',
-        'timezone' => 'Europe/Kiev',
+        'timezone' => 'Europe/Kyiv',
     ],
     'cors' => [
         'allowed_origins' => array_values(array_filter([

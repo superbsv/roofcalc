@@ -1,4 +1,8 @@
 <?php
+// Попередження PHP не повинні потрапляти у відповідь API (інакше ламається JSON) — лише в журнал
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_NOTICE);
 if (function_exists('opcache_reset')) opcache_reset();
 // api/index.php — ADM.TOOLS версія
 // Розташування: <корінь сайту>/api/index.php (roofkit.com.ua/api)
@@ -37,7 +41,7 @@ use RoofCalc\Api\Admin\AdminController;
 use RoofCalc\Api\Super\SuperController;
 use RoofCalc\Api\Tenant\TenantController;
 
-date_default_timezone_set('Europe/Kiev');
+date_default_timezone_set(in_array('Europe/Kyiv', timezone_identifiers_list(), true) ? 'Europe/Kyiv' : 'Europe/Kiev');
 
 $cfg    = require SRC_PATH . '/config/app.php';
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';

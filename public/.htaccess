@@ -10,7 +10,7 @@ RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
 RewriteRule ^ https://%1%{REQUEST_URI} [R=301,L]
 
 # Службові файли не віддаємо
-RewriteRule ^(\.env|vendor/|src/) - [F,L]
+RewriteRule ^(\.env|vendor/|src/|storage/) - [F,L]
 
 # API обробляє api/index.php (власний .htaccess)
 RewriteRule ^api/ - [L]
