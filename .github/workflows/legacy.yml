@@ -1,0 +1,21 @@
+name: Legacy site (artbudtrading.com.ua/calculator)
+# Ручний запуск: оновлює лише .htaccess у старій папці калькулятора
+on:
+  workflow_dispatch:
+jobs:
+  legacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upload legacy .htaccess
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          protocol: ftps
+          port: 21
+          local-dir: ./legacy/
+          server-dir: /artbudtrading.com.ua/www/calculator/
+          state-name: .ftp-deploy-legacy-state.json
+          dangerous-clean-slate: false

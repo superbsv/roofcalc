@@ -1,0 +1,15 @@
+# Старий адрес artbudtrading.com.ua/calculator/ (калькулятор переїхав на roofkit.com.ua)
+Options -Indexes
+Options -MultiViews
+RewriteEngine On
+RewriteBase /calculator/
+
+# Службові файли (паролі, бібліотеки) — заборонено
+RewriteRule (^|/)\.env - [F,L]
+RewriteRule (^|/)\.ftp-deploy - [F,L]
+RewriteRule ^(vendor|src)/ - [F,L]
+
+RewriteRule ^api/ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.html [L]
