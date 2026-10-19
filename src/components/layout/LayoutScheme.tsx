@@ -59,6 +59,8 @@ interface Props {
   shiftX?: number;                              // поточний зсув сітки колонок, мм
   onShiftX?: (mm: number) => void;             // новий зсув сітки колонок (перерахунок на сервері)
   onReset?: () => void;                         // скинути зсув і лінію стику
+  splitForced?: boolean;                        // стик додано на вимогу (скат вміщається одним листом)
+  onForceSplit?: (on: boolean) => void;         // додати / прибрати стик на вимогу
   onUpdate?: (placements: SheetPlacement[]) => void;
 }
 
@@ -240,7 +242,7 @@ function sheetState(x: number, y: number, len: number, usefulWidth: number, poly
   return 'full';
 }
 
-export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset }: Props) {
+export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset, splitForced = false, onForceSplit }: Props) {
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
 
@@ -671,13 +673,21 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
             title={onJointChange ? 'Рухає лінію стику рядів — усі листи ската діляться по ній' : undefined}>
             {onJointChange ? 'Лінія стику:' : 'По вертикалі:'}</span>
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-            {onJointChange && jointY == null && <span style={{ fontSize:'.78rem', color:'var(--clr-text-3)' }}>скат в один ряд — стику немає</span>}
+            {onJointChange && jointY == null && <>
+              <span style={{ fontSize:'.78rem', color:'var(--clr-text-3)', alignSelf:'center' }}>скат в один ряд</span>
+              {onForceSplit && <button onClick={() => onForceSplit(true)} style={{ ...shiftBtn, borderColor:'var(--clr-brand)', color:'var(--clr-brand)', fontWeight:700 }}
+                title="Розділити всі листи ската однією лінією (коротші листи)">＋ Додати стик</button>}
+            </>}
             {!(onJointChange && jointY == null) && STEPS.map(s => (
               <React.Fragment key={s.mm}>
                 <button onClick={()=>shiftVerticalLayout(-s.mm)} style={shiftBtn}>↓ {s.label}</button>
                 <button onClick={()=>shiftVerticalLayout(+s.mm)} style={shiftBtn}>↑ {s.label}</button>
               </React.Fragment>
             ))}
+            {splitForced && onForceSplit && jointY != null && (
+              <button onClick={() => onForceSplit(false)} style={{ ...shiftBtn, color:'var(--clr-error)', borderColor:'var(--clr-error)' }}
+                title="Повернути укладку одним листом на всю довжину">✕ Прибрати стик</button>
+            )}
           </div>
         </div>
       </div>

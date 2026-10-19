@@ -164,7 +164,7 @@ class SlopesController
         }
 
         $allowed = ['name','polygon_points','holes','edge_types','element_kind','calc_mode','slope_angle','eave_side','ridge_side',
-                    'laying_direction','eave_overhang','ridge_gap','sort_order','joint_y','round_step','layout_shift',
+                    'laying_direction','eave_overhang','ridge_gap','sort_order','joint_y','round_step','layout_shift','split_forced',
                     'material_profile_id','material_color','material_coating','material_thickness'];
 
         foreach ($allowed as $f) {
@@ -178,6 +178,9 @@ class SlopesController
             } elseif ($f === 'calc_mode') {
                 $fields[] = "$f = ?";
                 $params[] = self::cleanMode($body[$f]);
+            } elseif ($f === 'split_forced') {
+                $fields[] = "$f = ?";
+                $params[] = !empty($body[$f]) ? 1 : null;
             } elseif ($f === 'layout_shift') {
                 $fields[] = "$f = ?";
                 $v = ($body[$f] === null || $body[$f] === '') ? 0 : (int)$body[$f];

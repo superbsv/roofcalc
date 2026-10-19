@@ -398,8 +398,13 @@ export default function ProjectPage({ projectId }: Props) {
     await calcSlope(active.id);
   });
 
+  const setForced = (on: boolean) => active && run('calc', async () => {
+    await patchSlope(active.id, { split_forced: on, joint_y: null });
+    await calcSlope(active.id);
+  });
+
   const resetLayout = () => active && run('calc', async () => {
-    await patchSlope(active.id, { layout_shift: 0, joint_y: null });
+    await patchSlope(active.id, { layout_shift: 0, joint_y: null, split_forced: false });
     await calcSlope(active.id);
   });
 
@@ -799,7 +804,8 @@ export default function ProjectPage({ projectId }: Props) {
                   {res.warnings?.map((w, i) => <div key={i} className="alert alert-warning">{w}</div>)}
                   <LayoutScheme calcResult={res as any} polygonPoints={pts} holes={holes} slopeName={active.name}
                     jointY={res.joint_y_mm ?? null} jointRange={res.joint_range_mm ?? null} onJointChange={mm => setJoint(mm)}
-                    jointStep={jointStep} shiftX={res.layout_shift_mm ?? 0} onShiftX={mm => setShift(mm)} onReset={resetLayout} />
+                    jointStep={jointStep} shiftX={res.layout_shift_mm ?? 0} onShiftX={mm => setShift(mm)} onReset={resetLayout}
+                    splitForced={!!res.split_forced} onForceSplit={on => setForced(on)} />
                   <div className="kp-infobar">
                     <dl>
                       <dt>Замовлення</dt><dd>№{settings.order_no} від {dateUa(settings.order_date)}</dd>

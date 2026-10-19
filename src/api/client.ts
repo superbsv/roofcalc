@@ -172,6 +172,7 @@ export interface Slope {
   element_kind?: 'roof' | 'facade';   // скат покрівлі або фасад
   calc_mode?: CalcMode | 'stock';     // «на замовлення» / «зі складу» 1-2-3
   joint_y?: number | null;            // лінія стику рядів, мм (null — посередині)
+  split_forced?: boolean | number | null; // стик на вимогу, навіть коли вистачає одного листа
   layout_shift?: number | null;       // зсув сітки колонок по горизонталі, мм
   round_step?: number | null;         // округлення довжин листів для ската, мм (null — з матеріалу)
   created_at: string; updated_at: string;
@@ -202,7 +203,7 @@ export interface CalcResult {
   alternatives?: { rows: number[]; running_m: number }[];
   running_m?: number;
   max_real_length_mm?: number; max_std_length_mm?: number; rounding_mm?: number;
-  layout_shift_mm?: number; joint_y_mm?: number | null; joint_range_mm?: [number, number] | null; joint_custom?: boolean;
+  split_forced?: boolean; layout_shift_mm?: number; joint_y_mm?: number | null; joint_range_mm?: [number, number] | null; joint_custom?: boolean;
 }
 
 export interface CuttingGroup {

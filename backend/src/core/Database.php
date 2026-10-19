@@ -121,7 +121,8 @@ class Database
         // Лінія стику рядів на скаті (висота верхнього краю нижнього листа, мм); NULL — посередині
         self::ensureColumn('slopes', 'joint_y', 'INT NULL');
         self::ensureColumn('slopes', 'round_step', 'INT NULL');
-        self::ensureColumn('slopes', 'layout_shift', 'INT NULL'); // зсув сітки колонок по горизонталі, мм // округлення довжин для ската (NULL — з матеріалу)
+        self::ensureColumn('slopes', 'layout_shift', 'INT NULL'); // зсув сітки колонок по горизонталі, мм
+        self::ensureColumn('slopes', 'split_forced', 'TINYINT NULL'); // стик рядів навіть коли скат вкривається одним листом // округлення довжин для ската (NULL — з матеріалу)
     }
 
     // Реквізити замовлення і параметри проєкту як у КП (тип розрахунку, матеріал, К, ПК, валюта…)

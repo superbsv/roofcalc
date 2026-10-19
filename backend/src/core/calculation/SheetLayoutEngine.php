@@ -268,6 +268,7 @@ class SheetLayoutEngine
             'rounding_mm'        => $this->round,
             'joint_y_mm'         => $this->jointY,
             'joint_range_mm'     => $this->jointRange,
+            'split_forced'       => !empty($this->slope['split_forced']),
             'layout_shift_mm'    => (int)($this->slope['layout_shift'] ?? 0),
             'joint_custom'       => isset($this->slope['joint_y']) && $this->slope['joint_y'] !== null && $this->slope['joint_y'] !== '',
             'warnings'           => array_values(array_unique($this->warnings)),
@@ -303,6 +304,12 @@ class SheetLayoutEngine
         // (slope.joint_y — абсолютна висота верхнього краю нижнього листа, мм).
         $split = [];
         foreach ($columns as $i => $col) if ($this->mode !== 'sheetcut' && $col['need'] > $max) $split[] = $i;
+        // Стик на вимогу (коротші листи): ділимо всі колонки, де вміщаються два листи, навіть якщо вистачило б одного
+        $forced = !empty($this->slope['split_forced']) && $this->mode !== 'sheetcut';
+        $byRequest = $forced && !$split;
+        if ($byRequest) {
+            foreach ($columns as $i => $col) if ($col['need'] + $this->pz >= 2 * $this->lmin) $split[] = $i;
+        }
 
         $out = [];
         if (!$split) {
@@ -375,7 +382,9 @@ class SheetLayoutEngine
         }
         $this->jointY = $actual;
         $this->jointRange = ($rows === 2 && $lo <= $hi) ? [$lo, $hi] : null;
-        $this->warnings[] = sprintf('Скат довший за лист — укладка у %d ряди, лінія стику на висоті %.3f м, нахлест %d мм', $rows, $joint / 1000, $this->pz);
+        $this->warnings[] = $byRequest
+            ? sprintf('Стик на вимогу — укладка у %d ряди, лінія стику на висоті %.3f м, нахлест %d мм', $rows, $joint / 1000, $this->pz)
+            : sprintf('Скат довший за лист — укладка у %d ряди, лінія стику на висоті %.3f м, нахлест %d мм', $rows, $joint / 1000, $this->pz);
         return $out;
     }
 
