@@ -23,6 +23,8 @@ class AccessoryCalc
     private float $eaveLength;     // карниз
     private float $endLength;      // торці (бокові)
     private float $valleyLength;   // ендова (якщо є)
+    private float $hipLength = 0.0;      // хребет (похиле ребро вальмового даху)
+    private float $abutmentLength = 0.0; // примикання (стіни, труби, вирізи)
     private float $slopeAreaM2;
 
     public function __construct(array $slope, array $calcResult)
@@ -46,6 +48,33 @@ class AccessoryCalc
     {
         $bbox = GeometryEngine::boundingBox($this->polygon);
         $this->slopeAreaM2 = GeometryEngine::polygonAreaM2($this->polygon);
+
+        // Вирізи: площа віднімається, периметр іде у примикання
+        foreach ($this->slope['holes'] ?? [] as $hole) {
+            if (!is_array($hole) || count($hole) < 3) continue;
+            $this->slopeAreaM2    -= GeometryEngine::polygonAreaM2($hole);
+            $this->abutmentLength += GeometryEngine::perimeter($hole) / 1000;
+        }
+        $this->slopeAreaM2 = max(0.0, $this->slopeAreaM2);
+
+        // Якщо користувач задав тип кожного ребра — рахуємо точно по ребрах
+        $edgeTypes = $this->slope['edge_types'] ?? [];
+        $n = count($this->polygon);
+        if (is_array($edgeTypes) && $n >= 3 && count($edgeTypes) === $n) {
+            $sum = ['eave' => 0.0, 'ridge' => 0.0, 'hip' => 0.0, 'valley' => 0.0, 'end' => 0.0, 'abutment' => 0.0];
+            for ($i = 0; $i < $n; $i++) {
+                $t = $edgeTypes[$i];
+                if (!isset($sum[$t])) continue; // 'none' — без доборних
+                $sum[$t] += GeometryEngine::sideLength($this->polygon[$i], $this->polygon[($i + 1) % $n]);
+            }
+            $this->eaveLength      = $sum['eave'] / 1000;
+            $this->ridgeLength     = $sum['ridge'] / 1000;
+            $this->hipLength       = $sum['hip'] / 1000;
+            $this->valleyLength    = $sum['valley'] / 1000;
+            $this->endLength       = $sum['end'] / 1000;
+            $this->abutmentLength += $sum['abutment'] / 1000;
+            return;
+        }
 
         // Знаходимо карнизну і коньову лінії по індексах
         $n        = count($this->polygon);
@@ -138,6 +167,9 @@ class AccessoryCalc
             'ridge_length_m' => round($this->ridgeLength, 2),
             'end_length_m'   => round($this->endLength, 2),
             'valley_length_m'=> round($this->valleyLength, 2),
+            'hip_length_m'     => round($this->hipLength, 2),
+            'abutment_length_m'=> round($this->abutmentLength, 2),
+            'edges_by_type'    => !empty($this->slope['edge_types']) && count($this->slope['edge_types']) === count($this->polygon),
             'slope_area_m2'  => round($this->slopeAreaM2, 3),
         ];
     }
@@ -153,7 +185,14 @@ class AccessoryCalc
 
         switch ($type['calc_rule']) {
             case 'ridge':
-                return $this->calcLinear($this->ridgeLength, $effective);
+                // Напівкруглий/фігурний конек ставиться і на хребти, якщо окремого типу 'hip' немає
+                return $this->calcLinear($this->ridgeLength + ($this->hasRule('hip') ? 0 : $this->hipLength), $effective);
+
+            case 'hip':
+                return $this->calcLinear($this->hipLength, $effective);
+
+            case 'abutment':
+                return $this->calcLinear($this->abutmentLength, $effective);
 
             case 'eave':
                 return $this->calcLinear($this->eaveLength, $effective);
@@ -166,7 +205,7 @@ class AccessoryCalc
                 return $this->calcLinear($this->valleyLength, $effective);
 
             case 'perimeter':
-                $total = $this->eaveLength + $this->ridgeLength + $this->endLength;
+                $total = $this->eaveLength + $this->ridgeLength + $this->endLength + $this->hipLength;
                 return $this->calcLinear($total, $effective);
 
             case 'area':
@@ -177,6 +216,14 @@ class AccessoryCalc
             default:
                 return 0;
         }
+    }
+
+    private function hasRule(string $rule): bool
+    {
+        foreach ($this->accessoryTypes as $t) {
+            if (($t['calc_rule'] ?? '') === $rule) return true;
+        }
+        return false;
     }
 
     // Кількість планок (округлення вгору)

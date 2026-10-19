@@ -119,9 +119,7 @@ class ProjectsController
         );
 
         foreach ($slopes as &$slope) {
-            $slope['polygon_points'] = json_decode($slope['polygon_points'], true) ?? [];
-            $slope['holes']          = json_decode($slope['holes'], true) ?? [];
-            $slope['calc_result']    = json_decode($slope['calc_result'], true);
+            $slope = \RoofCalc\Api\Slopes\SlopesController::decodeSlope($slope);
         }
 
         $this->json([

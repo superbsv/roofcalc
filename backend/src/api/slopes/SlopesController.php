@@ -8,6 +8,7 @@ namespace RoofCalc\Api\Slopes;
 
 use RoofCalc\Core\Auth;
 use RoofCalc\Core\Database;
+use RoofCalc\Core\Geometry\GeometryEngine;
 use RoofCalc\Core\Calculation\TileCalculator;
 use RoofCalc\Core\Calculation\ProfileCalculator;
 use RoofCalc\Core\Calculation\FaltsCalculator;
@@ -15,6 +16,52 @@ use RoofCalc\Core\Calculation\AccessoryCalc;
 
 class SlopesController
 {
+    // Типи ребер ската (індекс = сторона полігону i → i+1)
+    public const EDGE_TYPES = ['eave','ridge','hip','valley','end','abutment','none'];
+
+    public function __construct()
+    {
+        Database::ensureColumn('slopes', 'edge_types', 'TEXT NULL');
+    }
+
+    // Розпаковка JSON-полів ската для відповіді API
+    public static function decodeSlope(array $s): array
+    {
+        $s['polygon_points'] = json_decode($s['polygon_points'] ?? 'null', true) ?? [];
+        $s['holes']          = json_decode($s['holes'] ?? 'null', true) ?? [];
+        $s['edge_types']     = json_decode($s['edge_types'] ?? 'null', true) ?? [];
+        if (array_key_exists('calc_result', $s) && is_string($s['calc_result'])) {
+            $s['calc_result'] = json_decode($s['calc_result'], true);
+        }
+        return $s;
+    }
+
+    // Нормалізація вирізів: масив полігонів, кожен ≥3 точок [x,y] у мм (цілі)
+    private static function cleanHoles($holes): array
+    {
+        if (!is_array($holes)) return [];
+        $out = [];
+        foreach ($holes as $h) {
+            if (!is_array($h) || count($h) < 3) continue;
+            $poly = [];
+            foreach ($h as $pt) {
+                if (!is_array($pt) || count($pt) < 2) continue 2;
+                $poly[] = [(int)round($pt[0]), (int)round($pt[1])];
+            }
+            $out[] = $poly;
+        }
+        return $out;
+    }
+
+    private static function cleanEdgeTypes($types): array
+    {
+        if (!is_array($types)) return [];
+        $out = [];
+        foreach (array_values($types) as $t) {
+            $out[] = in_array($t, self::EDGE_TYPES, true) ? $t : 'none';
+        }
+        return $out;
+    }
     // GET /api/projects/{projectId}/slopes
     public function index(int $projectId): void
     {
@@ -32,10 +79,9 @@ class SlopesController
         );
 
         foreach ($slopes as &$s) {
-            $s['polygon_points'] = json_decode($s['polygon_points'], true) ?? [];
-            $s['holes']          = json_decode($s['holes'], true) ?? [];
-            $s['calc_result']    = json_decode($s['calc_result'], true);
+            $s = self::decodeSlope($s);
         }
+        unset($s);
 
         $this->json(['slopes' => $slopes]);
     }
@@ -57,14 +103,14 @@ class SlopesController
         $id = Database::insert(
             'INSERT INTO slopes (project_id, name, sort_order, polygon_points, holes,
              slope_angle, eave_side, ridge_side, laying_direction, eave_overhang, ridge_gap,
-             material_profile_id, material_color, material_coating, material_thickness)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+             material_profile_id, material_color, material_coating, material_thickness, edge_types)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             [
                 $projectId,
                 $body['name']          ?? 'Скат ' . ($maxOrder + 1),
                 $maxOrder + 1,
                 json_encode($body['polygon_points']),
-                json_encode($body['holes'] ?? []),
+                json_encode(self::cleanHoles($body['holes'] ?? [])),
                 $body['slope_angle']   ?? 30,
                 $body['eave_side']     ?? null,
                 $body['ridge_side']    ?? null,
@@ -75,12 +121,11 @@ class SlopesController
                 $body['material_color']      ?? null,
                 $body['material_coating']    ?? null,
                 $body['material_thickness']  ?? null,
+                json_encode(self::cleanEdgeTypes($body['edge_types'] ?? [])),
             ]
         );
 
-        $slope = Database::fetchOne('SELECT * FROM slopes WHERE id = ?', [$id]);
-        $slope['polygon_points'] = json_decode($slope['polygon_points'], true);
-        $slope['holes']          = json_decode($slope['holes'], true);
+        $slope = self::decodeSlope(Database::fetchOne('SELECT * FROM slopes WHERE id = ?', [$id]));
 
         $this->json(['slope' => $slope], 201);
     }
@@ -95,13 +140,19 @@ class SlopesController
         $fields = [];
         $params = [];
 
-        $allowed = ['name','polygon_points','holes','slope_angle','eave_side','ridge_side',
+        $allowed = ['name','polygon_points','holes','edge_types','slope_angle','eave_side','ridge_side',
                     'laying_direction','eave_overhang','ridge_gap',
                     'material_profile_id','material_color','material_coating','material_thickness'];
 
         foreach ($allowed as $f) {
             if (!array_key_exists($f, $body)) continue;
-            if (in_array($f, ['polygon_points','holes'])) {
+            if ($f === 'holes') {
+                $fields[] = "$f = ?";
+                $params[] = json_encode(self::cleanHoles($body[$f]));
+            } elseif ($f === 'edge_types') {
+                $fields[] = "$f = ?";
+                $params[] = json_encode(self::cleanEdgeTypes($body[$f]));
+            } elseif ($f === 'polygon_points') {
                 $fields[] = "$f = ?";
                 $params[] = json_encode($body[$f]);
             } else {
@@ -119,9 +170,7 @@ class SlopesController
         $params[] = $id;
         Database::query('UPDATE slopes SET ' . implode(', ', $fields) . ' WHERE id = ?', $params);
 
-        $slope = Database::fetchOne('SELECT * FROM slopes WHERE id = ?', [$id]);
-        $slope['polygon_points'] = json_decode($slope['polygon_points'], true);
-        $slope['holes']          = json_decode($slope['holes'], true);
+        $slope = self::decodeSlope(Database::fetchOne('SELECT * FROM slopes WHERE id = ?', [$id]));
 
         $this->json(['slope' => $slope]);
     }
@@ -161,7 +210,8 @@ class SlopesController
         if (!$slope) return ['errors' => ['Скат не знайдено']];
 
         $slope['polygon_points'] = json_decode($slope['polygon_points'], true) ?? [];
-        $slope['holes']          = json_decode($slope['holes'], true) ?? [];
+        $slope['holes']          = self::cleanHoles(json_decode($slope['holes'] ?? 'null', true));
+        $slope['edge_types']     = self::cleanEdgeTypes(json_decode($slope['edge_types'] ?? 'null', true));
         $slope['forbidden_lengths'] = $slope['forbidden_lengths'] ?? '[]';
         $slope['stock_lengths']     = $slope['stock_lengths']     ?? '[]';
 
@@ -210,6 +260,16 @@ class SlopesController
 
         if (!empty($calcResult['errors'])) {
             return $calcResult;
+        }
+
+        // Вирізи (труби, вікна): віднімаємо їх площу від площі ската
+        if (!empty($slope['holes'])) {
+            $holesArea = 0.0;
+            foreach ($slope['holes'] as $h) $holesArea += GeometryEngine::polygonAreaM2($h);
+            $calcResult['holes_area_m2'] = round($holesArea, 3);
+            if (isset($calcResult['slope_area_m2'])) {
+                $calcResult['slope_area_m2'] = round(max(0, $calcResult['slope_area_m2'] - $holesArea), 3);
+            }
         }
 
         // Доборні елементи

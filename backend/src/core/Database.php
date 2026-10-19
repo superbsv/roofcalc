@@ -72,4 +72,18 @@ class Database
     {
         return (int) self::connection()->lastInsertId();
     }
+
+    // Додає колонку, якщо її ще немає (легка самоміграція для shared-хостингу без CLI).
+    // $table і $column — лише з коду, не від користувача.
+    private static array $checkedColumns = [];
+    public static function ensureColumn(string $table, string $column, string $definition): void
+    {
+        $key = $table . '.' . $column;
+        if (isset(self::$checkedColumns[$key])) return;
+        $exists = self::fetchOne("SHOW COLUMNS FROM `$table` LIKE ?", [$column]);
+        if (!$exists) {
+            self::connection()->exec("ALTER TABLE `$table` ADD COLUMN `$column` $definition");
+        }
+        self::$checkedColumns[$key] = true;
+    }
 }
