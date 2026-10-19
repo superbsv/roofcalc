@@ -368,12 +368,6 @@ export default function ProductsPage({ category }: { category?: Category }) {
                 )}
               </Row>
               <Row>
-                <Field label="Склад: довжина:наявність, мм:шт (до 10 позицій)" style={{ flex:2 }}>
-                  <input className="form-control" value={stockInput} onChange={e => setStockInput(e.target.value)} placeholder="Н-р: 1200:40, 2250:40, 3650:12, 4500:10" />
-                  <div style={{ fontSize:'.75rem', color:'var(--clr-text-3)', marginTop:'4px' }}>Порожньо — лише «на замовлення». Без «:кількості» — наявність не обмежена.</div>
-                </Field>
-              </Row>
-              <Row>
                 <Field label="Заборонені діапазони довжин" style={{ flex:2 }}>
                   <ForbiddenRanges value={forbiddenInput} onChange={setForbiddenInput} />
                 </Field>

@@ -158,7 +158,7 @@ class SlopesController
         $params = [];
 
         $allowed = ['name','polygon_points','holes','edge_types','element_kind','calc_mode','slope_angle','eave_side','ridge_side',
-                    'laying_direction','eave_overhang','ridge_gap','sort_order',
+                    'laying_direction','eave_overhang','ridge_gap','sort_order','joint_y',
                     'material_profile_id','material_color','material_coating','material_thickness'];
 
         foreach ($allowed as $f) {
@@ -172,6 +172,9 @@ class SlopesController
             } elseif ($f === 'calc_mode') {
                 $fields[] = "$f = ?";
                 $params[] = self::cleanMode($body[$f]);
+            } elseif ($f === 'joint_y') {
+                $fields[] = "$f = ?";
+                $params[] = ($body[$f] === null || $body[$f] === '') ? null : (int)$body[$f];
             } elseif ($f === 'element_kind') {
                 $fields[] = "$f = ?";
                 $params[] = $body[$f] === 'facade' ? 'facade' : 'roof';
@@ -270,7 +273,8 @@ class SlopesController
         $profile['round_step']     = $slope['round_step'] ?? null;
         $profile['max_std_length'] = $slope['max_std_length'] ?? null;
         $profile['type']           = $slope['type'];
-        $mode = self::cleanMode($slope['calc_mode'] ?? 'order');
+        // Розрахунок лише «на замовлення» (режими «зі складу» прибрано з програми)
+        $mode = 'order';
 
         switch ($slope['type']) {
             // Листові та штучні матеріали — єдиний движок укладки (режими як у «Кровля Профи»)

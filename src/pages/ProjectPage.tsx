@@ -42,17 +42,11 @@ const dateUa = (iso?: string) => (iso ? iso.split('-').reverse().join('.') : '')
 // Доборні у списку сторони — як у КП: «без доборних» і комплекти в кутових дужках
 const doborLabel = (t: EdgeType) => (t === 'none' ? 'без доборних' : `<${EDGE_TYPES.find(e => e.key === t)?.label || t}>`);
 
-function modeOf(s: ProjectSettings): CalcMode {
-  return s.supply === 'stock' ? (`stock${s.stock_variant || 1}` as CalcMode) : 'order';
+// Розрахунок лише «на замовлення» (режими «зі складу» прибрано)
+function modeOf(_s: ProjectSettings): CalcMode {
+  return 'order';
 }
 
-// Нормалізація складських даних матеріалу: [[L, qty|null]]
-function stockOf(m?: MaterialProfile): [number, number | null][] {
-  const raw = (m?.stock_lengths || []) as any[];
-  return raw.map(r => Array.isArray(r) ? [Number(r[0]), r[1] == null ? null : Number(r[1])] as [number, number | null]
-    : typeof r === 'object' ? [Number(r.length), r.qty == null ? null : Number(r.qty)] as [number, number | null]
-    : [Number(r), null] as [number, number | null]).filter(r => r[0] > 0);
-}
 function rangesOf(m?: MaterialProfile): [number, number][] {
   const raw = (m?.forbidden_lengths || []) as any[];
   return raw.map(r => Array.isArray(r) ? [Number(r[0]), Number(r[1])] as [number, number] : [Number(r.min), Number(r.max)] as [number, number]);
@@ -126,7 +120,6 @@ export default function ProjectPage({ projectId }: Props) {
         st.pk = st.pk ?? 0;
         st.direction = st.direction || 'right_left';
         st.supply = st.supply || 'order';
-        st.stock_variant = st.stock_variant || 1;
         setProject(p.project);
         setSettings(st);
         setInfo({
@@ -389,8 +382,10 @@ export default function ProjectPage({ projectId }: Props) {
     if (!s.calc_result && (s.polygon_points?.length || 0) >= 3) await calcSlope(s.id);
   });
 
-  const setSlopeMode = (mode: CalcMode) => active && run('calc', async () => {
-    await patchSlope(active.id, { calc_mode: mode });
+  // Лінія стику рядів (одна на весь скат): null — посередині
+  const jointStep = (materials.find(x => x.id === active?.material_profile_id)?.wave_step || 100);
+  const setJoint = (mm: number | null) => active && run('calc', async () => {
+    await patchSlope(active.id, { joint_y: mm });
     await calcSlope(active.id);
   });
 
@@ -742,14 +737,15 @@ export default function ProjectPage({ projectId }: Props) {
               <input key={`k${active.id}`} className="form-control" type="number" min={0} max={500} defaultValue={active.eave_overhang}
                 onBlur={e => +e.target.value !== active.eave_overhang && setSlopeK(+e.target.value)} />
             </label>
-            {ct?.stock && (
-              <div className="seg" role="radiogroup" aria-label="Тип розрахунку">
-                {([['order', 'На замовл.'], ['stock1', 'Склад 1'], ['stock2', 'Склад 2'], ['stock3', 'Склад 3']] as [CalcMode, string][]).map(([m, l]) => {
-                  const cur = active.calc_mode === 'stock' ? 'stock2' : (active.calc_mode || 'order');
-                  return <button key={m} type="button" role="radio" aria-checked={cur === m} className={cur === m ? 'on' : ''}
-                    disabled={!!busy || (m !== 'order' && !stockOf(materials.find(x => x.id === active.material_profile_id)).length)}
-                    onClick={() => setSlopeMode(m)}>{l}</button>;
-                })}
+            {res?.joint_y_mm != null && (
+              <div className="kp-joint" role="group" aria-label="Лінія стику рядів">
+                <span>Лінія стику, м</span>
+                <button className="btn btn-secondary btn-sm" onClick={() => setJoint(res.joint_y_mm! - jointStep)} disabled={!!busy} aria-label="Опустити лінію стику">▼</button>
+                <input key={`j${active.id}-${res.joint_y_mm}`} className="form-control" inputMode="decimal" defaultValue={m3(res.joint_y_mm)}
+                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                  onBlur={e => { const v = parseFloat(e.target.value.replace(',', '.')); if (Number.isFinite(v) && Math.round(v * 1000) !== res.joint_y_mm) setJoint(Math.round(v * 1000)); }} />
+                <button className="btn btn-secondary btn-sm" onClick={() => setJoint(res.joint_y_mm! + jointStep)} disabled={!!busy} aria-label="Підняти лінію стику">▲</button>
+                {res.joint_custom && <button className="btn btn-ghost btn-sm" onClick={() => setJoint(null)} disabled={!!busy}>Посередині</button>}
               </div>
             )}
             <div className="kp-tools">
@@ -794,7 +790,8 @@ export default function ProjectPage({ projectId }: Props) {
               ) : (
                 <>
                   {res.warnings?.map((w, i) => <div key={i} className="alert alert-warning">{w}</div>)}
-                  <LayoutScheme calcResult={res as any} polygonPoints={pts} holes={holes} slopeName={active.name} />
+                  <LayoutScheme calcResult={res as any} polygonPoints={pts} holes={holes} slopeName={active.name}
+                    jointY={res.joint_y_mm ?? null} jointRange={res.joint_range_mm ?? null} onJointChange={mm => setJoint(mm)} />
                   <div className="kp-infobar">
                     <dl>
                       <dt>Замовлення</dt><dd>№{settings.order_no} від {dateUa(settings.order_date)}</dd>
@@ -813,24 +810,6 @@ export default function ProjectPage({ projectId }: Props) {
                     </dl>
                   </div>
                   {res.cutting?.length ? <CuttingTable rows={res.cutting} /> : null}
-                  {res.alternatives && res.alternatives.length > 1 && (
-                    <div className="kp-card">
-                      <div className="kp-h3">Варіанти рядності (склад 1): найкращий з {res.alternatives.length}</div>
-                      <table className="kp-table">
-                        <thead><tr><th>№</th><th>Нижні ряди, м</th><th>Погонні метри</th></tr></thead>
-                        <tbody>{res.alternatives.map((a, i) => <tr key={i} className={i === 0 ? 'kp-best' : ''}><td>{i + 1}</td><td>{a.rows.length ? a.rows.map(m3).join(' + ') : 'один ряд'}</td><td>{f2(a.running_m, 3)}</td></tr>)}</tbody>
-                      </table>
-                    </div>
-                  )}
-                  {res.stock_usage?.length ? (
-                    <div className="kp-card">
-                      <div className="kp-h3">Склад</div>
-                      <table className="kp-table">
-                        <thead><tr><th>L, м</th><th>Потрібно</th><th>Наявність</th></tr></thead>
-                        <tbody>{res.stock_usage.map(u => <tr key={u.length} className={u.available != null && u.used > u.available ? 'kp-short' : ''}><td>{m3(u.length)}</td><td>{u.used}</td><td>{u.available ?? '∞'}</td></tr>)}</tbody>
-                      </table>
-                    </div>
-                  ) : null}
                 </>
               )}
             </div>
@@ -909,9 +888,6 @@ function polyArea(p: Point[]): number {
 function modeName(m?: string): string {
   switch (m) {
     case 'order': return 'на замовлення';
-    case 'stock': case 'stock2': return 'зі складу 2 — цілими листами, мінімум витрати';
-    case 'stock1': return 'зі складу 1 — цілими листами з дотриманням рядності';
-    case 'stock3': return 'зі складу 3 — розрахунковими листами з розкроєм';
     case 'fixed': return 'цілими елементами';
     case 'sheetcut': return 'з розкроєм листів';
     default: return m || '—';
@@ -929,7 +905,7 @@ function CuttingTable({ rows }: { rows: NonNullable<Slope['calc_result']>['cutti
           {rows.map((c, i) => (
             <tr key={i} className={c.missing ? 'kp-short' : ''}>
               <td>{c.from === c.to ? c.from : `${c.from}–${c.to}`}</td>
-              <td>{m3(c.sheet_length)}{c.missing ? ' (немає на складі)' : ''}</td>
+              <td>{m3(c.sheet_length)}</td>
               <td>{c.cuts.map(m3).join(' + ')}</td>
               <td>{c.remainder ? m3(c.remainder) : '—'}</td>
             </tr>
@@ -948,9 +924,7 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
   edit: boolean; onChange: (patch: Partial<MaterialProfile>) => void;
 }) {
   const fixed = ct === 'piece' || ct === 'sheet';
-  const stock = stockOf(m);
   const ranges = rangesOf(m);
-  const canStock = (ct === 'tile' || ct === 'profile');
   const round = m.round_step || m.cut_step || 10;
   const num = (k: 'k' | 'pk') => (
     <input className="form-control" type="number" min={0} max={500} value={settings[k] ?? 0}
@@ -976,11 +950,6 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
     const next = ranges.map(r => [...r] as [number, number]);
     next[i][j] = mm;
     onChange({ forbidden_lengths: next });
-  };
-  const setStock = (i: number, j: 0 | 1, v: number | null) => {
-    const rows: [number, number | null][] = Array.from({ length: 10 }, (_, k) => stock[k] ? [...stock[k]] as [number, number | null] : [0, null]);
-    rows[i][j] = v as any;
-    onChange({ stock_lengths: rows.filter(r => r[0] > 0) as any });
   };
   const optText = (o?: string[]) => (o || []).join(', ');
   const parseOpts = (v: string) => v.split(',').map(x => x.trim()).filter(Boolean);
@@ -1031,8 +1000,8 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
 
       {!fixed && (
         <div className="kp-supply">
-          <div className={`kp-supply-col${settings.supply !== 'stock' ? ' on' : ''}`}>
-            <label className="kp-supply-title"><input type="radio" checked={settings.supply !== 'stock'} onChange={() => setSettings(s => ({ ...s, supply: 'order' }))} /> НА ЗАМОВЛЕННЯ</label>
+          <div className="kp-supply-col on">
+            <div className="kp-supply-title">НА ЗАМОВЛЕННЯ</div>
             <div className="kp-params kp-params-2">
               <label>Lmax, м{mf('max_length', m.max_length)}</label>
               <label>Lmin, м{mf('min_length', m.min_length)}</label>
@@ -1060,35 +1029,6 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
                 </tbody>
               </table>
             )}
-          </div>
-          <div className={`kp-supply-col${settings.supply === 'stock' ? ' on' : ''}`}>
-            <label className="kp-supply-title"><input type="radio" disabled={!canStock || !stock.length} checked={settings.supply === 'stock'} onChange={() => setSettings(s => ({ ...s, supply: 'stock' }))} /> ЗІ СКЛАДУ</label>
-            <table className="kp-table">
-              <thead><tr><th></th><th>Довжина, м</th><th>Наявність, шт</th></tr></thead>
-              <tbody>
-                {Array.from({ length: 10 }, (_, i) => stock[i]).map((r, i) => (
-                  <tr key={`${rk}-s${i}-${stock.length}`}>
-                    <td>L({i + 1})</td>
-                    {edit ? (
-                      <>
-                        <td><input className="kp-cell" inputMode="decimal" defaultValue={r ? m3(r[0]) : ''}
-                          onBlur={e => { const v = parseFloat(e.target.value.replace(',', '.')); setStock(i, 0, Number.isFinite(v) ? Math.round(v * 1000) : 0); }} /></td>
-                        <td><input className="kp-cell" inputMode="numeric" defaultValue={r && r[1] != null ? String(r[1]) : ''} placeholder="∞"
-                          onBlur={e => { const v = parseInt(e.target.value, 10); setStock(i, 1, Number.isFinite(v) ? v : null); }} /></td>
-                      </>
-                    ) : <><td>{r ? m3(r[0]) : ''}</td><td>{r ? (r[1] ?? '∞') : ''}</td></>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <fieldset className="kp-fieldset" disabled={settings.supply !== 'stock'}>
-              <legend>Тип розрахунку за замовчуванням</legend>
-              {([1, 2, 3] as const).map(v => (
-                <label key={v}><input type="radio" checked={(settings.stock_variant || 1) === v} onChange={() => setSettings(s => ({ ...s, stock_variant: v }))} />
-                  {v === 1 ? ' Цілими листами 1 (рядність)' : v === 2 ? ' Цілими листами 2 (мінімум витрати)' : ' Складськими з розкроєм 3'}</label>
-              ))}
-            </fieldset>
-            {!stock.length && !edit && <div className="text-xs text-muted">Складські довжини не задано.</div>}
           </div>
         </div>
       )}
@@ -1180,7 +1120,7 @@ function Specification({ project, settings, slopes, material, items, projectId, 
         <h2 className="kp-paper-title">СПЕЦИФІКАЦІЯ</h2>
         <div className="kp-paper-sub">
           <div>Замовлення №{settings.order_no} від {dateUa(settings.order_date)}</div>
-          <div>Тип розрахунку: «{ct?.label?.toUpperCase()} {settings.supply === 'stock' ? 'ЗІ СКЛАДУ' : 'НА ЗАМОВЛЕННЯ'}»</div>
+          <div>Тип розрахунку: «{ct?.label?.toUpperCase()} НА ЗАМОВЛЕННЯ»</div>
         </div>
         <div className="kp-paper-mat"><span>{(ct?.facade ? 'ФАСАДНИЙ' : 'ПОКРІВЕЛЬНИЙ')} МАТЕРІАЛ:</span> <b>{material?.name || '—'}</b>{material ? ` (${materialLabel(material.type)})` : ''}</div>
         {material && (

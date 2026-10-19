@@ -123,6 +123,7 @@ export interface Slope {
   edge_types?: EdgeType[];            // тип кожного ребра (сторона i → i+1)
   element_kind?: 'roof' | 'facade';   // скат покрівлі або фасад
   calc_mode?: CalcMode | 'stock';     // «на замовлення» / «зі складу» 1-2-3
+  joint_y?: number | null;            // лінія стику рядів, мм (null — посередині)
   created_at: string; updated_at: string;
 }
 
@@ -151,6 +152,7 @@ export interface CalcResult {
   alternatives?: { rows: number[]; running_m: number }[];
   running_m?: number;
   max_real_length_mm?: number; max_std_length_mm?: number; rounding_mm?: number;
+  joint_y_mm?: number | null; joint_range_mm?: [number, number] | null; joint_custom?: boolean;
 }
 
 export interface CuttingGroup {

@@ -51,6 +51,9 @@ interface Props {
   polygonPoints: Point[];
   holes?: Point[][];
   slopeName: string;
+  jointY?: number | null;                       // лінія стику рядів, мм
+  jointRange?: [number, number] | null;
+  onJointChange?: (mm: number) => void;         // перетягування лінії стику
   onUpdate?: (placements: SheetPlacement[]) => void;
 }
 
@@ -230,7 +233,7 @@ function sheetState(x: number, y: number, len: number, usefulWidth: number, poly
   return 'full';
 }
 
-export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate }: Props) {
+export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange }: Props) {
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
 
@@ -251,6 +254,29 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   const [selected, setSelected]       = useState<Set<number>>(new Set());
   const [zoom, setZoom]               = useState(1);
   const [stepMm, setStepMm]           = useState(100); // крок зміни (як в KrovlyaProfy)
+
+  // Перетягування лінії стику
+  const [jointDrag, setJointDrag] = useState<number | null>(null);
+  useEffect(() => { setJointDrag(null); }, [jointY]);
+  const startJointDrag = (e: React.MouseEvent) => {
+    if (!onJointChange || jointY == null) return;
+    e.stopPropagation(); e.preventDefault();
+    const svg = svgRef.current; if (!svg) return;
+    let cur = jointY;
+    const move = (ev: MouseEvent) => {
+      const rect = svg.getBoundingClientRect();
+      const f = SVG_W / rect.width;
+      const sy = (ev.clientY - rect.top) * f;
+      let mm = Math.round((H - (sy - PADDING) / scale) / 10) * 10;
+      if (jointRange) mm = Math.max(jointRange[0], Math.min(jointRange[1], mm));
+      cur = mm; setJointDrag(mm);
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up);
+      if (cur !== jointY) onJointChange(cur); else setJointDrag(null);
+    };
+    window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+  };
 
   const [rubberBand, setRubberBand] = useState<{x1:number;y1:number;x2:number;y2:number}|null>(null);
   const svgRef     = useRef<SVGSVGElement>(null);
@@ -693,6 +719,20 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           </g>
 
           <path d={polyPath} fill="none" stroke={COLORS.polygon} strokeWidth="2"/>
+          {/* Лінія стику рядів — одна на весь скат, перетягується мишею */}
+          {jointY != null && (() => {
+            const jy = ty(jointDrag ?? jointY);
+            return (
+              <g style={{ cursor: onJointChange ? 'ns-resize' : 'default' }} onMouseDown={startJointDrag}>
+                <line x1={tx(0) - 10} x2={tx(W) + 10} y1={jy} y2={jy} stroke="var(--clr-brand)" strokeWidth="2.5" strokeDasharray="10 5" />
+                <line x1={tx(0) - 10} x2={tx(W) + 10} y1={jy} y2={jy} stroke="transparent" strokeWidth="16" />
+                <rect x={tx(W) + 12} y={jy - 11} width="78" height="22" rx="4" fill="var(--clr-brand)" />
+                <text x={tx(W) + 51} y={jy + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--clr-on-brand)">
+                  {((jointDrag ?? jointY) / 1000).toFixed(3)} м
+                </text>
+              </g>
+            );
+          })()}
           {/* Внутрішні кути площини */}
           {polygonPoints.length >= 3 && interiorAngles(polygonPoints).map((a, i) => {
             if (Math.abs(a.deg - 180) < 0.05) return null;

@@ -118,6 +118,8 @@ class Database
         // Етап 3 (КП 8.15): величина округлення і максимальна стандартна довжина
         self::ensureColumn('material_profiles', 'round_step', 'INT NULL');
         self::ensureColumn('material_profiles', 'max_std_length', 'INT NULL');
+        // Лінія стику рядів на скаті (висота верхнього краю нижнього листа, мм); NULL — посередині
+        self::ensureColumn('slopes', 'joint_y', 'INT NULL');
     }
 
     // Реквізити замовлення і параметри проєкту як у КП (тип розрахунку, матеріал, К, ПК, валюта…)

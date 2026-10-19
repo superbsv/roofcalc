@@ -1164,3 +1164,6 @@ tr:hover td { background: var(--clr-surface-2); }
 .kp-prompt label { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; color: var(--clr-text-2); font-weight: 600; }
 .kp-prompt .form-control { font-family: var(--font-mono); text-align: right; }
 .kp-prompt-btns { display: flex; justify-content: flex-end; gap: 6px; }
+.kp-joint { display: flex; align-items: center; gap: 4px; font-size: .72rem; color: var(--clr-text-3); font-weight: 600; }
+.kp-joint .form-control { width: 76px; padding: 4px 6px; text-align: right; font-family: var(--font-mono); }
+.kp-joint > span { margin-right: 2px; }

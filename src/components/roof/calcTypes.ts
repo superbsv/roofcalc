@@ -14,11 +14,11 @@ export interface CalcTypeInfo {
 }
 
 export const CALC_TYPES: CalcTypeInfo[] = [
-  { key: 'tile', label: 'Металочерепиця', hint: 'Малюнок сусідніх листів суміщається, ряди кратні хвилі. «На замовлення» і «зі складу».',
+  { key: 'tile', label: 'Металочерепиця', hint: 'Малюнок сусідніх листів суміщається, ряди кратні хвилі.',
     materialTypes: ['tile'], stock: true, ready: true },
   { key: 'piece', label: 'Черепиця', hint: 'Прямокутні листи фіксованого розміру, обрізки не використовуються (Метробонд, натуральна).',
     materialTypes: ['tile_module', 'natural_tile'], stock: false, ready: true },
-  { key: 'profile', label: 'Профнастил', hint: 'Лист будь-якої довжини до Lmax, з округленням. «На замовлення» і «зі складу».',
+  { key: 'profile', label: 'Профнастил', hint: 'Лист будь-якої довжини до Lmax, з округленням.',
     materialTypes: ['profile'], stock: true, ready: true },
   { key: 'falts', label: 'Фальцева покрівля', hint: 'Як профнастил, але нахлест сусідніх листів зі зміщенням (врозбіжку).',
     materialTypes: ['falts'], stock: false, ready: true },

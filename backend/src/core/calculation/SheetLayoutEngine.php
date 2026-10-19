@@ -50,6 +50,8 @@ class SheetLayoutEngine
     private string $direction;
 
     private array $warnings = [];
+    private ?int $jointY = null;
+    private ?array $jointRange = null;
 
     public function __construct(array $profile, array $slope, string $mode = 'order')
     {
@@ -257,6 +259,9 @@ class SheetLayoutEngine
             'max_real_length_mm' => $this->lmax,
             'max_std_length_mm'  => $this->lmaxStd,
             'rounding_mm'        => $this->round,
+            'joint_y_mm'         => $this->jointY,
+            'joint_range_mm'     => $this->jointRange,
+            'joint_custom'       => isset($this->slope['joint_y']) && $this->slope['joint_y'] !== null && $this->slope['joint_y'] !== '',
             'warnings'           => array_values(array_unique($this->warnings)),
             'errors'             => [],
         ];
@@ -285,47 +290,85 @@ class SheetLayoutEngine
         if ($this->mode === 'stock3')   { $max = $maxLower = $this->stockMax(); }
         if ($this->mode === 'sheetcut') { $max = $maxLower = $this->lmax; }
 
-        // Висота ряду: якщо скат не вкривається одним листом, ряди ділимо порівну за найвищою колонкою,
-        // щоб стики листів ішли однією горизонталлю посередині (а не довгий лист + короткий обрізок).
-        $rowLen = $maxLower;
-        if ($this->mode !== 'sheetcut') {
-            $maxNeed = 0;
-            foreach ($columns as $col) if ($col['need'] > $max) $maxNeed = max($maxNeed, $col['need']);
-            if ($maxNeed > 0 && $maxLower > $this->pz) {
-                $rows = (int)ceil(($maxNeed - $this->pz) / ($maxLower - $this->pz));
-                $even = (int)ceil(($maxNeed + ($rows - 1) * $this->pz) / $rows);
-                if ($this->wave > 0) {
-                    // стандартна довжина: хвиля × n + ПЗ — малюнок черепиці суміщається
-                    $even = (int)(ceil(($even - $this->pz) / $this->wave) * $this->wave + $this->pz);
-                    if ($even > $maxLower) $even = $maxLower;
-                } else {
-                    $even = $this->fit($even, $maxLower);
+        // Лінія стику (КП: «висота ряду»): якщо скат не вкривається одним листом, усі колонки ділимо
+        // ОДНІЄЮ горизонталлю. За замовчуванням — посередині найвищої частини ската, користувач може її зсунути
+        // (slope.joint_y — абсолютна висота верхнього краю нижнього листа, мм).
+        $split = [];
+        foreach ($columns as $i => $col) if ($this->mode !== 'sheetcut' && $col['need'] > $max) $split[] = $i;
+
+        $out = [];
+        if (!$split) {
+            foreach ($columns as $col) {
+                $left = $col['need'];
+                $lens = [];
+                for ($i = 0; $i < 50 && $left > $max; $i++) { $lens[] = $maxLower; $left -= ($maxLower - $this->pz); }
+                if ($left > 0) {
+                    if (count($lens)) $left += $this->pz;
+                    $lens[] = $this->mode === 'sheetcut' ? min($left, $this->lmax) : $this->fit($left, $max);
                 }
-                $rowLen = max($this->lmin, min($maxLower, $even));
+                $out[] = $lens;
+            }
+            if ($this->mode === 'sheetcut' && array_filter($out, function ($l) { return count($l) > 1; })) {
+                $this->warnings[] = sprintf('Скат довший за лист — укладка в кілька рядів, нахлест %d мм', $this->pz);
+            }
+            return $out;
+        }
+
+        $minBottom = PHP_INT_MAX; $maxTop = PHP_INT_MIN;
+        foreach ($split as $i) {
+            $minBottom = min($minBottom, $columns[$i]['bottom']);
+            $maxTop = max($maxTop, $columns[$i]['bottom'] + $columns[$i]['need']);
+        }
+        $span = $maxTop - $minBottom;
+        $rows = max(2, (int)ceil(($span - $this->pz) / max(1, $maxLower - $this->pz)));
+        $even = (int)ceil(($span + ($rows - 1) * $this->pz) / $rows);
+        $rowLen = max($this->lmin, min($maxLower, $this->stdLen($even, $maxLower)));
+
+        // Допустимий діапазон лінії (для двох рядів): нижній лист ≤ Lmax станд., верхній ≤ Lmax і ≥ Lmin
+        $lo = PHP_INT_MIN; $hi = PHP_INT_MAX;
+        foreach ($split as $i) {
+            $bot = $columns[$i]['bottom']; $top = $bot + $columns[$i]['need'];
+            $lo = max($lo, $bot + $this->lmin, $rows === 2 ? $top - $max + $this->pz : PHP_INT_MIN);
+            $hi = min($hi, $bot + $maxLower, $rows === 2 ? $top + $this->pz - $this->lmin : PHP_INT_MAX);
+        }
+        $joint = $minBottom + $rowLen;
+        $user = isset($this->slope['joint_y']) && $this->slope['joint_y'] !== null && $this->slope['joint_y'] !== '' ? (int)$this->slope['joint_y'] : null;
+        if ($user !== null) {
+            $joint = $user;
+            if ($rows === 2 && $lo <= $hi && ($joint < $lo || $joint > $hi)) {
+                $joint = max($lo, min($hi, $joint));
+                $this->warnings[] = sprintf('Лінію стику обмежено довжинами листів: допустимо від %.3f до %.3f м', $lo / 1000, $hi / 1000);
             }
         }
 
-        $out = [];
-        $multi = false;
-        foreach ($columns as $col) {
-            $left = $col['need'];
-            $lens = [];
-            // Нижні ряди — однакова висота ряду; коньковий ряд — залишок до реальної максимальної (КП 13.3)
-            for ($i = 0; $i < 50 && $left > $max; $i++) {
-                $lens[] = $rowLen;
-                $left -= ($rowLen - $this->pz);
-                $multi = true;
-            }
-            if ($left > 0) {
-                if (count($lens)) $left += $this->pz; // верхній лист теж заходить на нижній
-                $lens[] = $this->mode === 'sheetcut' ? min($left, $this->lmax) : $this->fit($left, $max);
-            }
+        $actual = null;
+        foreach ($columns as $i => $col) {
+            $need = $col['need'];
+            if (!in_array($i, $split, true)) { $out[] = [$this->fit($need, $max)]; continue; }
+            // нижній лист — до лінії стику (стандартна довжина для металочерепиці)
+            $first = max($this->lmin, min($maxLower, $this->stdLen($joint - $col['bottom'], $maxLower)));
+            $lens = [$first];
+            if ($col['bottom'] === $minBottom) $actual = $col['bottom'] + $first;   // фактична лінія після округлення
+            $left = $need - $first;
+            for ($k = 0; $k < 50 && $left + $this->pz > $max; $k++) { $lens[] = $rowLen; $left -= ($rowLen - $this->pz); }
+            if ($left > 0) $lens[] = $this->fit($left + $this->pz, $max);
             $out[] = $lens;
         }
-        if ($multi) {
-            $this->warnings[] = sprintf('Скат довший за максимальну довжину листа — укладка в кілька рядів: висота нижніх рядів %d мм, нахлест %d мм', $rowLen, $this->pz);
-        }
+        $this->jointY = $actual ?? $joint;
+        $joint = $this->jointY;
+        $this->jointRange = ($rows === 2 && $lo <= $hi) ? [$lo, $hi] : null;
+        $this->warnings[] = sprintf('Скат довший за лист — укладка у %d ряди, лінія стику на висоті %.3f м, нахлест %d мм', $rows, $joint / 1000, $this->pz);
         return $out;
+    }
+
+    // Стандартна довжина: металочерепиця — хвиля × n + ПЗ (малюнок суміщається), інші — округлення
+    private function stdLen(int $len, int $max): int
+    {
+        if ($this->wave > 0) {
+            $l = (int)(ceil(($len - $this->pz) / $this->wave) * $this->wave + $this->pz);
+            return min($l, $max);
+        }
+        return $this->fit($len, $max);
     }
 
     // Довжина «на замовлення»: округлення → Lmin → невиконувані діапазони (межі виконувані)
