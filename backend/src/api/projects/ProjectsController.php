@@ -207,32 +207,39 @@ class ProjectsController
         $this->findProject($id, $user);
 
         $slopes = Database::fetchAll(
-            'SELECT id FROM slopes WHERE project_id = ?', [$id]
+            'SELECT id, name, polygon_points, material_profile_id FROM slopes WHERE project_id = ?', [$id]
         );
 
+        // Розраховуємо кожен елемент окремо: порожній або помилковий елемент не зупиняє весь проєкт
         $slopeCtrl = new \RoofCalc\Api\Slopes\SlopesController();
+        $skipped = [];
+        $area    = 0.0;
         foreach ($slopes as $s) {
-            $slopeCtrl->calculateById((int)$s['id']);
+            $pts = json_decode($s['polygon_points'] ?? '[]', true) ?: [];
+            if (count($pts) < 3) { $skipped[] = $s['name'] . ': немає контуру'; continue; }
+            if (empty($s['material_profile_id'])) { $skipped[] = $s['name'] . ': не обрано матеріал'; continue; }
+            try {
+                $r = $slopeCtrl->calculateById((int)$s['id']);
+                if (!empty($r['errors'])) { $skipped[] = $s['name'] . ': ' . implode('; ', $r['errors']); continue; }
+                $area += (float)($r['slope_area_m2'] ?? 0);
+            } catch (\Throwable $e) {
+                $skipped[] = $s['name'] . ': ' . $e->getMessage();
+            }
         }
 
-        // Оновлюємо підсумки проекту
+        // Підсумки проєкту (раніше тут була неіснуюча колонка useful_area → помилка 500)
         $totals = Database::fetchOne(
             'SELECT SUM(total) as total_price FROM specification_items WHERE project_id = ?',
-            [$id]
-        );
-        $area = Database::fetchOne(
-            'SELECT SUM(useful_area) as total_area FROM specification_items
-             WHERE project_id = ? AND type = "sheet"',
             [$id]
         );
 
         Database::query(
             'UPDATE projects SET total_price = ?, total_area = ?, status = "calculated" WHERE id = ?',
-            [$totals['total_price'], $area['total_area'], $id]
+            [$totals['total_price'] ?? 0, round($area, 3), $id]
         );
 
         $this->log($user['sub'], 'project.calculate', 'project', $id);
-        $this->json(['message' => 'Проект перераховано', 'project_id' => $id]);
+        $this->json(['message' => 'Проект перераховано', 'project_id' => $id, 'skipped' => $skipped]);
     }
 
     // ---- Helpers ----

@@ -247,9 +247,10 @@ export default function ProjectPage({ projectId }: Props) {
   const calculateAll = async () => {
     setCalculating(true); setError('');
     try {
-      await projectsApi.calculateAll(projectId);
+      const r = await projectsApi.calculateAll(projectId);
       await reload(active?.id);
       await loadSpec();
+      if (r.skipped?.length) setError('Не розраховано — ' + r.skipped.join(' · '));
     } catch (e: any) { setError(e.message); }
     setCalculating(false);
   };

@@ -34,7 +34,7 @@ async function request<T>(
   }
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Помилка сервера');
+  if (!res.ok) throw new Error((data.error || 'Помилка сервера') + (data.detail ? `: ${data.detail}` : ''));
   return data as T;
 }
 
@@ -85,7 +85,7 @@ export const projectsApi = {
   create:(body: Partial<Project>)   => post<{ project: Project }>('/projects', body),
   update:(id: number, body: Partial<Project>) => put<{ project: Project }>(`/projects/${id}`, body),
   delete:(id: number)               => del<{}>(`/projects/${id}`),
-  calculateAll:(id: number)         => post<{}>(`/projects/${id}/calculate-all`, {}),
+  calculateAll:(id: number)         => post<{ skipped?: string[] }>(`/projects/${id}/calculate-all`, {}),
   share: (token: string)            => get<{project:Project;slopes:Slope[];specification:SpecItem[]}>(`/projects/share/${token}`),
 };
 
