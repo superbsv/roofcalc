@@ -8,11 +8,13 @@ import AdminPage    from './pages/AdminPage';
 import ProductsPage from './pages/ProductsPage';
 import BrandMark, { BrandWordmark } from './components/brand/BrandMark';
 import { ThemeToggle } from './components/theme/theme';
+import { MATERIAL_TYPES } from './components/roof/materials';
+import { MaterialProfile } from './api/client';
 
 type Page =
   | { type: 'projects' }
   | { type: 'project'; id: number }
-  | { type: 'products'; category?: 'tile' | 'profile' | 'falts' }
+  | { type: 'products'; category?: MaterialProfile['type'] }
   | { type: 'clients' }
   | { type: 'users' }
   | { type: 'settings' };
@@ -149,11 +151,7 @@ function Shell() {
 
             {productsOpen && (
               <div style={{paddingLeft:'16px'}}>
-                {[
-                  {cat:'tile' as const,   label:'Металочерепиця'},
-                  {cat:'profile' as const,label:'Профнастил'},
-                  {cat:'falts' as const,  label:'Фальцева покрівля'},
-                ].map(({cat, label}) => (
+                {MATERIAL_TYPES.map(t => ({ cat: t.key, label: t.label })).map(({cat, label}) => (
                   <div
                     key={cat}
                     className={`sidebar-item${page.type==='products'&&(page as any).category===cat?' active':''}`}

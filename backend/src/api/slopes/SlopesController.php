@@ -13,6 +13,10 @@ use RoofCalc\Core\Calculation\TileCalculator;
 use RoofCalc\Core\Calculation\ProfileCalculator;
 use RoofCalc\Core\Calculation\FaltsCalculator;
 use RoofCalc\Core\Calculation\AccessoryCalc;
+use RoofCalc\Core\Calculation\SheetLayoutEngine;
+
+// Новий клас підключаємо явно: classmap Composer на сервері його ще не знає
+require_once __DIR__ . '/../../core/calculation/SheetLayoutEngine.php';
 
 class SlopesController
 {
@@ -24,6 +28,7 @@ class SlopesController
         Database::ensureColumn('slopes', 'edge_types', 'TEXT NULL');
         // Елемент покрівлі (скат) або фасад — як у провіднику «Кровля Профи»
         Database::ensureColumn('slopes', 'element_kind', "VARCHAR(16) NOT NULL DEFAULT 'roof'");
+        Database::ensureMaterialSchema();
     }
 
     // Розпаковка JSON-полів ската для відповіді API
@@ -143,7 +148,7 @@ class SlopesController
         $fields = [];
         $params = [];
 
-        $allowed = ['name','polygon_points','holes','edge_types','element_kind','slope_angle','eave_side','ridge_side',
+        $allowed = ['name','polygon_points','holes','edge_types','element_kind','calc_mode','slope_angle','eave_side','ridge_side',
                     'laying_direction','eave_overhang','ridge_gap',
                     'material_profile_id','material_color','material_coating','material_thickness'];
 
@@ -155,6 +160,9 @@ class SlopesController
             } elseif ($f === 'edge_types') {
                 $fields[] = "$f = ?";
                 $params[] = json_encode(self::cleanEdgeTypes($body[$f]));
+            } elseif ($f === 'calc_mode') {
+                $fields[] = "$f = ?";
+                $params[] = $body[$f] === 'stock' ? 'stock' : 'order';
             } elseif ($f === 'element_kind') {
                 $fields[] = "$f = ?";
                 $params[] = $body[$f] === 'facade' ? 'facade' : 'roof';
@@ -247,13 +255,16 @@ class SlopesController
             'min_slope_angle'    => $slope['min_slope_angle'],
             'price_per_m2'       => $slope['price_per_m2'],
         ];
+        $mode = (($slope['calc_mode'] ?? 'order') === 'stock') ? 'stock' : 'order';
 
         switch ($slope['type']) {
+            // Листові та штучні матеріали — єдиний движок укладки (режими як у «Кровля Профи»)
             case 'tile':
-                $calc = new TileCalculator($profile, $slope);
-                break;
             case 'profile':
-                $calc = new ProfileCalculator($profile, $slope);
+            case 'tile_module':
+            case 'sheet':
+            case 'natural_tile':
+                $calc = new SheetLayoutEngine($profile, $slope, $mode);
                 break;
             case 'falts':
                 $calc = new FaltsCalculator($profile, $slope);
@@ -322,7 +333,9 @@ class SlopesController
                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
                 [
                     $projectId, $slopeId, 'sheet',
-                    $profile['name'] . ' L=' . ($group['length_mm'] ?? 0) . ' мм',
+                    in_array($profile['type'], ['natural_tile', 'tile_module', 'sheet'], true)
+                        ? $profile['name']
+                        : $profile['name'] . ' L=' . ($group['length_mm'] ?? 0) . ' мм',
                     'шт',
                     $group['count'] ?? 0,
                     $group['length_mm'] ?? 0,
@@ -343,7 +356,7 @@ class SlopesController
                  VALUES (?,?,?,?,?,?,?,?,?)',
                 [
                     $projectId, $slopeId,
-                    strpos($acc['code'] ?? '', 'screw') !== false ? 'fastener' : 'accessory',
+                    in_array($acc['code'] ?? '', ['screw_4x35','nail_ondulin','clamp_tile'], true) || strpos($acc['code'] ?? '', 'screw') !== false ? 'fastener' : 'accessory',
                     $acc['name'],
                     $acc['unit'],
                     $acc['quantity'],

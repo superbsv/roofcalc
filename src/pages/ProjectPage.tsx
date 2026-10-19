@@ -14,6 +14,7 @@ import {
 } from '../api/client';
 import { EDGE_TYPES, autoEdgeTypes, edgeColor, edgeLabel, sideLengthMm, rectHole, mirrorElement } from '../components/roof/edges';
 import { useTheme } from '../components/theme/theme';
+import { MATERIAL_TYPES, materialLabel, isFixedType, supportsStock } from '../components/roof/materials';
 
 interface Props { projectId: number; }
 
@@ -497,6 +498,32 @@ export default function ProjectPage({ projectId }: Props) {
                     {(elementMaterial || projectMaterial) && (
                       <MaterialFacts m={(elementMaterial || projectMaterial)!} />
                     )}
+                    {(() => {
+                      const m = elementMaterial || projectMaterial;
+                      if (!m) return null;
+                      const t = MATERIAL_TYPES.find(x => x.key === m.type);
+                      const hasStock = !!m.stock_lengths?.length;
+                      const modeNow = active.calc_mode === 'stock' ? 'stock' : 'order';
+                      return (
+                        <div className="calc-mode">
+                          <div className="calc-mode-title">Режим розрахунку</div>
+                          {supportsStock(m.type) ? (
+                            <div className="seg" role="radiogroup" aria-label="Режим розрахунку">
+                              <button type="button" role="radio" aria-checked={modeNow === 'order'} className={modeNow === 'order' ? 'on' : ''}
+                                onClick={() => patch({ calc_mode: 'order' })}>На замовлення</button>
+                              <button type="button" role="radio" aria-checked={modeNow === 'stock'} className={modeNow === 'stock' ? 'on' : ''}
+                                disabled={!hasStock} onClick={() => patch({ calc_mode: 'stock' })}>Зі складу</button>
+                            </div>
+                          ) : <div className="text-sm">Фіксований елемент — розкладка цілими листами</div>}
+                          <div className="text-xs text-muted" style={{ marginTop: 6 }}>
+                            {modeNow === 'stock' && supportsStock(m.type)
+                              ? 'Довжини беруться лише зі складського типоряду матеріалу.'
+                              : t?.hint}
+                            {supportsStock(m.type) && !hasStock && ' Щоб увімкнути «Зі складу», задайте складські довжини в довіднику матеріалів.'}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div className="flex gap-3" style={{ flexWrap: 'wrap', marginTop: 12 }}>
                       <button className="btn btn-primary" onClick={calculate}
                         disabled={calculating || pts.length < 3 || !active.material_profile_id}>
@@ -525,6 +552,10 @@ export default function ProjectPage({ projectId }: Props) {
                           <div key={l as string} className="metric-card"><div className="metric-value">{v}</div><div className="metric-label">{l}</div></div>
                         ))}
                       </div>
+                      {calcResult.mode && <div className="text-sm text-muted">
+                        {calcResult.mode === 'stock' ? 'Розраховано «зі складу»' : calcResult.mode === 'fixed' ? 'Розраховано цілими елементами' : 'Розраховано «на замовлення»'}
+                        {calcResult.material_type ? ` · ${materialLabel(calcResult.material_type)}` : ''}
+                      </div>}
                       {calcResult.holes_area_m2 ? <div className="alert alert-info">Вирізи: {fmt(calcResult.holes_area_m2)} м² віднято від площі елемента.</div> : null}
                       {calcResult.warnings?.map((w, i) => <div key={i} className="alert alert-warning">{w}</div>)}
                       <LayoutScheme calcResult={calcResult} polygonPoints={pts} slopeName={active.name} />
@@ -657,11 +688,10 @@ export default function ProjectPage({ projectId }: Props) {
 // ---------- Допоміжні компоненти ----------
 
 function MaterialSelect({ value, list, onChange, disabled }: { value: number; list: MaterialProfile[]; onChange: (id: number) => void; disabled?: boolean }) {
-  const groups: [MaterialProfile['type'], string][] = [['tile', 'Металочерепиця'], ['profile', 'Профнастил'], ['falts', 'Фальцева покрівля']];
   return (
     <select className="form-control" value={value} onChange={e => onChange(+e.target.value)} disabled={disabled}>
       <option value={0}>— Оберіть матеріал —</option>
-      {groups.map(([t, label]) => {
+      {MATERIAL_TYPES.map(({ key: t, label }) => {
         const items = list.filter(m => m.type === t);
         return items.length ? <optgroup key={t} label={label}>{items.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</optgroup> : null;
       })}
@@ -670,13 +700,15 @@ function MaterialSelect({ value, list, onChange, disabled }: { value: number; li
 }
 
 function MaterialFacts({ m }: { m: MaterialProfile }) {
+  const fixed = isFixedType(m.type);
   const rows: [string, string][] = [
-    ['Тип', m.type === 'tile' ? 'Металочерепиця' : m.type === 'profile' ? 'Профнастил' : 'Фальц'],
+    ['Тип', materialLabel(m.type)],
     ['Ширина повна / корисна', `${m.full_width} / ${m.useful_width} мм`],
     ['Нахлест боковий / поздовжній', `${m.side_overlap} / ${m.length_overlap} мм`],
-    ['Довжина листа', `${m.min_length}–${m.max_length} мм`],
+    fixed ? ['Розмір елемента (довжина)', `${m.max_length} мм, не ріжеться`] : ['Довжина листа', `${m.min_length}–${m.max_length} мм`],
   ];
   if (m.wave_step) rows.push(['Крок хвилі', `${m.wave_step} мм`]);
+  else if (!fixed && m.cut_step) rows.push(['Крок округлення', `${m.cut_step} мм`]);
   if (m.forbidden_lengths?.length) rows.push(['Заборонені довжини', m.forbidden_lengths.map(f => `${f.min}–${f.max}`).join(', ')]);
   if (m.stock_lengths?.length) rows.push(['Складський типоряд', m.stock_lengths.join(', ') + ' мм']);
   rows.push(['Мін. кут покрівлі', `${m.min_slope_angle}°`]);

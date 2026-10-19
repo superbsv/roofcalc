@@ -5,3 +5,5 @@ build/
 # backend secrets
 .env
 backend/.env
+backend/vendor/
+backend/router-test.php

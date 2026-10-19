@@ -73,6 +73,16 @@ class Database
         return (int) self::connection()->lastInsertId();
     }
 
+    // SHOW COLUMNS не підтримує плейсхолдери (?) у справжніх prepared statements MySQL —
+    // тому назву колонки підставляємо через PDO::quote
+    private static function columnInfo(string $table, string $column): ?array
+    {
+        $row = self::connection()
+            ->query("SHOW COLUMNS FROM `$table` LIKE " . self::connection()->quote($column))
+            ->fetch(\PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     // Додає колонку, якщо її ще немає (легка самоміграція для shared-хостингу без CLI).
     // $table і $column — лише з коду, не від користувача.
     private static array $checkedColumns = [];
@@ -80,10 +90,30 @@ class Database
     {
         $key = $table . '.' . $column;
         if (isset(self::$checkedColumns[$key])) return;
-        $exists = self::fetchOne("SHOW COLUMNS FROM `$table` LIKE ?", [$column]);
+        $exists = self::columnInfo($table, $column);
         if (!$exists) {
             self::connection()->exec("ALTER TABLE `$table` ADD COLUMN `$column` $definition");
         }
         self::$checkedColumns[$key] = true;
+    }
+
+    // Перетворює ENUM-колонку на VARCHAR, щоб можна було додавати нові значення (типи матеріалів)
+    public static function ensureVarchar(string $table, string $column, int $len = 32): void
+    {
+        $key = $table . '.' . $column . ':varchar';
+        if (isset(self::$checkedColumns[$key])) return;
+        $col = self::columnInfo($table, $column);
+        if ($col && stripos((string)($col['Type'] ?? ''), 'enum') === 0) {
+            $null = (($col['Null'] ?? 'YES') === 'NO') ? 'NOT NULL' : 'NULL';
+            self::connection()->exec("ALTER TABLE `$table` MODIFY `$column` VARCHAR($len) $null");
+        }
+        self::$checkedColumns[$key] = true;
+    }
+
+    // Схема для етапу 2 (режими матеріалів) — викликається з контролерів матеріалів і скатів
+    public static function ensureMaterialSchema(): void
+    {
+        self::ensureVarchar('material_profiles', 'type', 32);
+        self::ensureColumn('slopes', 'calc_mode', "VARCHAR(8) NOT NULL DEFAULT 'order'");
     }
 }

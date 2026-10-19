@@ -801,6 +801,15 @@ tr:hover td { background: var(--clr-surface-2); }
   .px { max-width: none; position: static; }
 }
 
+/* Режим розрахунку (сегментований перемикач) */
+.calc-mode { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--clr-border); }
+.calc-mode-title { font-family: var(--font-display); font-size: .68rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--clr-text-3); margin-bottom: var(--sp-2); }
+.seg { display: inline-flex; border: 1px solid var(--clr-border-dark); border-radius: var(--r-md); overflow: hidden; }
+.seg button { min-height: 44px; padding: 0 var(--sp-4); border: none; background: transparent; color: var(--clr-text-2); font-weight: 600; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--clr-border-dark); }
+.seg button.on { background: var(--clr-brand); color: var(--clr-on-brand); }
+.seg button:disabled { opacity: .45; cursor: not-allowed; }
+
 /* --- Utility --- */
 .flex           { display: flex; }
 .flex-col       { display: flex; flex-direction: column; }

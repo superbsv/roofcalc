@@ -4,6 +4,7 @@
 // ============================================
 
 import React, { useEffect, useState } from 'react';
+import { MATERIAL_TYPES, isFixedType } from '../components/roof/materials';
 
 const BASE = process.env.REACT_APP_API_URL || '/calculator/api';
 const tok  = () => localStorage.getItem('rc_token');
@@ -18,7 +19,7 @@ const api  = async (method: string, path: string, body?: unknown) => {
   return d;
 };
 
-type Category = 'tile' | 'profile' | 'falts';
+type Category = 'tile' | 'tile_module' | 'profile' | 'sheet' | 'natural_tile' | 'falts';
 
 interface Material {
   id: number;
@@ -67,10 +68,15 @@ const EMPTY: Omit<Material, 'id'> = {
   sort_order: 0,
 };
 
-const CAT_LABEL: Record<Category, string> = {
-  tile: 'Металочерепиця',
-  profile: 'Профнастил',
-  falts: 'Фальцева покрівля',
+const CAT_LABEL: Record<Category, string> = Object.fromEntries(MATERIAL_TYPES.map(t => [t.key, t.label])) as Record<Category, string>;
+const CAT_SHORT: Record<Category, string> = Object.fromEntries(MATERIAL_TYPES.map(t => [t.key, t.short])) as Record<Category, string>;
+
+// Типові параметри нового матеріалу за типом (підказка, менеджер змінює під свій прайс)
+const TYPE_DEFAULTS: Partial<Record<Category, Partial<Omit<Material, 'id'>>>> = {
+  tile_module:  { full_width: 1180, useful_width: 1100, side_overlap: 80, length_overlap: 0,   min_length: 400,  max_length: 400,  wave_step: 0, cut_step: 0 },
+  sheet:        { full_width: 950,  useful_width: 860,  side_overlap: 90, length_overlap: 170, min_length: 2000, max_length: 2000, wave_step: 0, cut_step: 0, min_slope_angle: 5 },
+  natural_tile: { full_width: 300,  useful_width: 250,  side_overlap: 50, length_overlap: 80,  min_length: 420,  max_length: 420,  wave_step: 0, cut_step: 0, min_slope_angle: 22 },
+  profile:      { full_width: 1150, useful_width: 1100, side_overlap: 50, length_overlap: 200, min_length: 500,  max_length: 12000, wave_step: 0, cut_step: 50, min_slope_angle: 8 },
 };
 
 function ForbiddenRanges({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -159,7 +165,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
   const newMaterial = () => {
     setSelected(null);
     setIsNew(true);
-    setForm({ ...EMPTY, type: cat });
+    setForm({ ...EMPTY, ...(TYPE_DEFAULTS[cat] || {}), type: cat });
     setForbiddenInput('[]');
     setStockInput('');
     setError(''); setSuccess('');
@@ -203,12 +209,12 @@ export default function ProductsPage({ category }: { category?: Category }) {
       {/* Ліва панель */}
       <div style={{ width:'280px', minWidth:'280px', borderRight:'1px solid var(--clr-border)', display:'flex', flexDirection:'column', background:'var(--clr-surface)' }}>
         <div style={{ display:'flex', borderBottom:'1px solid var(--clr-border)' }}>
-          {(['tile','profile','falts'] as Category[]).map(c => (
+          {MATERIAL_TYPES.map(t => t.key as Category).map(c => (
             <button key={c} onClick={() => { setCat(c); setSelected(null); setIsNew(false); }}
               style={{ flex:1, padding:'10px 4px', fontSize:'.72rem', fontWeight:600, border:'none',
                 borderBottom: cat===c ? '2px solid var(--clr-brand)' : '2px solid transparent',
                 background:'none', color: cat===c ? 'var(--clr-brand)' : 'var(--clr-text-3)', cursor:'pointer' }}>
-              {CAT_LABEL[c].replace('Металочерепиця','МЧ').replace('Профнастил','ПН').replace('Фальцева покрівля','ФП')}
+              <span title={CAT_LABEL[c]}>{CAT_SHORT[c]}</span>
             </button>
           ))}
         </div>
@@ -275,9 +281,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
                 </Field>
                 <Field label="Тип">
                   <select className="form-control" value={form.type} onChange={e => f('type', e.target.value)}>
-                    <option value="tile">Металочерепиця</option>
-                    <option value="profile">Профнастил</option>
-                    <option value="falts">Фальцева покрівля</option>
+                    {MATERIAL_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
                   </select>
                 </Field>
               </Row>
@@ -294,7 +298,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
             {/* Геометрія листа */}
             <Section title="Геометрія листа">
               <div style={{ marginBottom:'12px', padding:'12px', background:'var(--clr-info-bg)', borderRadius:'8px', fontSize:'.8rem', color:'var(--clr-info)' }}>
-                💡 Схема: [—бокове перекриття—|———корисна ширина———|—бокове перекриття—] = повна ширина
+                Схема: [—бокове перекриття—|———корисна ширина———|—бокове перекриття—] = повна ширина
               </div>
               <Row>
                 <Field label="Повна ширина листа, мм">
@@ -311,7 +315,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
                 <Field label="Поздовжнє перекриття, мм">
                   <input type="number" className="form-control" value={form.length_overlap} onChange={e => f('length_overlap', Number(e.target.value))} />
                 </Field>
-                {(cat === 'tile' || cat === 'profile') && <>
+                {cat === 'tile' && <>
                   <Field label="Крок хвилі, мм">
                     <input type="number" className="form-control" value={form.wave_step || ''} onChange={e => f('wave_step', Number(e.target.value))} />
                   </Field>
@@ -323,6 +327,17 @@ export default function ProductsPage({ category }: { category?: Category }) {
             </Section>
 
             {/* Довжини */}
+            {isFixedType(form.type) ? (
+            <Section title="Розмір елемента">
+              <Row>
+                <Field label="Довжина листа / модуля / черепиці, мм">
+                  <input type="number" className="form-control" value={form.max_length}
+                    onChange={e => { const v = Number(e.target.value); setForm(p => ({ ...p, max_length: v, min_length: v })); }} />
+                  <div style={{ fontSize:'.75rem', color:'var(--clr-text-3)', marginTop:'4px' }}>Фіксована довжина, елемент не ріжеться. Ширини і нахлести — у розділі «Геометрія».</div>
+                </Field>
+              </Row>
+            </Section>
+            ) : (
             <Section title="Довжини листів">
               <Row>
                 <Field label="Мінімальна довжина, мм">
@@ -347,6 +362,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
                 </Field>
               </Row>
             </Section>
+            )}
 
             {/* Замок (тільки для фальцевої) */}
             {cat === 'falts' && (
@@ -374,7 +390,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
             <div style={{ marginTop:'24px', display:'flex', justifyContent:'flex-end', gap:'12px' }}>
               <button className="btn btn-ghost" onClick={() => { setSelected(null); setIsNew(false); }}>Скасувати</button>
               <button className="btn btn-primary" onClick={save} disabled={loading}>
-                {loading ? 'Збереження…' : '💾 Зберегти матеріал'}
+                {loading ? 'Збереження…' : 'Зберегти матеріал'}
               </button>
             </div>
           </>

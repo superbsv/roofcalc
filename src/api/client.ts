@@ -105,6 +105,7 @@ export interface Slope {
   calc_result?: CalcResult; calc_at?: string;
   edge_types?: EdgeType[];            // тип кожного ребра (сторона i → i+1)
   element_kind?: 'roof' | 'facade';   // скат покрівлі або фасад
+  calc_mode?: 'order' | 'stock';      // «на замовлення» / «зі складу»
   created_at: string; updated_at: string;
 }
 
@@ -124,6 +125,8 @@ export interface CalcResult {
   sheet_full_width?: number;
   sheet_useful_width?: number;
   holes_area_m2?: number;
+  mode?: 'order' | 'stock' | 'fixed';
+  material_type?: string;
 }
 
 export interface SheetGroup {
@@ -165,11 +168,11 @@ export const slopesApi = {
 // MATERIALS
 // ============================================
 export interface MaterialProfile {
-  id: number; type: 'tile'|'profile'|'falts'; name: string;
+  id: number; type: 'tile'|'tile_module'|'profile'|'sheet'|'natural_tile'|'falts'; name: string;
   manufacturer?: string;
   full_width: number; useful_width: number;
   side_overlap: number; length_overlap: number;
-  wave_step?: number; min_length: number; max_length: number;
+  wave_step?: number; cut_step?: number; min_length: number; max_length: number;
   forbidden_lengths?: Array<{min:number;max:number}>;
   stock_lengths?: number[];
   lock_type?: string; min_joint_distance?: number; join_overlap?: number;

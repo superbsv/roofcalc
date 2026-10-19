@@ -241,6 +241,22 @@ class AccessoryCalc
         $totalSheets = $this->calcResult['total_sheets'] ?? 0;
         if ($totalSheets <= 0) return null;
 
+        // Кріплення залежить від типу матеріалу (ціну таких позицій задає менеджер — тут 0)
+        $type = $this->slope['type'] ?? 'tile';
+        $fixings = [
+            'sheet'        => ['nail_ondulin',  'Цвях для листового покриття', 20, 'шт/лист'],
+            'natural_tile' => ['clamp_tile',    'Кляммер для черепиці',          1, 'шт/черепицю'],
+        ];
+        if (isset($fixings[$type])) {
+            [$code, $name, $perPiece, $unitNote] = $fixings[$type];
+            $qty = (int)ceil($totalSheets * $perPiece * 1.05);
+            return [
+                'code' => $code, 'name' => $name, 'unit' => 'шт', 'quantity' => $qty,
+                'price' => 0, 'total' => 0, 'calc_rule' => 'area',
+                'note' => "{$perPiece} {$unitNote} × {$totalSheets} + 5% запас",
+            ];
+        }
+
         // Норма: 7–8 саморізів на лист металочерепиці / профнастилу
         $norm    = 7;
         $total   = (int)ceil($totalSheets * $norm);
