@@ -1,0 +1,21 @@
+Options -Indexes
+Options -MultiViews
+DirectoryIndex index.html
+
+RewriteEngine On
+RewriteBase /
+
+# www → без www (http → https вмикається в панелі ADM.TOOLS)
+RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+RewriteRule ^ https://%1%{REQUEST_URI} [R=301,L]
+
+# Службові файли не віддаємо
+RewriteRule ^(\.env|vendor/|src/) - [F,L]
+
+# API обробляє api/index.php (власний .htaccess)
+RewriteRule ^api/ - [L]
+
+# Решта маршрутів застосунку → index.html
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.html [L]

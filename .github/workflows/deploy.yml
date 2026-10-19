@@ -18,7 +18,7 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
-      # Бекенд (PHP) іде в той самий каталог calculator/ одним FTP-підключенням
+      # Бекенд (PHP) іде в корінь сайту roofkit.com.ua одним FTP-підключенням
       # (хостинг рве друге підключення поспіль). .env і vendor/ на сервері не чіпаємо.
       - name: Stage backend
         run: |
@@ -34,7 +34,7 @@ jobs:
           protocol: ftps
           port: 21
           local-dir: ./build/
-          server-dir: /artbudtrading.com.ua/www/calculator/
+          server-dir: /roofkit.com.ua/www/
           dangerous-clean-slate: false
           exclude: |
             **/.git*

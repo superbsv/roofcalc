@@ -3,7 +3,7 @@
 // api/client.ts — HTTP клієнт
 // ============================================
 
-const BASE = process.env.REACT_APP_API_URL || '/calculator/api';
+const BASE = process.env.REACT_APP_API_URL || '/api';
 
 function getToken(): string | null {
   return localStorage.getItem('rc_token');
@@ -29,7 +29,7 @@ async function request<T>(
   if (res.status === 401) {
     localStorage.removeItem('rc_token');
     localStorage.removeItem('rc_user');
-    window.location.href = '/calculator/login';
+    window.location.href = '/login';
     throw new Error('Не авторизовано');
   }
 

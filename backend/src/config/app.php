@@ -42,6 +42,8 @@ return [
     ],
     'cors' => [
         'allowed_origins' => array_values(array_filter([
+            'https://roofkit.com.ua',
+            'https://www.roofkit.com.ua',
             'https://artbudtrading.com.ua',
             isset($_ENV['DEV_ORIGIN']) ? $_ENV['DEV_ORIGIN'] : null,
         ])),

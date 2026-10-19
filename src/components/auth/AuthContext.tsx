@@ -117,7 +117,7 @@ function LoginForm({ onRegister }: { onRegister: () => void }) {
     setBusy(true); setError('');
     try {
       await login(loginVal, password);
-      window.location.href = '/calculator/';
+      window.location.href = '/';
     } catch (err: any) {
       setError(err.message || 'Помилка входу');
     } finally {

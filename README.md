@@ -10,7 +10,7 @@
 
 \- БД: MySQL hj409222\_db
 
-\- Live: https://artbudtrading.com.ua/calculator/
+\- Live: https://roofkit.com.ua/
 
 \- GitHub: https://github.com/superbsv/roofcalc
 

@@ -1,8 +1,8 @@
 <?php
 if (function_exists('opcache_reset')) opcache_reset();
 // api/index.php — ADM.TOOLS версія
-// Розташування: calculator/api/index.php
-// PHP шукає src/ і vendor/ на рівень вище: calculator/
+// Розташування: <корінь сайту>/api/index.php (roofkit.com.ua/api)
+// PHP шукає src/ і vendor/ на рівень вище — у корені сайту
 
 define('BASE_PATH', dirname(__DIR__));
 define('SRC_PATH',  BASE_PATH . '/src');
@@ -10,7 +10,7 @@ define('SRC_PATH',  BASE_PATH . '/src');
 $autoload = BASE_PATH . '/vendor/autoload.php';
 if (!file_exists($autoload)) {
     http_response_code(503);
-    die(json_encode(['error' => 'Виконайте composer install у папці calculator/']));
+    die(json_encode(['error' => 'Виконайте composer install у корені сайту']));
 }
 require_once $autoload;
 
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 
 $method = $_SERVER['REQUEST_METHOD'];
 $uri    = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$uri    = preg_replace('#^/[^/]+/api#', '', $uri) ?: '/';
+$uri    = preg_replace('#^(/[^/]+)?/api#', '', $uri) ?: '/';
 
 try {
     if (mt_rand(1,100)===1) Auth::cleanExpiredSessions();
