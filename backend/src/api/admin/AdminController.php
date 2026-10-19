@@ -120,7 +120,7 @@ class AdminController
     // POST /api/admin/materials
     public function createMaterial(): void
     {
-        $this->requireAdmin();
+        $this->requireMaterialEditor();
         Database::ensureMaterialSchema();
         $body = $this->body();
 
@@ -164,6 +164,13 @@ class AdminController
             ]
         );
 
+        // Поля етапу 3 (КП): величина округлення і стандартна довжина
+        $extra = []; $vals = [];
+        foreach (['round_step', 'max_std_length'] as $f) {
+            if (array_key_exists($f, $body)) { $extra[] = "$f = ?"; $vals[] = $body[$f] === '' ? null : $body[$f]; }
+        }
+        if ($extra) { $vals[] = $id; Database::query('UPDATE material_profiles SET ' . implode(', ', $extra) . ' WHERE id = ?', $vals); }
+
         $this->log('admin.material.create', 'material', $id);
         $this->json(['id' => $id, 'message' => 'Профіль створено'], 201);
     }
@@ -171,7 +178,7 @@ class AdminController
     // PUT /api/admin/materials/{id}
     public function updateMaterial(int $id): void
     {
-        $this->requireAdmin();
+        $this->requireMaterialEditor();
         Database::ensureMaterialSchema();
         $body = $this->body();
 
@@ -271,6 +278,15 @@ class AdminController
     }
 
     // ---- Helpers ----
+
+    // Матеріали може редагувати адміністратор і менеджер (кнопка «Дозволити редагування» у вікні матеріалу)
+    private function requireMaterialEditor(): array
+    {
+        $user = Auth::currentUser();
+        if (!$user) $this->error('Не авторизовано', 401);
+        Auth::requireRole($user, ['admin', 'manager']);
+        return $user;
+    }
 
     private function requireAdmin(): array
     {

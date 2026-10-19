@@ -211,7 +211,7 @@ export interface MaterialProfile {
   stock_lengths?: Array<number | [number, number | null] | {length:number; qty?:number|null}>;
   round_step?: number; max_std_length?: number;
   lock_type?: string; min_joint_distance?: number; join_overlap?: number;
-  min_slope_angle: number; price_per_m2: number;
+  min_slope_angle: number; price_per_m2: number; wave_height?: number;
   color_options?: string[]; coating_options?: string[]; thickness_options?: number[];
   is_active: boolean;
 }
@@ -221,6 +221,9 @@ export const materialsApi = {
   byType: (type: string)       => get<{ profiles: MaterialProfile[] }>(`/materials/${type}`),
   get:    (id: number)         => get<{ profile: MaterialProfile }>(`/materials/${id}`),
   accessories: ()              => get<{ accessories: AccessoryType[] }>('/accessories'),
+  // Редагування довідника з вікна матеріалу (адміністратор / менеджер)
+  create: (body: Partial<MaterialProfile>)             => post<{ id: number }>('/admin/materials', body),
+  update: (id: number, body: Partial<MaterialProfile>) => put<{ message: string }>(`/admin/materials/${id}`, body),
 };
 
 // ============================================

@@ -21,6 +21,7 @@ import { CALC_TYPES, calcTypeInfo } from '../components/roof/calcTypes';
 import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter } from '../components/roof/templates';
 import { materialLabel } from '../components/roof/materials';
 import TemplateSketch from '../components/roof/TemplateSketch';
+import { useAuth } from '../components/auth/AuthContext';
 
 interface Props { projectId: number; }
 
@@ -86,6 +87,9 @@ export default function ProjectPage({ projectId }: Props) {
   const [hole, setHole] = useState({ x: '1.000', y: '1.000', w: '0.600', h: '0.600' });
   const [tpl, setTpl] = useState<{ t: Template; v: Record<string, string> } | null>(null);
   const [tplFocus, setTplFocus] = useState<string | null>(null);
+  const [matEdit, setMatEdit] = useState<{ mode: 'new' | 'edit' | 'copy'; draft: MaterialProfile } | null>(null);
+  const { user } = useAuth();
+  const canEditMaterials = user?.role === 'admin' || user?.role === 'manager';
   const [clip, setClip] = useState<Slope | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
   const [showExplorer, setShowExplorer] = useState(true);
@@ -175,6 +179,45 @@ export default function ProjectPage({ projectId }: Props) {
     });
     if (!info.name.trim()) setInfo(v => ({ ...v, name: `Замовлення №${settings.order_no}` }));
     setStep('material');
+  });
+
+  // ---------- 2. Довідник матеріалів з вікна матеріалу (як кнопки КП: новий, редагувати, копіювати, видалити) ----------
+  const editDraft = (patch: Partial<MaterialProfile>) => setMatEdit(e => e && ({ ...e, draft: { ...e.draft, ...patch } }));
+
+  const startNewMaterial = () => {
+    if (!ct) return;
+    const type = ct.materialTypes[0] as MaterialProfile['type'];
+    const base: Record<string, Partial<MaterialProfile>> = {
+      tile: { full_width: 1180, useful_width: 1100, length_overlap: 150, wave_step: 350, min_length: 500, max_length: 6000, round_step: 10, min_slope_angle: 14 },
+      profile: { full_width: 1150, useful_width: 1100, length_overlap: 200, min_length: 500, max_length: 12000, round_step: 10, min_slope_angle: 8 },
+      falts: { full_width: 560, useful_width: 530, length_overlap: 0, min_length: 500, max_length: 10000, round_step: 10, min_slope_angle: 7 },
+      tile_module: { full_width: 1180, useful_width: 1100, length_overlap: 0, min_length: 400, max_length: 400, min_slope_angle: 14 },
+      sheet: { full_width: 950, useful_width: 860, length_overlap: 170, min_length: 2000, max_length: 2000, min_slope_angle: 5 },
+    };
+    const d = { ...(base[type] || base.tile) } as MaterialProfile;
+    d.side_overlap = Math.max(0, d.full_width - d.useful_width);
+    setMatEdit({ mode: 'new', draft: { ...d, id: 0, type, name: '', manufacturer: material?.manufacturer || '', price_per_m2: 0, is_active: true } });
+  };
+
+  const saveMaterial = () => matEdit && run('mat', async () => {
+    const { id, ...rest } = matEdit.draft as any;
+    const body: Partial<MaterialProfile> = { ...rest, name: matEdit.draft.name.trim(), side_overlap: Math.max(0, (rest.full_width || 0) - (rest.useful_width || 0)) };
+    delete (body as any).created_at; delete (body as any).updated_at;
+    let newId = id;
+    if (matEdit.mode === 'edit' && id) await materialsApi.update(id, body);
+    else newId = (await materialsApi.create(body)).id;
+    const ms = await materialsApi.list();
+    setMaterials(ms.profiles);
+    const m = ms.profiles.find(x => x.id === newId);
+    setSettings(s => ({ ...s, material_id: newId, coating: m?.coating_options?.[0] ?? s.coating, color: m?.color_options?.[0] ?? s.color }));
+    setMatEdit(null);
+  });
+
+  const deleteMaterial = () => material && window.confirm(`Видалити матеріал «${material.name}» з бази? Уже зроблені розрахунки збережуться.`) && run('mat', async () => {
+    await materialsApi.update(material.id, { is_active: 0 as any });
+    const ms = await materialsApi.list();
+    setMaterials(ms.profiles);
+    setSettings(s => ({ ...s, material_id: undefined }));
   });
 
   // ---------- 2. Матеріал → «Далі»: застосувати до всіх скатів (експрес-розрахунок КП) ----------
@@ -464,28 +507,61 @@ export default function ProjectPage({ projectId }: Props) {
       {step === 'material' && ct && (
         <div className="kp-window">
           <div className="kp-toolbar">
-            <button className="btn btn-secondary btn-sm" onClick={() => setStep('order')}>← Назад</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setStep('order')} disabled={!!matEdit}>← Назад</button>
             <div className="kp-title">{ct.label}</div>
-            <select className="form-control kp-matsel" aria-label="Матеріал" value={settings.material_id || 0}
-              onChange={e => { const id = +e.target.value || undefined; const m = materials.find(x => x.id === id); setSettings(s => ({ ...s, material_id: id, coating: m?.coating_options?.[0], color: m?.color_options?.[0] })); }}>
-              <option value={0}>— Оберіть матеріал з бази —</option>
-              {Array.from(new Set(typeMaterials.map(m => m.manufacturer || 'Інші'))).sort().map(mf => (
-                <optgroup key={mf} label={mf}>
-                  {typeMaterials.filter(m => (m.manufacturer || 'Інші') === mf).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </optgroup>
-              ))}
-            </select>
-            <button className="btn btn-primary" onClick={materialNext} disabled={!material || !!busy || !ct.ready}>
+            {matEdit ? (
+              <div className="kp-matname">
+                <input className="form-control" aria-label="Назва матеріалу" placeholder="Назва матеріалу" value={matEdit.draft.name}
+                  onChange={e => editDraft({ name: e.target.value })} />
+                <input className="form-control" aria-label="Виробник" placeholder="Виробник" value={matEdit.draft.manufacturer || ''}
+                  onChange={e => editDraft({ manufacturer: e.target.value })} />
+                {ct.materialTypes.length > 1 && (
+                  <select className="form-control" aria-label="Різновид" value={matEdit.draft.type} onChange={e => editDraft({ type: e.target.value as any })}>
+                    {ct.materialTypes.map(t => <option key={t} value={t}>{materialLabel(t)}</option>)}
+                  </select>
+                )}
+              </div>
+            ) : (
+              <select className="form-control kp-matsel" aria-label="Матеріал" value={settings.material_id || 0}
+                onChange={e => { const id = +e.target.value || undefined; const m = materials.find(x => x.id === id); setSettings(s => ({ ...s, material_id: id, coating: m?.coating_options?.[0], color: m?.color_options?.[0] })); }}>
+                <option value={0}>— Оберіть матеріал з бази —</option>
+                {Array.from(new Set(typeMaterials.map(m => m.manufacturer || 'Інші'))).sort().map(mf => (
+                  <optgroup key={mf} label={mf}>
+                    {typeMaterials.filter(m => (m.manufacturer || 'Інші') === mf).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+            )}
+            {canEditMaterials && (
+              <div className="kp-matbtns" role="group" aria-label="Довідник матеріалів">
+                {matEdit ? (
+                  <>
+                    <span className="kp-editbadge">{matEdit.mode === 'edit' ? 'Редагування' : matEdit.mode === 'copy' ? 'Копія' : 'Новий матеріал'}</span>
+                    <button className="btn btn-primary btn-sm" onClick={saveMaterial} disabled={!!busy || !matEdit.draft.name.trim()}>{busy === 'mat' ? 'Збереження…' : 'Зберегти'}</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setMatEdit(null)} disabled={!!busy}>Скасувати</button>
+                  </>
+                ) : (
+                  <>
+                    <button className="btn btn-secondary btn-sm" onClick={startNewMaterial} title="Створити новий запис у базі матеріалів">Новий</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => material && setMatEdit({ mode: 'edit', draft: { ...material } })} disabled={!material} title="Перейти в режим редагування поточного матеріалу">Дозволити редагування</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => material && setMatEdit({ mode: 'copy', draft: { ...material, id: 0, name: `${material.name} (копія)` } })} disabled={!material} title="Створити новий матеріал копіюванням поточного">Копіювати</button>
+                    <button className="btn btn-danger btn-sm" onClick={deleteMaterial} disabled={!material || !!busy} title="Прибрати матеріал з бази">Видалити</button>
+                  </>
+                )}
+              </div>
+            )}
+            <button className="btn btn-primary" onClick={materialNext} disabled={!material || !!busy || !ct.ready || !!matEdit}>
               {busy === 'apply' ? 'Застосовую…' : 'Далі →'}
             </button>
           </div>
 
           {!ct.ready && <div className="alert alert-warning">Тип розрахунку «{ct.label}» ще в розробці — оберіть інший тип або поверніться пізніше.</div>}
-          {!typeMaterials.length && <div className="alert alert-info">У базі немає матеріалів типу «{ct.label}». Додайте їх у розділі «Товари» (довідник матеріалів).</div>}
+          {!typeMaterials.length && <div className="alert alert-info"> У базі немає матеріалів типу «{ct.label}». {canEditMaterials ? 'Натисніть «Новий», щоб додати.' : 'Зверніться до адміністратора.'}</div>}
 
-          {material && (
+          {(matEdit || material) && (
             <div className="kp-material">
-              <MaterialPanel m={material} ct={ct.key} settings={settings} setSettings={setSettings} />
+              <MaterialPanel m={matEdit ? matEdit.draft : material!} ct={ct.key} settings={settings} setSettings={setSettings}
+                edit={!!matEdit} onChange={editDraft} />
               <section className="kp-pane kp-dobor">
                 <h3 className="kp-h3">Доборні елементи</h3>
                 <div className="table-wrap">
@@ -840,10 +916,12 @@ function CuttingTable({ rows }: { rows: NonNullable<Slope['calc_result']>['cutti
   );
 }
 
-// Вікно матеріалу: ліва частина — параметри (як «Металлочерепица» у КП)
-function MaterialPanel({ m, ct, settings, setSettings }: {
+// Вікно матеріалу: ліва частина — параметри (як «Металлочерепица» у КП).
+// edit = true — «Дозволити редагування»: параметри довідника стають доступними для зміни.
+function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
   m: MaterialProfile; ct: string; settings: ProjectSettings;
   setSettings: React.Dispatch<React.SetStateAction<ProjectSettings>>;
+  edit: boolean; onChange: (patch: Partial<MaterialProfile>) => void;
 }) {
   const fixed = ct === 'piece' || ct === 'sheet';
   const stock = stockOf(m);
@@ -854,18 +932,47 @@ function MaterialPanel({ m, ct, settings, setSettings }: {
     <input className="form-control" type="number" min={0} max={500} value={settings[k] ?? 0}
       onChange={e => setSettings(s => ({ ...s, [k]: +e.target.value }))} />
   );
+  // Поле довідника: показ у метрах (як у КП), зберігання в мм
+  const rk = `${m.id || 'new'}`;
+  const mf = (key: keyof MaterialProfile, value: number | undefined, unit: 'm' | 'num' = 'm', extra?: (v: number) => Partial<MaterialProfile>) => (
+    edit ? (
+      <input key={`${rk}-${String(key)}`} className="form-control kp-editable" inputMode="decimal"
+        defaultValue={value == null || (key === 'max_std_length' && !value) ? '' : unit === 'm' ? m3(value) : String(value)}
+        placeholder={key === 'max_std_length' ? 'авто' : undefined}
+        onBlur={e => {
+          if (e.target.value.trim() === '' && key === 'max_std_length') { onChange({ max_std_length: null as any }); return; }
+          const v = parseFloat(e.target.value.replace(',', '.'));
+          if (!Number.isFinite(v)) return;
+          const val = unit === 'm' ? Math.round(v * 1000) : v;
+          onChange({ [key]: val, ...(extra ? extra(val) : {}) } as Partial<MaterialProfile>);
+        }} />
+    ) : <input className="form-control" readOnly value={unit === 'm' ? m3(value) : (unit === 'num' && key === 'price_per_m2' ? f2(value) : String(value ?? ''))} />
+  );
+  const setRange = (i: number, j: 0 | 1, mm: number) => {
+    const next = ranges.map(r => [...r] as [number, number]);
+    next[i][j] = mm;
+    onChange({ forbidden_lengths: next });
+  };
+  const setStock = (i: number, j: 0 | 1, v: number | null) => {
+    const rows: [number, number | null][] = Array.from({ length: 10 }, (_, k) => stock[k] ? [...stock[k]] as [number, number | null] : [0, null]);
+    rows[i][j] = v as any;
+    onChange({ stock_lengths: rows.filter(r => r[0] > 0) as any });
+  };
+  const optText = (o?: string[]) => (o || []).join(', ');
+  const parseOpts = (v: string) => v.split(',').map(x => x.trim()).filter(Boolean);
+
   return (
-    <section className="kp-pane kp-matpane">
+    <section className={`kp-pane kp-matpane${edit ? ' kp-editing' : ''}`}>
       <div className="kp-matgrid">
         <MaterialSketch wave={ct === 'tile'} />
         <div className="kp-params">
           <label>Перекриття конькове ПК, мм{num('pk')}</label>
-          <label>Перекриття замкове ПЗ, м<input className="form-control" readOnly value={m3(m.length_overlap)} /></label>
-          {ct === 'tile' && <label>Довжина хвилі, м<input className="form-control" readOnly value={m3(m.wave_step)} /></label>}
+          <label>Перекриття замкове ПЗ, м{mf('length_overlap', m.length_overlap)}</label>
+          {ct === 'tile' && <label>Довжина хвилі, м{mf('wave_step', m.wave_step)}</label>}
           <label>Карнизний звис К, мм{num('k')}</label>
-          <label>Повна ширина листа, м<input className="form-control" readOnly value={m3(m.full_width)} /></label>
-          <label>Корисна ширина листа, м<input className="form-control" readOnly value={m3(m.useful_width)} /></label>
-          {fixed && <label>Довжина листа, м<input className="form-control" readOnly value={m3(m.max_length)} /></label>}
+          <label>Повна ширина листа, м{mf('full_width', m.full_width, 'm', v => ({ side_overlap: Math.max(0, v - (m.useful_width || 0)) }))}</label>
+          <label>Корисна ширина листа, м{mf('useful_width', m.useful_width, 'm', v => ({ side_overlap: Math.max(0, (m.full_width || 0) - v) }))}</label>
+          {fixed && <label>Довжина листа, м{mf('max_length', m.max_length, 'm', v => ({ min_length: v }))}</label>}
         </div>
       </div>
 
@@ -877,16 +984,25 @@ function MaterialPanel({ m, ct, settings, setSettings }: {
           ))}
         </fieldset>
         <div className="kp-params">
-          <label>Покриття
-            <select className="form-control" value={settings.coating || ''} onChange={e => setSettings(s => ({ ...s, coating: e.target.value }))}>
-              <option value="">—</option>{(m.coating_options || []).map(o => <option key={o}>{o}</option>)}
-            </select></label>
-          <label>Колір
-            <select className="form-control" value={settings.color || ''} onChange={e => setSettings(s => ({ ...s, color: e.target.value }))}>
-              <option value="">—</option>{(m.color_options || []).map(o => <option key={o}>{o}</option>)}
-            </select></label>
-          <label>Ціна, {settings.currency || 'грн'} за 1 м²<input className="form-control" readOnly value={f2(m.price_per_m2)} /></label>
-          <label>Мін. уклон покрівлі, °<input className="form-control" readOnly value={m.min_slope_angle} /></label>
+          {edit ? (
+            <>
+              <label>Покриття (через кому)<input key={`${rk}-coat`} className="form-control kp-editable kp-left-text" defaultValue={optText(m.coating_options)} onBlur={e => onChange({ coating_options: parseOpts(e.target.value) })} /></label>
+              <label>Кольори (через кому)<input key={`${rk}-col`} className="form-control kp-editable kp-left-text" defaultValue={optText(m.color_options)} onBlur={e => onChange({ color_options: parseOpts(e.target.value) })} /></label>
+            </>
+          ) : (
+            <>
+              <label>Покриття
+                <select className="form-control" value={settings.coating || ''} onChange={e => setSettings(s => ({ ...s, coating: e.target.value }))}>
+                  <option value="">—</option>{(m.coating_options || []).map(o => <option key={o}>{o}</option>)}
+                </select></label>
+              <label>Колір
+                <select className="form-control" value={settings.color || ''} onChange={e => setSettings(s => ({ ...s, color: e.target.value }))}>
+                  <option value="">—</option>{(m.color_options || []).map(o => <option key={o}>{o}</option>)}
+                </select></label>
+            </>
+          )}
+          <label>Ціна, {settings.currency || 'грн'} за 1 м²{mf('price_per_m2', m.price_per_m2, 'num')}</label>
+          <label>Мін. уклон покрівлі, °{mf('min_slope_angle', m.min_slope_angle, 'num')}</label>
         </div>
       </div>
 
@@ -895,16 +1011,30 @@ function MaterialPanel({ m, ct, settings, setSettings }: {
           <div className={`kp-supply-col${settings.supply !== 'stock' ? ' on' : ''}`}>
             <label className="kp-supply-title"><input type="radio" checked={settings.supply !== 'stock'} onChange={() => setSettings(s => ({ ...s, supply: 'order' }))} /> НА ЗАМОВЛЕННЯ</label>
             <div className="kp-params kp-params-2">
-              <label>Lmax, м<input className="form-control" readOnly value={m3(m.max_length)} /></label>
-              <label>Lmin, м<input className="form-control" readOnly value={m3(m.min_length)} /></label>
-              <label>Величина округлення, м<input className="form-control" readOnly value={m3(round)} /></label>
-              {m.max_std_length ? <label>Lmax стандартна, м<input className="form-control" readOnly value={m3(m.max_std_length)} /></label> : null}
+              <label>Lmax, м{mf('max_length', m.max_length)}</label>
+              <label>Lmin, м{mf('min_length', m.min_length)}</label>
+              <label>Величина округлення, м{mf('round_step', round)}</label>
+              {(m.max_std_length || (edit && ct === 'tile')) ? <label>Lmax стандартна, м{mf('max_std_length', m.max_std_length)}</label> : null}
             </div>
             <div className="kp-check"><input type="checkbox" readOnly checked={ranges.length > 0} /> Враховувати діапазони невиконуваних розмірів листів</div>
-            {ranges.length > 0 && (
+            {(ranges.length > 0 || edit) && (
               <table className="kp-table kp-ranges">
-                <thead><tr><th></th><th>«від»</th><th>«до»</th></tr></thead>
-                <tbody>{ranges.map((r, i) => <tr key={i}><td>{i + 1}</td><td>{m3(r[0])}</td><td>{m3(r[1])}</td></tr>)}</tbody>
+                <thead><tr><th></th><th>«від», м</th><th>«до», м</th>{edit && <th></th>}</tr></thead>
+                <tbody>
+                  {ranges.map((r, i) => (
+                    <tr key={`${rk}-r${i}-${ranges.length}`}>
+                      <td>{i + 1}</td>
+                      {edit ? ([0, 1] as const).map(j => (
+                        <td key={j}><input className="kp-cell" inputMode="decimal" defaultValue={m3(r[j])}
+                          onBlur={e => { const v = parseFloat(e.target.value.replace(',', '.')); if (Number.isFinite(v)) setRange(i, j, Math.round(v * 1000)); }} /></td>
+                      )) : <><td>{m3(r[0])}</td><td>{m3(r[1])}</td></>}
+                      {edit && <td><button className="kp-x" onClick={() => onChange({ forbidden_lengths: ranges.filter((_, k) => k !== i) })} aria-label="Видалити діапазон">×</button></td>}
+                    </tr>
+                  ))}
+                  {edit && ranges.length < 22 && (
+                    <tr><td colSpan={4}><button className="btn btn-ghost btn-sm" onClick={() => onChange({ forbidden_lengths: [...ranges, [0, 0]] })}>+ діапазон</button></td></tr>
+                  )}
+                </tbody>
               </table>
             )}
           </div>
@@ -914,7 +1044,17 @@ function MaterialPanel({ m, ct, settings, setSettings }: {
               <thead><tr><th></th><th>Довжина, м</th><th>Наявність, шт</th></tr></thead>
               <tbody>
                 {Array.from({ length: 10 }, (_, i) => stock[i]).map((r, i) => (
-                  <tr key={i}><td>L({i + 1})</td><td>{r ? m3(r[0]) : ''}</td><td>{r ? (r[1] ?? '∞') : ''}</td></tr>
+                  <tr key={`${rk}-s${i}-${stock.length}`}>
+                    <td>L({i + 1})</td>
+                    {edit ? (
+                      <>
+                        <td><input className="kp-cell" inputMode="decimal" defaultValue={r ? m3(r[0]) : ''}
+                          onBlur={e => { const v = parseFloat(e.target.value.replace(',', '.')); setStock(i, 0, Number.isFinite(v) ? Math.round(v * 1000) : 0); }} /></td>
+                        <td><input className="kp-cell" inputMode="numeric" defaultValue={r && r[1] != null ? String(r[1]) : ''} placeholder="∞"
+                          onBlur={e => { const v = parseInt(e.target.value, 10); setStock(i, 1, Number.isFinite(v) ? v : null); }} /></td>
+                      </>
+                    ) : <><td>{r ? m3(r[0]) : ''}</td><td>{r ? (r[1] ?? '∞') : ''}</td></>}
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -925,11 +1065,14 @@ function MaterialPanel({ m, ct, settings, setSettings }: {
                   {v === 1 ? ' Цілими листами 1 (рядність)' : v === 2 ? ' Цілими листами 2 (мінімум витрати)' : ' Складськими з розкроєм 3'}</label>
               ))}
             </fieldset>
-            {!stock.length && <div className="text-xs text-muted">Складські довжини не задано в довіднику.</div>}
+            {!stock.length && !edit && <div className="text-xs text-muted">Складські довжини не задано.</div>}
           </div>
         </div>
       )}
-      <div className="text-xs text-muted">Параметри матеріалу (ширини, довжини, склад) редагуються в довіднику «Товари». ПК, К, напрямок, покриття і колір — параметри цього проєкту.</div>
+      <div className="text-xs text-muted">
+        {edit ? 'Режим редагування довідника: змініть параметри і натисніть «Зберегти». Розрахунки ідентифікують матеріал за назвою — змінюючи параметри, краще копіюйте матеріал під новою назвою.'
+          : 'Параметри матеріалу змінюються кнопкою «Дозволити редагування». ПК, К, напрямок, покриття і колір — параметри цього проєкту.'}
+      </div>
     </section>
   );
 }
