@@ -4,6 +4,7 @@
 // ============================================
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { useTheme, Theme } from '../theme/theme';
 import { Point, Slope, SheetPlacement, CalcResult } from '../../api/client';
 
 interface Props {
@@ -14,19 +15,27 @@ interface Props {
   gridScale?: number;
 }
 
-// Палітра полотна в стилі ABT (canvas не читає CSS-змінні, тому hex)
-const COLORS = {
-  grid:       '#1E1E1E',
-  axis:       '#3A3A3A',
-  polygon:    '#F4F4F2',
-  polygonFill:'rgba(255,122,0,0.10)',
-  point:      '#FF7A00',
-  pointFirst: '#FF5A5A',
-  sheet:      ['rgba(191,195,199,0.20)','rgba(191,195,199,0.34)'],
-  sheetBorder:['#BFC3C7','#8A8F95'],
-  dim:        '#BFC3C7',
-  tooltip:    '#0D0D0D',
-  cursorLen:  '#FF7A00',
+// Палітри полотна ABT для темної і світлої теми (canvas не читає CSS-змінні, тому hex)
+type Palette = {
+  grid: string; axis: string; polygon: string; polygonFill: string; point: string; pointFirst: string;
+  sheet: string[]; sheetBorder: string[]; dim: string; tooltip: string; cursorLen: string;
+  label: string; tooltipBg: string; tooltipText: string; pointStroke: string;
+};
+const PALETTES: Record<Theme, Palette> = {
+  dark: {
+    grid: '#1E1E1E', axis: '#3A3A3A', polygon: '#F4F4F2', polygonFill: 'rgba(255,122,0,0.10)',
+    point: '#FF7A00', pointFirst: '#FF5A5A',
+    sheet: ['rgba(191,195,199,0.20)','rgba(191,195,199,0.34)'], sheetBorder: ['#BFC3C7','#8A8F95'],
+    dim: '#BFC3C7', tooltip: '#0D0D0D', cursorLen: '#FF7A00',
+    label: '#A3A8AD', tooltipBg: 'rgba(13,13,13,0.92)', tooltipText: '#FFFFFF', pointStroke: '#0D0D0D',
+  },
+  light: {
+    grid: '#E8E8E4', axis: '#C2C4C6', polygon: '#1A1A1A', polygonFill: 'rgba(255,122,0,0.10)',
+    point: '#FF7A00', pointFirst: '#C8322F',
+    sheet: ['rgba(78,82,88,0.14)','rgba(78,82,88,0.26)'], sheetBorder: ['#4E5258','#2E3135'],
+    dim: '#4E5258', tooltip: '#1A1A1A', cursorLen: '#C25E00',
+    label: '#63676C', tooltipBg: 'rgba(26,26,26,0.92)', tooltipText: '#FFFFFF', pointStroke: '#FFFFFF',
+  },
 };
 
 interface TplParam { key: string; label: string; default: number; }
@@ -127,6 +136,8 @@ const ICON_SVG: Record<string, string> = {
 const SNAP_PRECISION = 0.001;
 
 export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOnly, gridScale = 1 }: Props) {
+  const theme  = useTheme();
+  const COLORS = PALETTES[theme];
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef   = useRef<HTMLDivElement>(null);
 
@@ -175,7 +186,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     drawPoints(ctx, H);
     if (mode === 'draw' && !closed) drawCursorInfo(ctx, H);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, closed, mouse, scale, offset, mode, showLayout, calcResult, hoverIdx, dragIdx]);
+  }, [points, closed, mouse, scale, offset, mode, showLayout, calcResult, hoverIdx, dragIdx, theme]);
 
   useEffect(() => { render(); }, [render]);
 
@@ -237,7 +248,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     }
 
     // Підписи по X (на всю ширину)
-    ctx.fillStyle = '#A3A8AD';
+    ctx.fillStyle = COLORS.label;
     ctx.font = '10px Inter, system-ui, sans-serif';
     const labelY = Math.min(H - 4, axisY + 14);
     // Знаходимо першу мітку зліва
@@ -334,7 +345,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     if (bx + textW > W - 4) bx = mx - textW - 14;
     if (by < 4) by = my + 14;
 
-    ctx.fillStyle = 'rgba(13,13,13,0.92)';
+    ctx.fillStyle = COLORS.tooltipBg;
     ctx.beginPath();
     ctx.roundRect?.(bx, by, textW, textH, 4);
     ctx.fill();
@@ -373,7 +384,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       ctx.arc(sx, sy, isActive ? 7 : (i === 0 && !closed ? 6 : 4), 0, Math.PI * 2);
       ctx.fillStyle   = i === 0 ? COLORS.pointFirst : (isActive ? COLORS.dim : COLORS.point);
       ctx.fill();
-      ctx.strokeStyle = '#0D0D0D'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = COLORS.pointStroke; ctx.lineWidth = 1.5; ctx.stroke();
       // Координати активної точки
       if (isActive) {
         ctx.font = '11px Inter, system-ui, sans-serif';

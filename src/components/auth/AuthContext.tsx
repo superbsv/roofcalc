@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, authApi } from '../../api/client';
 import BrandMark from '../brand/BrandMark';
+import { ThemeToggle } from '../theme/theme';
 
 interface AuthCtx {
   user: User | null;
@@ -73,6 +74,7 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
+      <ThemeToggle className="theme-toggle-floating" />
       <div className="login-card">
         <div className="login-logo">
           <div className="login-logo-mark"><BrandMark size={56} /></div>

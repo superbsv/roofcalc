@@ -57,6 +57,80 @@
   --header-h:  60px;
 }
 
+:root {
+  /* Кольори схем (SVG читає змінні напряму, canvas — через getComputedStyle) */
+  --clr-polygon:      #F4F4F2;
+  --clr-sheet:        #BFC3C7;
+  --clr-sheet-2:      #8A8F95;
+  --clr-sheet-cut:    #6E9BD8;
+  --clr-sheet-waste:  #E5484D;
+  --clr-dim:          #BFC3C7;
+  --clr-axis:         #3A3A3A;
+  --clr-header-bg:    #0D0D0D;
+}
+
+/* ===== Світла тема ABT: Off White фон, графітовий текст, той самий помаранчевий ===== */
+:root[data-theme="light"] {
+  --clr-brand-pale:   #FFF0E0;
+  --clr-brand-border: #FFC891;
+  --clr-accent-light: #FFF0E0;
+  --clr-bg:           #F4F4F2;
+  --clr-surface:      #FFFFFF;
+  --clr-surface-2:    #EDEDEA;
+  --clr-border:       #DEDED9;
+  --clr-border-dark:  #C2C4C6;
+  --clr-text:         #1A1A1A;
+  --clr-text-2:       #3F4246;
+  --clr-text-3:       #63676C;
+  --clr-text-inv:     #F4F4F2;
+  --clr-success:      #1E7A46;
+  --clr-warning:      #9A4A00;
+  --clr-error:        #B42318;
+  --clr-info:         #1D4E9E;
+  --clr-success-bg:   #E5F4EB;
+  --clr-warning-bg:   #FFF1E0;
+  --clr-error-bg:     #FDECEA;
+  --clr-info-bg:      #E6EEFB;
+  --clr-canvas:       #FAFAF8;
+  --clr-grid:         #E8E8E4;
+  --clr-polygon:      #1A1A1A;
+  --clr-sheet:        #7A7F85;
+  --clr-sheet-2:      #4E5258;
+  --clr-sheet-cut:    #2F6BC2;
+  --clr-sheet-waste:  #C8322F;
+  --clr-dim:          #4E5258;
+  --clr-axis:         #C2C4C6;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.08);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,.12);
+  color-scheme: light;
+}
+:root[data-theme="light"] body { color-scheme: light; }
+:root[data-theme="light"] .form-control { background: var(--clr-surface); }
+:root[data-theme="light"] .alert-warning { color: #5D2E00; }
+:root[data-theme="light"] .alert-error   { color: #7A1A12; }
+:root[data-theme="light"] .alert-success { color: #0F4A2A; }
+:root[data-theme="light"] .alert-info    { color: #12346B; }
+:root[data-theme="light"] .login-page {
+  background: linear-gradient(115deg, transparent 0 68%, var(--abt-orange) 68% 100%), var(--clr-bg);
+}
+
+/* Перемикач теми */
+.theme-toggle {
+  width: 40px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  border: 1px solid #3A3A3A;
+  background: transparent;
+  color: #F4F4F2;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.theme-toggle:hover { border-color: var(--abt-orange); color: var(--abt-orange); }
+.theme-toggle-floating { position: fixed; top: 16px; right: 16px; z-index: 10;
+  width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 1px solid var(--clr-border-dark); background: var(--clr-surface); color: var(--clr-text); cursor: pointer; }
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 14px; -webkit-text-size-adjust: 100%; }
 body {
@@ -84,8 +158,9 @@ img, svg { display: block; }
 /* --- Header --- */
 .header {
   grid-column: 1 / -1;
-  background: var(--abt-black);
-  border-bottom: 1px solid var(--clr-border);
+  background: var(--clr-header-bg);
+  border-bottom: 1px solid #2C2C2C;
+  color: #F4F4F2;
   display: flex;
   align-items: center;
   padding: 0 var(--sp-6);
@@ -99,7 +174,7 @@ img, svg { display: block; }
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  color: var(--clr-text-inv);
+  color: #F4F4F2;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 1.15rem;
@@ -125,7 +200,7 @@ img, svg { display: block; }
   margin-left: var(--sp-6);
 }
 .header-nav a {
-  color: var(--clr-text-3);
+  color: #A3A8AD;
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--r-md);
   font-family: var(--font-display);
@@ -136,11 +211,13 @@ img, svg { display: block; }
   transition: all .15s;
 }
 .header-nav a:hover, .header-nav a.active {
-  color: var(--clr-text);
-  background: var(--clr-surface-2);
+  color: #F4F4F2;
+  background: #232323;
   text-decoration: none;
 }
 
+.header .btn-ghost { color: #C9CCD0; }
+.header .btn-ghost:hover { background: #232323; color: #F4F4F2; }
 .header-right {
   display: flex;
   align-items: center;

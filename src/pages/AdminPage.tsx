@@ -72,8 +72,8 @@ function UsersTab() {
   };
 
   const roleColors: Record<string,[string,string]> = {
-    admin:['#0D0D0D','#FF7A00'], manager:['#CFE0FF','#12203A'],
-    dealer:['#FFD6A8','#2B1E0E'], production:['#E2CCFF','#24163A'], viewer:['#C9CCD0','#2C2C2C'],
+    admin:['#0D0D0D','#FF7A00'], manager:['var(--clr-info)','var(--clr-info-bg)'],
+    dealer:['var(--clr-warning)','var(--clr-warning-bg)'], production:['var(--clr-text-2)','var(--clr-surface-2)'], viewer:['var(--clr-text-3)','var(--clr-surface-2)'],
   };
   const roleLabels: Record<string,string> = { admin:'Адміністратор',manager:'Менеджер',dealer:'Дилер',production:'Виробництво',viewer:'Перегляд' };
 
@@ -88,7 +88,7 @@ function UsersTab() {
           <thead><tr><th>Ім'я</th><th>Логін / Email</th><th>Роль</th><th>Компанія</th><th>Статус</th><th>Останній вхід</th><th></th></tr></thead>
           <tbody>
             {users.map(u => {
-              const [color, bg] = roleColors[u.role] || ['#F4F4F2','#2C2C2C'];
+              const [color, bg] = roleColors[u.role] || ['var(--clr-text)','var(--clr-surface-2)'];
               return (
                 <tr key={u.id}>
                   <td><b>{u.name}</b></td>

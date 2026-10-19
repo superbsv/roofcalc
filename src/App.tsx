@@ -7,6 +7,7 @@ import ProjectPage  from './pages/ProjectPage';
 import AdminPage    from './pages/AdminPage';
 import ProductsPage from './pages/ProductsPage';
 import BrandMark, { BrandWordmark } from './components/brand/BrandMark';
+import { ThemeToggle } from './components/theme/theme';
 
 type Page =
   | { type: 'projects' }
@@ -85,6 +86,7 @@ function Shell() {
         </nav>
 
         <div className="header-right">
+          <ThemeToggle />
           <div className="header-user">
             <div className="header-avatar">{initials}</div>
             <div>
