@@ -40,7 +40,28 @@ class PdfGenerator
         );
         $this->settings = $this->loadSettings();
         $this->logoPath = $this->settings['logo_path'] ?? '';
+
+        // Реквізити кабінету, якому належить проєкт (логотип, назва, контакти, колір)
+        Database::ensurePlatformSchema();
+        $t = !empty($this->project['tenant_id'])
+            ? Database::fetchOne('SELECT * FROM tenants WHERE id = ?', [$this->project['tenant_id']]) : null;
+        if ($t) {
+            $this->settings['company_name']    = $t['doc_company'] ?: $t['name'];
+            $this->settings['company_phone']   = $t['doc_phone'] ?? '';
+            $this->settings['company_email']   = $t['doc_email'] ?? '';
+            $this->settings['company_address'] = trim(($t['doc_address'] ?? '') . (($t['doc_site'] ?? '') ? '  ' . $t['doc_site'] : ''));
+            $this->settings['company_requisites'] = $t['doc_requisites'] ?? '';
+            if (!empty($t['brand_color']) && preg_match('/^#([0-9A-Fa-f]{6})$/', $t['brand_color'], $m)) {
+                $this->brand = [hexdec(substr($m[1], 0, 2)), hexdec(substr($m[1], 2, 2)), hexdec(substr($m[1], 4, 2))];
+            }
+            if (!empty($t['logo']) && preg_match('#^data:image/(png|jpeg);base64,(.+)$#', $t['logo'], $m)) {
+                $this->logoData = base64_decode($m[2]) ?: '';
+            }
+        }
     }
+
+    private array $brand = [255, 122, 0];
+    private string $logoData = '';
 
     // ============================================
     // PDF для клієнта (КП)
@@ -65,7 +86,9 @@ class PdfGenerator
         $pdf->Cell(0, 10, 'КОМЕРЦІЙНА ПРОПОЗИЦІЯ', 0, 1, 'C');
         $pdf->SetFont('dejavusans', '', 9);
         $pdf->SetTextColor(100, 100, 100);
-        $pdf->Cell(0, 6, '№ ' . str_pad($this->project['id'], 6, '0', STR_PAD_LEFT) .
+        $ps = json_decode((string)($this->project['settings'] ?? ''), true);
+        $orderNo = is_array($ps) && !empty($ps['order_no']) ? $ps['order_no'] : $this->project['id'];
+        $pdf->Cell(0, 6, '№ ' . $orderNo .
             ' від ' . date('d.m.Y'), 0, 1, 'C');
         $pdf->Ln(4);
 
@@ -73,7 +96,7 @@ class PdfGenerator
         $pdf->SetFont('dejavusans', 'B', 10);
         $pdf->SetTextColor(26, 26, 26);
         $pdf->Cell(0, 7, 'ДАНІ ОБ\'ЄКТА', 0, 1);
-        $pdf->SetDrawColor(255, 122, 0);
+        $pdf->SetDrawColor($this->brand[0], $this->brand[1], $this->brand[2]);
         $pdf->Line(15, $pdf->GetY(), 195, $pdf->GetY());
         $pdf->Ln(2);
 
@@ -102,7 +125,7 @@ class PdfGenerator
             $pdf->SetFont('dejavusans', 'B', 10);
             $pdf->SetTextColor(26, 26, 26);
             $pdf->Cell(0, 7, 'СКАТИ ПОКРІВЛІ', 0, 1);
-            $pdf->SetDrawColor(255, 122, 0);
+            $pdf->SetDrawColor($this->brand[0], $this->brand[1], $this->brand[2]);
             $pdf->Line(15, $pdf->GetY(), 195, $pdf->GetY());
             $pdf->Ln(3);
 
@@ -133,7 +156,7 @@ class PdfGenerator
         $pdf->SetFont('dejavusans', 'B', 10);
         $pdf->SetTextColor(26, 26, 26);
         $pdf->Cell(0, 7, 'СПЕЦИФІКАЦІЯ МАТЕРІАЛІВ', 0, 1);
-        $pdf->SetDrawColor(255, 122, 0);
+        $pdf->SetDrawColor($this->brand[0], $this->brand[1], $this->brand[2]);
         $pdf->Line(15, $pdf->GetY(), 195, $pdf->GetY());
         $pdf->Ln(3);
 
@@ -275,7 +298,9 @@ class PdfGenerator
     {
         $pageW = $landscape ? 297 : 210;
 
-        if ($this->logoPath && file_exists($this->logoPath)) {
+        if ($this->logoData !== '') {
+            $pdf->Image('@' . $this->logoData, 15, 8, 0, 14, '', '', 'T', false, 300);   // висота 14 мм, ширина за пропорцією
+        } elseif ($this->logoPath && file_exists($this->logoPath)) {
             $pdf->Image($this->logoPath, 15, 10, 40, 0, '', '', 'T', false, 300);
         }
 
@@ -286,13 +311,19 @@ class PdfGenerator
         $pdf->SetFont('dejavusans', '', 8);
         $pdf->SetTextColor(100, 100, 100);
         $pdf->SetX($landscape ? 120 : 60);
-        $pdf->Cell($pageW - 75, 4, ($this->settings['company_phone'] ?? '') .
-            ' | ' . ($this->settings['company_email'] ?? ''), 0, 1, 'R');
-        $pdf->SetX($landscape ? 120 : 60);
-        $pdf->Cell($pageW - 75, 4, $this->settings['company_address'] ?? 'Україна', 0, 1, 'R');
+        $contacts = implode(' | ', array_filter([$this->settings['company_phone'] ?? '', $this->settings['company_email'] ?? '']));
+        if ($contacts !== '') $pdf->Cell($pageW - 75, 4, $contacts, 0, 1, 'R');
+        if (!empty($this->settings['company_address'])) {
+            $pdf->SetX($landscape ? 120 : 60);
+            $pdf->Cell($pageW - 75, 4, $this->settings['company_address'], 0, 1, 'R');
+        }
 
-        $pdf->SetDrawColor(255, 122, 0);
-        $pdf->Line(15, 25, $pageW - 15, 25);
+        if (!empty($this->settings['company_requisites'])) {
+            $pdf->SetX($landscape ? 120 : 60);
+            $pdf->Cell($pageW - 75, 4, str_replace(["\r", "\n"], ['', ' · '], mb_substr($this->settings['company_requisites'], 0, 160)), 0, 1, 'R');
+        }
+        $pdf->SetDrawColor($this->brand[0], $this->brand[1], $this->brand[2]);
+        $pdf->Line(15, max(25, $pdf->GetY() + 1), $pageW - 15, max(25, $pdf->GetY() + 1));
         $pdf->Ln(6);
     }
 

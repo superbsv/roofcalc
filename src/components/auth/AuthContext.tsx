@@ -7,6 +7,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { User, authApi, superApi } from '../../api/client';
 import BrandMark from '../brand/BrandMark';
 import { ThemeToggle } from '../theme/theme';
+import RegisterPage from '../../pages/RegisterPage';
 
 interface AuthCtx {
   user: User | null;
@@ -15,6 +16,7 @@ interface AuthCtx {
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   impersonate: (tenantId: number) => Promise<void>;   // супер-адмін: «Увійти як»
+  acceptSession: (token: string, user: User) => Promise<void>;   // після реєстрації
   leaveImpersonation: () => Promise<void>;
 }
 
@@ -64,6 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
+  const acceptSession = async (token: string, u: User) => {
+    localStorage.setItem('rc_token', token);
+    localStorage.setItem('rc_user', JSON.stringify(u));
+    localStorage.removeItem('rc_token_super');
+    setUser(u);
+    await refresh();
+  };
+
   const impersonate = async (tenantId: number) => {
     const res = await superApi.impersonate(tenantId);
     if (!localStorage.getItem('rc_token_super')) localStorage.setItem('rc_token_super', localStorage.getItem('rc_token') || '');
@@ -79,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await refresh();
   };
 
-  return <Ctx.Provider value={{ user, loading, login, logout, refresh, impersonate, leaveImpersonation }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user, loading, login, logout, refresh, impersonate, leaveImpersonation, acceptSession }}>{children}</Ctx.Provider>;
 }
 
 export const useAuth = () => useContext(Ctx);
@@ -88,6 +98,13 @@ export const useAuth = () => useContext(Ctx);
 // Login Page
 // ============================================
 export function LoginPage() {
+  const [mode, setMode] = useState<'login' | 'register'>(() =>
+    (typeof window !== 'undefined' && /[?&]register\b/.test(window.location.search)) ? 'register' : 'login');
+  if (mode === 'register') return <RegisterPage onLogin={() => setMode('login')} />;
+  return <LoginForm onRegister={() => setMode('register')} />;
+}
+
+function LoginForm({ onRegister }: { onRegister: () => void }) {
   const { login } = useAuth();
   const [loginVal, setLoginVal] = useState('');
   const [password, setPassword] = useState('');
@@ -158,7 +175,11 @@ export function LoginPage() {
           </button>
         </form>
 
-        <div style={{marginTop:'24px',textAlign:'center',fontSize:'.75rem',color:'#8896A5'}}>
+        <div className="login-register">
+          Немає кабінету? <button type="button" className="btn btn-ghost btn-sm" onClick={onRegister}>Зареєструвати компанію — 14 днів безкоштовно</button>
+        </div>
+
+        <div style={{marginTop:'24px',textAlign:'center',fontSize:'.75rem',color:'var(--clr-text-3)'}}>
           © {new Date().getFullYear()} ArtBudTrading. Всі права захищено.
         </div>
       </div>

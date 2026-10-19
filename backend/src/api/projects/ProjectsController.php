@@ -8,13 +8,14 @@ namespace RoofCalc\Api\Projects;
 
 use RoofCalc\Core\Auth;
 use RoofCalc\Core\Database;
+use RoofCalc\Core\Plans;
 
 class ProjectsController
 {
     public function __construct()
     {
         Database::ensureProjectSchema();
-        Database::ensureTenantSchema();
+        Database::ensurePlatformSchema();
     }
 
     // settings: реквізити замовлення і параметри проєкту як у КП
@@ -103,6 +104,27 @@ class ProjectsController
         if (empty($body['name'])) {
             $this->error('Назва проекту обов\'язкова', 400);
         }
+
+        // Ліміт розрахунків тарифу на календарний місяць
+        $tenant = Database::fetchOne('SELECT * FROM tenants WHERE id = ?', [$user['tid']]);
+        $lim = $tenant ? Plans::limits($tenant) : ['projects_month' => null];
+        if (!empty($lim['projects_month'])) {
+            $cnt = (int)Database::fetchOne(
+                "SELECT COUNT(*) c FROM projects WHERE tenant_id = ? AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')", [$user['tid']]
+            )['c'];
+            if ($cnt >= (int)$lim['projects_month']) {
+                $this->error('Вичерпано ліміт тарифу: ' . $lim['projects_month'] . ' розрахунків на місяць. Змініть тариф або зверніться до ABT', 402);
+            }
+        }
+
+        // Номер замовлення — наскрізна нумерація кабінету
+        $settings = is_array($body['settings'] ?? null) ? $body['settings'] : [];
+        if ($tenant && empty($settings['order_no'])) {
+            $settings['order_no'] = (string)(int)$tenant['next_order_no'];
+            Database::query('UPDATE tenants SET next_order_no = next_order_no + 1 WHERE id = ?', [$user['tid']]);
+        }
+        if ($tenant && empty($settings['company'])) $settings['company'] = $tenant['doc_company'] ?: $tenant['name'];
+        $body['settings'] = $settings;
 
         $id = Database::insert(
             'INSERT INTO projects (user_id, name, client_name, client_phone, client_email,

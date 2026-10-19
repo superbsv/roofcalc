@@ -9,23 +9,16 @@ namespace RoofCalc\Api\Super;
 
 use RoofCalc\Core\Auth;
 use RoofCalc\Core\Database;
+use RoofCalc\Core\Plans;
 
 class SuperController
 {
-    public const PLANS = [
-        'trial'    => 'Пробний',
-        'start'    => 'Старт',
-        'pro'      => 'Профі',
-        'business' => 'Бізнес',
-        'custom'   => 'Індивідуальний',
-        'internal' => 'Внутрішній',
-    ];
 
     private array $me;
 
     public function __construct()
     {
-        Database::ensureTenantSchema();
+        Database::ensurePlatformSchema();
         $u = Auth::currentUser();
         if (!$u) $this->error('Не авторизовано', 401);
         if (empty($u['sa'])) $this->error('Доступ лише для супер-адміна платформи', 403);
@@ -46,7 +39,7 @@ class SuperController
         }
         $s['users'] = (int)Database::fetchOne('SELECT COUNT(*) c FROM users WHERE is_active = 1')['c'];
         $s['projects_30d'] = (int)Database::fetchOne('SELECT COUNT(*) c FROM projects WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)')['c'];
-        $this->json(['stats' => $s, 'plans' => self::PLANS]);
+        $this->json(['stats' => $s, 'plans' => Plans::names(), 'plan_defs' => Plans::all()]);
     }
 
     // GET /super/tenants?search=
@@ -67,9 +60,9 @@ class SuperController
              FROM tenants t WHERE $where ORDER BY t.is_internal DESC, t.created_at DESC",
             $params
         );
-        foreach ($rows as &$t) $t['state'] = self::state($t);
+        foreach ($rows as &$t) { $t['state'] = self::state($t); unset($t['logo']); }
         unset($t);
-        $this->json(['tenants' => $rows, 'plans' => self::PLANS]);
+        $this->json(['tenants' => $rows, 'plans' => Plans::names()]);
     }
 
     // GET /super/tenants/{id}
@@ -91,7 +84,9 @@ class SuperController
              WHERE a.tenant_id = ? ORDER BY a.id DESC LIMIT 20',
             [$id]
         );
-        $this->json(['tenant' => $t, 'users' => $users, 'stats' => $stats, 'log' => $log, 'plans' => self::PLANS]);
+        unset($t['logo']);
+        $this->json(['tenant' => $t, 'users' => $users, 'stats' => $stats, 'log' => $log, 'plans' => Plans::names(),
+            'limits' => Plans::limits($t), 'plan_defs' => Plans::all()]);
     }
 
     // POST /super/tenants — новий кабінет разом із власником
@@ -107,7 +102,7 @@ class SuperController
         if (strlen($ownerPass) < 8) $this->error('Пароль власника — мінімум 8 символів');
         $this->assertLoginFree($ownerLogin, $ownerEmail);
 
-        $plan = isset(self::PLANS[$b['plan'] ?? '']) ? $b['plan'] : 'trial';
+        $plan = isset(Plans::names()[$b['plan'] ?? '']) ? $b['plan'] : 'trial';
         if ($plan === 'internal') $plan = 'custom';
         $status = $plan === 'trial' ? 'trial' : 'active';
         $trialDays = max(1, (int)($b['trial_days'] ?? 14));
@@ -153,7 +148,7 @@ class SuperController
             $v = $b[$f];
             if ($kind === 'date') $v = $this->dateOrNull($v);
             elseif ($kind === 'int') $v = $this->intOrNull($v);
-            elseif ($kind === 'plan') { if (!isset(self::PLANS[$v]) || ($v === 'internal') !== ((int)$t['is_internal'] === 1)) continue; }
+            elseif ($kind === 'plan') { if (!isset(Plans::names()[$v]) || ($v === 'internal') !== ((int)$t['is_internal'] === 1)) continue; }
             elseif ($kind === 'status') { if (!in_array($v, ['active', 'trial', 'blocked'], true)) continue; }
             else $v = trim((string)$v) === '' ? null : trim((string)$v);
             if ($f === 'name' && !$v) continue;
@@ -176,7 +171,7 @@ class SuperController
         $months = max(1, min(36, (int)($b['months'] ?? 1)));
         $from = (!empty($t['paid_until']) && $t['paid_until'] >= date('Y-m-d')) ? $t['paid_until'] : date('Y-m-d');
         $until = date('Y-m-d', strtotime("$from +$months months"));
-        $plan = $t['plan'] === 'trial' ? (isset(self::PLANS[$b['plan'] ?? '']) && $b['plan'] !== 'trial' && $b['plan'] !== 'internal' ? $b['plan'] : 'start') : $t['plan'];
+        $plan = $t['plan'] === 'trial' ? (isset(Plans::names()[$b['plan'] ?? '']) && $b['plan'] !== 'trial' && $b['plan'] !== 'internal' ? $b['plan'] : 'start') : $t['plan'];
         Database::query("UPDATE tenants SET paid_until = ?, status = 'active', plan = ? WHERE id = ?", [$until, $plan, $id]);
         $this->log('super.tenant.extend', $id, ['months' => $months, 'until' => $until]);
         $this->tenant($id);
@@ -198,6 +193,16 @@ class SuperController
         $this->tenant($id);
     }
 
+    // PUT /super/plans — тарифи платформи (назва, ціна, ліміти, можливості)
+    public function savePlans(): void
+    {
+        $b = $this->body();
+        $plans = Plans::save(is_array($b['plans'] ?? null) ? $b['plans'] : []);
+        $this->log('super.plans.update', 0);
+        $this->json(['plans' => $plans]);
+    }
+
+    // GET /super/stats повертає і визначення тарифів
     // POST /super/tenants/{id}/impersonate — «Увійти як»: окремий токен з кабінетом клієнта
     public function impersonate(int $id): void
     {

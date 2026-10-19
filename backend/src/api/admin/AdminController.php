@@ -39,11 +39,12 @@ class AdminController
     {
         $me = $this->requireAdmin();
         $body = $this->body();
-        // ліміт користувачів тарифу
-        $t = Database::fetchOne('SELECT max_users FROM tenants WHERE id = ?', [$me['tid']]);
-        if (!empty($t['max_users'])) {
+        // ліміт користувачів тарифу (або індивідуальний ліміт кабінету)
+        $t = Database::fetchOne('SELECT * FROM tenants WHERE id = ?', [$me['tid']]);
+        $lim = $t ? \RoofCalc\Core\Plans::limits($t) : ['users' => null];
+        if (!empty($lim['users'])) {
             $cnt = (int)Database::fetchOne('SELECT COUNT(*) c FROM users WHERE tenant_id = ? AND is_active = 1', [$me['tid']])['c'];
-            if ($cnt >= (int)$t['max_users']) $this->error('Досягнуто ліміту користувачів вашого тарифу (' . $t['max_users'] . ')', 402);
+            if ($cnt >= (int)$lim['users']) $this->error('Досягнуто ліміту користувачів вашого тарифу (' . $lim['users'] . ')', 402);
         }
 
         $required = ['name','email','login','password','role'];
@@ -88,6 +89,10 @@ class AdminController
         $me = $this->requireAdmin();
         $target = Database::fetchOne('SELECT tenant_id FROM users WHERE id = ?', [$id]);
         if (!$target || (int)$target['tenant_id'] !== (int)$me['tid']) $this->error('Користувача не знайдено', 404);
+        $b0 = $this->body();
+        if ((int)$id === (int)$me['sub'] && ((isset($b0['is_active']) && !$b0['is_active']) || (isset($b0['role']) && $b0['role'] !== 'admin'))) {
+            $this->error('Не можна вимкнути себе або зняти з себе роль адміністратора', 400);
+        }
         $body   = $this->body();
         $fields = []; $params = [];
 

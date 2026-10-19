@@ -490,7 +490,7 @@ export default function ProjectPage({ projectId }: Props) {
               <label>Об'єкт</label>
               <input className="form-control" value={info.object_address} onChange={e => setInfo(v => ({ ...v, object_address: e.target.value }))} placeholder="Адреса об'єкта" />
               <label>Моя компанія</label>
-              <input className="form-control" value={settings.company ?? 'ТОВ «АртБудТрейдинг»'} onChange={e => setSettings(s => ({ ...s, company: e.target.value }))} />
+              <input className="form-control" value={settings.company ?? (user?.tenant?.doc_company || user?.tenant?.name || '')} onChange={e => setSettings(s => ({ ...s, company: e.target.value }))} />
               <label>Відповідальний</label>
               <input className="form-control" value={settings.responsible || ''} onChange={e => setSettings(s => ({ ...s, responsible: e.target.value }))} />
               <label>Назва проєкту</label>
@@ -1117,7 +1117,7 @@ function Specification({ project, settings, slopes, material, items, projectId, 
 
       <article className="kp-paper">
         <div className="kp-paper-head">
-          <div><span>Постачальник:</span> {settings.company ?? 'ТОВ «АртБудТрейдинг»'}</div>
+          <div><span>Постачальник:</span> {settings.company || '—'}</div>
           <div><span>Замовник:</span> {project?.client_name || '—'}{project?.client_phone ? `, ${project.client_phone}` : ''}</div>
           {project?.object_address && <div><span>Об'єкт:</span> {project.object_address}</div>}
         </div>

@@ -8,6 +8,7 @@ namespace RoofCalc\Api\Auth;
 
 use RoofCalc\Core\Auth;
 use RoofCalc\Core\Database;
+use RoofCalc\Core\Plans;
 
 class AuthController
 {
@@ -74,6 +75,68 @@ class AuthController
     }
 
     // POST /api/auth/logout
+    // POST /auth/register — самостійна реєстрація компанії: новий кабінет з пробним періодом
+    public function register(): void
+    {
+        Database::ensurePlatformSchema();
+        $b = json_decode(file_get_contents('php://input'), true) ?? [];
+        if (!empty($b['website'])) $this->error('Помилка реєстрації', 400);   // пастка для ботів
+
+        $company = trim((string)($b['company'] ?? ''));
+        $name    = trim((string)($b['name'] ?? ''));
+        $email   = mb_strtolower(trim((string)($b['email'] ?? '')));
+        $phone   = trim((string)($b['phone'] ?? ''));
+        $pass    = (string)($b['password'] ?? '');
+        if ($company === '' || mb_strlen($company) > 200) $this->error('Вкажіть назву компанії');
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $this->error('Вкажіть коректний email');
+        if (strlen($pass) < 8) $this->error('Пароль — мінімум 8 символів');
+
+        $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+        $recent = Database::fetchOne(
+            "SELECT COUNT(*) c FROM tenants WHERE signup_ip = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)", [$ip]
+        );
+        if ((int)$recent['c'] >= 3) $this->error('Забагато реєстрацій з вашої адреси. Спробуйте пізніше', 429);
+        if (Database::fetchOne('SELECT id FROM users WHERE email = ? OR login = ?', [$email, $email])) {
+            $this->error('Цей email уже зареєстровано — увійдіть або відновіть пароль', 409);
+        }
+
+        $trial = Plans::get('trial');
+        $days = max(1, (int)($trial['days'] ?? 14));
+        $tid = Database::insert(
+            "INSERT INTO tenants (name, plan, status, trial_until, contact_name, contact_email, contact_phone, doc_company, signup_ip)
+             VALUES (?, 'trial', 'trial', ?, ?, ?, ?, ?, ?)",
+            [$company, date('Y-m-d', strtotime("+$days days")), $name ?: null, $email, $phone ?: null, $company, $ip]
+        );
+        $uid = Database::insert(
+            "INSERT INTO users (name, email, login, password_hash, role, company, phone, is_active, tenant_id)
+             VALUES (?, ?, ?, ?, 'admin', ?, ?, 1, ?)",
+            [$name ?: $company, $email, $email, Auth::hashPassword($pass), $company, $phone ?: null, $tid]
+        );
+        Database::query(
+            'INSERT INTO activity_log (user_id, tenant_id, action, ip_address) VALUES (?, ?, ?, ?)',
+            [$uid, $tid, 'auth.register', $ip]
+        );
+
+        $cfg = require __DIR__ . '/../../config/app.php';
+        $hours = $cfg['jwt']['expires_hours'];
+        $token = Auth::generateToken(['sub' => $uid, 'name' => $name ?: $company, 'email' => $email, 'role' => 'admin', 'company' => $company]);
+        Auth::saveSession($uid, $token, $hours);
+        $this->json([
+            'token' => $token, 'expires_in' => $hours * 3600,
+            'user' => ['id' => $uid, 'name' => $name ?: $company, 'email' => $email, 'login' => $email, 'role' => 'admin', 'company' => $company],
+        ], 201);
+    }
+
+    // GET /plans — публічні тарифи для сторінки реєстрації
+    public function plans(): void
+    {
+        $out = [];
+        foreach (Plans::all() as $k => $p) {
+            if ($k === 'trial' || !empty($p['public'])) $out[$k] = $p;
+        }
+        $this->json(['plans' => $out]);
+    }
+
     public function logout(): void
     {
         $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
@@ -101,7 +164,8 @@ class AuthController
         }
 
         // Кабінет і права платформи
-        $t = Database::fetchOne('SELECT id, name, plan, status, is_internal, trial_until, paid_until FROM tenants WHERE id = ?', [$payload['tid']]);
+        Database::ensurePlatformSchema();
+        $t = Database::fetchOne('SELECT id, name, plan, status, is_internal, trial_until, paid_until, doc_company FROM tenants WHERE id = ?', [$payload['tid']]);
         $user['role']          = $payload['role'];
         $user['is_superadmin'] = !empty($payload['sa']);
         $user['impersonating'] = !empty($payload['imp']);

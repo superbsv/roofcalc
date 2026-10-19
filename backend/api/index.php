@@ -21,7 +21,10 @@ spl_autoload_register(function (string $class) {
     if (file_exists($file)) require_once $file;
 });
 
-require_once SRC_PATH . '/api/super/SuperController.php';   // нового класу немає в classmap composer на сервері
+// нових класів немає в classmap composer на сервері — підключаємо явно
+require_once SRC_PATH . '/core/Plans.php';
+require_once SRC_PATH . '/api/super/SuperController.php';
+require_once SRC_PATH . '/api/tenant/TenantController.php';
 
 use RoofCalc\Core\Auth;
 use RoofCalc\Api\Auth\AuthController;
@@ -32,6 +35,7 @@ use RoofCalc\Api\Specification\SpecController;
 use RoofCalc\Api\Export\ExportController;
 use RoofCalc\Api\Admin\AdminController;
 use RoofCalc\Api\Super\SuperController;
+use RoofCalc\Api\Tenant\TenantController;
 
 date_default_timezone_set('Europe/Kiev');
 
@@ -69,6 +73,11 @@ try {
     switch (true) {
         case $method==='POST'&&$uri==='/auth/login':           (new AuthController)->login(); break;
         case $method==='POST'&&$uri==='/auth/logout':          (new AuthController)->logout(); break;
+        case $method==='POST'&&$uri==='/auth/register':        (new AuthController)->register(); break;
+        case $method==='GET' &&$uri==='/plans':                (new AuthController)->plans(); break;
+        case $method==='GET' &&$uri==='/tenant':               (new TenantController)->show(); break;
+        case $method==='PUT' &&$uri==='/tenant':               (new TenantController)->update(); break;
+        case $method==='PUT' &&$uri==='/super/plans':          (new SuperController)->savePlans(); break;
         case $method==='GET' &&$uri==='/auth/me':              (new AuthController)->me(); break;
         case $method==='POST'&&$uri==='/auth/change-password': (new AuthController)->changePassword(); break;
         case $method==='GET' &&$uri==='/projects':             (new ProjectsController)->index(); break;

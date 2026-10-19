@@ -182,4 +182,26 @@ class Database
             try { $db->exec('ALTER TABLE projects ADD INDEX idx_projects_tenant (tenant_id)'); } catch (\Throwable $e) {}
         }
     }
+
+    // Етап 3–4: реквізити кабінету для документів, логотип, колір, нумерація замовлень
+    private static bool $platformReady = false;
+    public static function ensurePlatformSchema(): void
+    {
+        if (self::$platformReady) return;
+        self::$platformReady = true;
+        self::ensureTenantSchema();
+        if (self::columnInfo('tenants', 'next_order_no')) return;
+        self::ensureColumn('tenants', 'doc_company', 'VARCHAR(200) NULL');
+        self::ensureColumn('tenants', 'doc_requisites', 'TEXT NULL');
+        self::ensureColumn('tenants', 'doc_address', 'VARCHAR(255) NULL');
+        self::ensureColumn('tenants', 'doc_phone', 'VARCHAR(80) NULL');
+        self::ensureColumn('tenants', 'doc_email', 'VARCHAR(150) NULL');
+        self::ensureColumn('tenants', 'doc_site', 'VARCHAR(150) NULL');
+        self::ensureColumn('tenants', 'brand_color', 'VARCHAR(7) NULL');
+        self::ensureColumn('tenants', 'logo', 'MEDIUMTEXT NULL');
+        self::ensureColumn('tenants', 'signup_ip', 'VARCHAR(45) NULL');
+        self::connection()->exec('ALTER TABLE tenants ADD COLUMN next_order_no INT NOT NULL DEFAULT 1');
+        // нумерація продовжує наявні номери (раніше № замовлення = id проєкту)
+        self::query('UPDATE tenants t SET next_order_no = COALESCE((SELECT MAX(p.id) FROM projects p WHERE p.tenant_id = t.id), 0) + 1');
+    }
 }

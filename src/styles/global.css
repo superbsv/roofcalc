@@ -1183,3 +1183,52 @@ tr:hover td { background: var(--clr-surface-2); }
 .imp-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; background: var(--clr-brand); color: var(--clr-on-brand); padding: 10px 16px; border-radius: var(--r-lg); margin-bottom: 16px; font-size: .9rem; }
 .imp-banner .btn { background: var(--clr-on-brand); color: var(--clr-brand); border: 0; font-weight: 700; }
 @media (max-width: 860px) { .super-card { position: static; max-width: none; } }
+
+/* ---------- Реєстрація ---------- */
+.login-register { margin-top: 16px; text-align: center; font-size: .82rem; color: var(--clr-text-3); }
+.reg { min-height: 100vh; background: var(--clr-bg); color: var(--clr-text); }
+.reg-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 24px; background: #0D0D0D; color: #F4F4F2; }
+.reg-brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 800; letter-spacing: .04em; }
+.reg-hero { max-width: 1200px; margin: 0 auto; padding: 48px 24px; display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; }
+.reg-hero-text { flex: 999 1 460px; min-width: 0; }
+.reg-hero-text h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(1.8rem, 3.4vw, 2.8rem); line-height: 1.1; margin: 0 0 16px; }
+.reg-hero-text p { font-size: 1.05rem; color: var(--clr-text-2); line-height: 1.55; max-width: 620px; }
+.reg-hero-text ul { padding-left: 18px; color: var(--clr-text-2); line-height: 1.9; }
+.reg-hero-text li::marker { color: var(--clr-brand); }
+.reg-form { flex: 1 1 340px; max-width: 440px; background: var(--clr-surface); border: 1px solid var(--clr-border); border-top: 4px solid var(--clr-brand); border-radius: var(--r-lg); padding: 24px; display: flex; flex-direction: column; gap: 10px; }
+.reg-form h2 { margin: 0 0 4px; font-family: var(--font-display); font-size: 1.25rem; }
+.reg-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.reg-plans { max-width: 1200px; margin: 0 auto; padding: 0 24px 56px; display: flex; flex-direction: column; gap: 16px; }
+.reg-plans h2 { font-family: var(--font-display); margin: 0; }
+.reg-plan-row { display: flex; flex-wrap: wrap; gap: 16px; }
+.reg-plan { flex: 1 1 260px; background: var(--clr-surface); border: 1px solid var(--clr-border); border-radius: var(--r-lg); padding: 20px; display: flex; flex-direction: column; gap: 8px; }
+.reg-plan.popular { border: 2px solid var(--clr-brand); }
+.reg-plan-head { display: flex; justify-content: space-between; align-items: center; font-family: var(--font-display); font-weight: 800; font-size: 1.15rem; }
+.reg-plan-head em { font-style: normal; font-size: .68rem; background: var(--clr-brand); color: var(--clr-on-brand); padding: 3px 8px; border-radius: 4px; }
+.reg-plan-price { font-family: var(--font-display); font-weight: 800; font-size: 1.8rem; }
+.reg-plan-price small { font-size: .85rem; font-weight: 600; color: var(--clr-text-3); }
+.reg-plan ul { margin: 4px 0 0; padding-left: 18px; line-height: 1.7; font-size: .9rem; }
+
+/* ---------- Налаштування кабінету ---------- */
+.tset { display: flex; flex-direction: column; gap: var(--sp-4); }
+.tset-grid { display: flex; flex-wrap: wrap; gap: var(--sp-4); align-items: flex-start; }
+.tset-card { flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.tset-team { flex-basis: 100%; }
+.tset-fields { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tset-logo { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.tset-logo-box { width: 140px; height: 72px; border: 2px dashed var(--clr-border-dark); border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #FFFFFF; color: #63676C; font-size: .8rem; overflow: hidden; }
+.tset-logo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.tset-colors { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+.tset-swatch { width: 30px; height: 30px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.tset-swatch.on { border-color: var(--clr-text); box-shadow: 0 0 0 2px var(--clr-bg) inset; }
+.tset-colors input[type=color] { width: 36px; height: 32px; border: 1px solid var(--clr-border-dark); border-radius: 6px; background: none; padding: 2px; }
+.tset-plan { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tset-usage { display: flex; flex-direction: column; gap: 4px; }
+.tset-bar { height: 8px; background: var(--clr-surface-2); border-radius: 4px; overflow: hidden; }
+.tset-bar > div { height: 100%; border-radius: 4px; }
+.tset-adduser { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+
+/* ---------- Тарифи (супер-адмін) ---------- */
+.plans-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--sp-4); }
+.plans-card { display: flex; flex-direction: column; gap: 10px; }
+.plans-name { font-family: var(--font-display); font-weight: 800; font-size: 1.05rem; }

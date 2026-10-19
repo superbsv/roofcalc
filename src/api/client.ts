@@ -58,13 +58,49 @@ export interface User {
 export interface TenantBrief {
   id: number; name: string; plan: string; status: string; is_internal: number | string;
   trial_until?: string | null; paid_until?: string | null; active: boolean;
+  doc_company?: string | null;
 }
+
+export interface PlanDef {
+  name: string; price: number; users: number | null; projects_month: number | null;
+  days?: number | null; public?: boolean; popular?: boolean; features: string[];
+}
+
+// Налаштування власного кабінету
+export interface TenantSettings {
+  id: number; name: string; plan: string; status: string; is_internal: number | string;
+  trial_until?: string | null; paid_until?: string | null; active: boolean;
+  doc_company?: string | null; doc_requisites?: string | null; doc_address?: string | null;
+  doc_phone?: string | null; doc_email?: string | null; doc_site?: string | null;
+  brand_color?: string | null; logo?: string | null; next_order_no: number;
+}
+export interface TenantInfo {
+  tenant: TenantSettings; plan: { key: string; name: string };
+  limits: { users: number | null; projects_month: number | null };
+  usage: { users: number; projects_month: number };
+}
+export interface TeamUser {
+  id: number; name: string; email?: string; login: string; role: User['role'];
+  is_active: number | string; last_login_at?: string | null;
+}
+export const teamApi = {
+  list:   () => get<{ users: TeamUser[] }>('/admin/users'),
+  create: (body: Record<string, unknown>) => post<{ user: TeamUser }>('/admin/users', body),
+  update: (id: number, body: Record<string, unknown>) => put<{ user: TeamUser }>(`/admin/users/${id}`, body),
+};
+export const tenantApi = {
+  get:    () => get<TenantInfo>('/tenant'),
+  update: (body: Partial<TenantSettings>) => put<TenantInfo>('/tenant', body),
+};
 
 export const authApi = {
   login: (login: string, password: string) =>
     post<{ token: string; user: User; expires_in: number }>('/auth/login', { login, password }),
   logout: () => post<{}>('/auth/logout', {}),
   me: () => get<{ user: User }>('/auth/me'),
+  register: (body: { company: string; name: string; email: string; phone: string; password: string; website?: string }) =>
+    post<{ token: string; user: User }>('/auth/register', body),
+  plans: () => get<{ plans: Record<string, PlanDef> }>('/plans'),
   changePassword: (current_password: string, new_password: string) =>
     post<{}>('/auth/change-password', { current_password, new_password }),
 };
@@ -291,7 +327,7 @@ export interface SuperStats {
 }
 
 export const superApi = {
-  stats:      () => get<{ stats: SuperStats; plans: Record<string, string> }>('/super/stats'),
+  stats:      () => get<{ stats: SuperStats; plans: Record<string, string>; plan_defs: Record<string, PlanDef> }>('/super/stats'),
   tenants:    (search = '') => get<{ tenants: Tenant[]; plans: Record<string, string> }>('/super/tenants' + (search ? '?search=' + encodeURIComponent(search) : '')),
   tenant:     (id: number) => get<TenantDetail>(`/super/tenants/${id}`),
   create:     (body: Record<string, unknown>) => post<TenantDetail>('/super/tenants', body),
@@ -300,4 +336,5 @@ export const superApi = {
   addUser:    (id: number, body: Record<string, unknown>) => post<TenantDetail>(`/super/tenants/${id}/users`, body),
   impersonate:(id: number) => post<{ token: string; tenant: { id: number; name: string } }>(`/super/tenants/${id}/impersonate`, {}),
   leave:      () => post<{}>('/super/leave', {}),
+  savePlans:  (plans: Record<string, Partial<PlanDef>>) => put<{ plans: Record<string, PlanDef> }>('/super/plans', { plans }),
 };
