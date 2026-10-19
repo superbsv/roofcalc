@@ -4,7 +4,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { authApi, PlanDef } from '../api/client';
-import { BrandLogo } from '../components/brand/BrandMark';
+import { BrandLogo, BrandLogoFull } from '../components/brand/BrandMark';
 import { ThemeToggle } from '../components/theme/theme';
 import { PlanCards } from './RegisterPage';
 
@@ -71,7 +71,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
   return (
     <div className="land">
       <header className="land-head">
-        <a className="land-brand" href="/" aria-label="RoofKit — на головну"><BrandLogo size={40} text={1.1} /></a>
+        <a className="land-brand" href="/" aria-label="RoofKit — на головну"><BrandLogo size={52} text={1.15} /></a>
         <nav className="land-nav" aria-label="Розділи">
           <a href="#features">Можливості</a>
           <a href="#steps">Як працює</a>
@@ -147,6 +147,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
       </section>
 
       <section className="land-final">
+        <BrandLogoFull width={260} />
         <h2>Від геометрії даху до готової специфікації</h2>
         <button type="button" className="btn btn-primary btn-lg" onClick={onRegister}>Створити кабінет</button>
       </section>

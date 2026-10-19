@@ -98,6 +98,7 @@ export default function ProjectPage({ projectId }: Props) {
   const activeIdx = active ? slopes.findIndex(s => s.id === active.id) : -1;
   const ct = calcTypeInfo(settings.calc_type);
   const material = materials.find(m => m.id === settings.material_id);
+  const fixedCt = ct?.key === 'piece' || ct?.key === 'sheet'; // штучні / фіксовані листи не округлюються
   const typeMaterials = useMemo(() => materials.filter(m => ct?.materialTypes.includes(m.type)), [materials, ct]);
 
   // ---------- Завантаження ----------
@@ -392,6 +393,11 @@ export default function ProjectPage({ projectId }: Props) {
     await calcSlope(active.id);
   });
 
+  const setRound = (mm: number | null) => active && run('calc', async () => {
+    await patchSlope(active.id, { round_step: mm });
+    await calcSlope(active.id);
+  });
+
   const setSlopeK = (k: number) => active && run('calc', async () => {
     await patchSlope(active.id, { eave_overhang: k });
     await calcSlope(active.id);
@@ -615,10 +621,6 @@ export default function ProjectPage({ projectId }: Props) {
                       onChange={() => run('dir', async () => { await patchSlope(active.id, { laying_direction: v }); })} /> {l}</label>
                   ))}
                 </div>
-                <label className="kp-field">Уклон, °
-                  <input key={`a${active.id}`} className="form-control" type="number" min={0} max={90} defaultValue={active.slope_angle}
-                    onBlur={e => +e.target.value !== active.slope_angle && run('angle', async () => { await patchSlope(active.id, { slope_angle: +e.target.value }, true); })} />
-                </label>
                 <label className="kp-field kp-field-name">Назва
                   <input key={`n${active.id}`} className="form-control" defaultValue={active.name}
                     onBlur={e => e.target.value.trim() && e.target.value !== active.name && run('name', async () => { await patchSlope(active.id, { name: e.target.value.trim() }, true); })} />
@@ -741,6 +743,8 @@ export default function ProjectPage({ projectId }: Props) {
               <input key={`k${active.id}`} className="form-control" type="number" min={0} max={500} defaultValue={active.eave_overhang}
                 onBlur={e => +e.target.value !== active.eave_overhang && setSlopeK(+e.target.value)} />
             </label>
+            {!fixedCt && <RoundPicker key={`r${active.id}-${res?.rounding_mm ?? ''}`} value={active.round_step ?? null}
+              current={res?.rounding_mm ?? (material?.round_step || 10)} wave={material?.wave_step || 0} disabled={!!busy} onChange={setRound} />}
             {res?.joint_y_mm != null && (
               <div className="kp-joint" role="group" aria-label="Лінія стику рядів">
                 <span>Лінія стику, м</span>
@@ -922,6 +926,37 @@ function CuttingTable({ rows }: { rows: NonNullable<Slope['calc_result']>['cutti
 
 // Вікно матеріалу: ліва частина — параметри (як «Металлочерепица» у КП).
 // edit = true — «Дозволити редагування»: параметри довідника стають доступними для зміни.
+// Округлення довжин листів для ската: з матеріалу або вибране / введене вручну
+const ROUND_OPTS = [1, 5, 10, 50, 100];
+function RoundPicker({ value, current, wave, disabled, onChange }: {
+  value: number | null; current: number; wave: number; disabled: boolean; onChange: (mm: number | null) => void;
+}) {
+  const opts = Array.from(new Set([...ROUND_OPTS, ...(wave > 0 ? [wave] : [])])).sort((a, b) => a - b);
+  const [custom, setCustom] = useState(value != null && !opts.includes(value));
+  const sel = value == null ? 'mat' : custom ? 'custom' : String(value);
+  return (
+    <div className="kp-round" role="group" aria-label="Округлення довжин листів">
+      <span>Округлення до, мм</span>
+      <select className="form-control" value={sel} disabled={disabled}
+        onChange={e => {
+          const v = e.target.value;
+          if (v === 'mat') { setCustom(false); onChange(null); }
+          else if (v === 'custom') setCustom(true);
+          else { setCustom(false); onChange(+v); }
+        }}>
+        <option value="mat">як у матеріалі{value == null ? ` (${current})` : ''}</option>
+        {opts.map(o => <option key={o} value={o}>{o}{o === wave ? ' — хвиля' : ''}</option>)}
+        <option value="custom">вручну…</option>
+      </select>
+      {custom && (
+        <input className="form-control" type="number" min={1} max={1000} defaultValue={value ?? current} disabled={disabled} aria-label="Округлення вручну, мм"
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+          onBlur={e => { const v = Math.round(+e.target.value); if (v >= 1 && v <= 1000 && v !== value) onChange(v); }} />
+      )}
+    </div>
+  );
+}
+
 function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
   m: MaterialProfile; ct: string; settings: ProjectSettings;
   setSettings: React.Dispatch<React.SetStateAction<ProjectSettings>>;
@@ -998,7 +1033,6 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
                 </select></label>
             </>
           )}
-          <label>Мін. уклон покрівлі, °{mf('min_slope_angle', m.min_slope_angle, 'num')}</label>
         </div>
       </div>
 
@@ -1145,21 +1179,21 @@ function Specification({ project, settings, slopes, material, items, projectId, 
 
         <table className="kp-table kp-paper-table">
           <thead>
-            <tr><th>№ ската</th><th>Уклон, град.</th><th>S ската, м²</th><th>S корисна, м²</th><th>S повна, м²</th><th>Листів, шт</th><th>Відходи, %</th></tr>
+            <tr><th>№ ската</th><th>S ската, м²</th><th>S корисна, м²</th><th>S повна, м²</th><th>Листів, шт</th><th>Відходи, %</th></tr>
           </thead>
           <tbody>
             {slopes.map((s, i) => {
               const r = s.calc_result;
               return (
                 <tr key={s.id}>
-                  <td>{i + 1}. {s.name}</td><td>{s.slope_angle}</td>
+                  <td>{i + 1}. {s.name}</td>
                   <td>{r ? f2(r.slope_area_m2, 3) : '—'}</td><td>{r ? f2(r.useful_area_m2, 3) : '—'}</td>
                   <td>{r ? f2(r.total_full_area_m2 ?? r.order_area_m2, 3) : '—'}</td>
                   <td>{r ? r.total_sheets : '—'}</td><td>{r ? f2(r.waste_pct, 2) : '—'}</td>
                 </tr>
               );
             })}
-            <tr className="tr-total"><td>Всього:</td><td></td><td>{f2(tot.area, 3)}</td><td>{f2(tot.useful, 3)}</td><td>{f2(tot.full, 3)}</td><td>{tot.sheets}</td><td>{f2(waste, 2)}</td></tr>
+            <tr className="tr-total"><td>Всього:</td><td>{f2(tot.area, 3)}</td><td>{f2(tot.useful, 3)}</td><td>{f2(tot.full, 3)}</td><td>{tot.sheets}</td><td>{f2(waste, 2)}</td></tr>
           </tbody>
         </table>
 

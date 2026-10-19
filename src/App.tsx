@@ -81,7 +81,7 @@ function Shell() {
         </button>
 
         <a href="/" className="header-logo" onClick={e => { e.preventDefault(); navigate({type:'projects'}); }}>
-          <div className="header-logo-icon"><BrandMark size={44} /></div>
+          <div className="header-logo-icon"><BrandMark size={52} /></div>
           <span><BrandWordmark /></span>
         </a>
 

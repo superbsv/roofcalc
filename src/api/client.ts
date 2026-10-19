@@ -172,6 +172,7 @@ export interface Slope {
   element_kind?: 'roof' | 'facade';   // скат покрівлі або фасад
   calc_mode?: CalcMode | 'stock';     // «на замовлення» / «зі складу» 1-2-3
   joint_y?: number | null;            // лінія стику рядів, мм (null — посередині)
+  round_step?: number | null;         // округлення довжин листів для ската, мм (null — з матеріалу)
   created_at: string; updated_at: string;
 }
 

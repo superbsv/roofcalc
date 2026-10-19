@@ -71,6 +71,9 @@ class SheetLayoutEngine
         $this->wave        = $this->type === 'tile' ? (int)($profile['wave_step'] ?? 0) : 0;
         $this->round       = (int)($profile['round_step'] ?? 0) ?: (int)($profile['cut_step'] ?? 0);
         if ($this->type === 'tile' && $this->round === $this->wave) $this->round = 10; // старі дані: крок різання = хвиля
+        // Округлення, задане для ската вручну, має пріоритет над матеріалом
+        $slopeRound = (int)($slope['round_step'] ?? 0);
+        if ($slopeRound > 0) $this->round = min(1000, $slopeRound);
         if ($this->round <= 0) $this->round = 1;
         $this->forbidden   = self::normalizeRanges($profile['forbidden_lengths'] ?? null);
         $this->stock       = self::normalizeStock($profile['stock_lengths'] ?? null);
@@ -151,11 +154,6 @@ class SheetLayoutEngine
         $geoErrors = GeometryEngine::validate($this->polygon);
         if (!empty($geoErrors)) return ['errors' => $geoErrors, 'warnings' => []];
 
-        $angle = (float)($this->slope['slope_angle'] ?? 0);
-        $minAngle = (float)($this->profile['min_slope_angle'] ?? 0);
-        if ($minAngle > 0 && $angle > 0 && $angle < $minAngle) {
-            $this->warnings[] = sprintf('Кут нахилу %.1f° менше мінімального для матеріалу (%.1f°)', $angle, $minAngle);
-        }
 
         // 1. Колонки і потрібні довжини
         $bbox = GeometryEngine::boundingBox($this->polygon);

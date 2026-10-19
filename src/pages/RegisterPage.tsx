@@ -53,7 +53,7 @@ export default function RegisterPage({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="reg">
       <header className="reg-head">
-        <a className="reg-brand" href="/" style={{ color: 'inherit', textDecoration: 'none' }}><BrandLogo size={40} text={1.1} /></a>
+        <a className="reg-brand" href="/" style={{ color: 'inherit', textDecoration: 'none' }}><BrandLogo size={52} text={1.15} /></a>
         <div className="flex gap-3" style={{ alignItems: 'center' }}>
           <ThemeToggle />
           <button type="button" className="btn btn-secondary btn-sm" onClick={onLogin}>Увійти</button>

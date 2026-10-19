@@ -120,6 +120,7 @@ class Database
         self::ensureColumn('material_profiles', 'max_std_length', 'INT NULL');
         // Лінія стику рядів на скаті (висота верхнього краю нижнього листа, мм); NULL — посередині
         self::ensureColumn('slopes', 'joint_y', 'INT NULL');
+        self::ensureColumn('slopes', 'round_step', 'INT NULL'); // округлення довжин для ската (NULL — з матеріалу)
     }
 
     // Реквізити замовлення і параметри проєкту як у КП (тип розрахунку, матеріал, К, ПК, валюта…)

@@ -2,6 +2,7 @@
 // Малюється з поточних введених розмірів, тож схема змінюється разом із полями.
 import React from 'react';
 import { Template } from './templates';
+import { interiorAngles, fmtAngle } from './edges';
 
 interface Props {
   t: Template;
@@ -49,6 +50,17 @@ export default function TemplateSketch({ t, values, focus }: Props) {
         </marker>
       </defs>
       <polygon points={poly} fill="var(--clr-brand-pale)" stroke="var(--clr-brand)" strokeWidth="3" strokeLinejoin="round" />
+      {/* Внутрішні кути площини */}
+      {interiorAngles(pts).map((a, i) => {
+        if (Math.abs(a.deg - 180) < 0.05) return null;
+        const b = a.start + a.sweep / 2;
+        const cx = X(pts[i][0]), cy = Y(pts[i][1]);
+        return (
+          <text key={`ang${i}`} x={cx + Math.cos(b) * 30} y={cy - Math.sin(b) * 30 + 4} textAnchor="middle"
+            fontSize="12" fontWeight="700" fontFamily="var(--font-mono)" fill="var(--clr-brand)"
+            stroke="var(--clr-canvas)" strokeWidth="3" style={{ paintOrder: 'stroke' }}>{fmtAngle(a.deg)}</text>
+        );
+      })}
       {dims.map((d, i) => {
         const on = focus === d.k;
         const col = on ? 'var(--clr-brand)' : 'var(--clr-text-2)';

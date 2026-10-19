@@ -3,7 +3,7 @@
    Global Styles — брендбук ROOFKIT v1.0 (темна тема основна)
    ============================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Montserrat:wght@900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
 :root {
   /* Бренд ROOFKIT: Deep Graphite, Surface, Roof Orange, Light Orange, Cloud White, Slate */
@@ -1291,9 +1291,14 @@ tr:hover td { background: var(--clr-surface-2); }
 
 /* ---------- Логотип ROOFKIT ---------- */
 .rk-logo { display: inline-flex; align-items: center; gap: 10px; }
-.rk-word { font-family: var(--font-display); font-weight: 800; letter-spacing: .02em; line-height: 1; white-space: nowrap; }
+.rk-word { font-family: 'Montserrat', var(--font-display); font-weight: 900; letter-spacing: -.035em; line-height: 1; white-space: nowrap; }
+.rk-roof, .rk-kit { -webkit-background-clip: text; background-clip: text; color: transparent; }
+.rk-roof { background-image: linear-gradient(180deg, #FFFFFF, #D7E0E9 40%, #65778B); }
+.rk-kit  { background-image: linear-gradient(180deg, #FFD26D, #FF901C 50%, #DF5806); }
+:root[data-theme="light"] .login-card .rk-roof, :root[data-theme="light"] .rk-full-roof { background-image: linear-gradient(180deg, #64748B, #334155 50%, #0B1119); }
+:root[data-theme="light"] .rk-full text:first-of-type { fill: #334155; stroke: #475569; }
+.rk-full { max-width: 100%; height: auto; }
 .mono, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.app-header, .land-head, .reg-head, .land-hero { --rk-silver: #C3CBD5; --rk-mark-shade: #4B5768; }
 .header-logo-icon { width: auto !important; height: auto !important; }
 .land-faq { display: flex; flex-direction: column; gap: 8px; max-width: 860px; }
 .land-faq details { background: var(--clr-surface); border: 1px solid var(--clr-border); border-radius: var(--r-lg); padding: 14px 18px; }
@@ -1302,3 +1307,8 @@ tr:hover td { background: var(--clr-surface-2); }
 .land-faq summary::after { content: '+'; color: var(--clr-brand); font-weight: 800; }
 .land-faq details[open] summary::after { content: '−'; }
 .land-faq p { margin: 10px 0 0; color: var(--clr-text-2); line-height: 1.6; }
+
+.kp-round { display: flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--clr-text-2); }
+.kp-round span { white-space: nowrap; font-weight: 600; }
+.kp-round select { width: auto; min-width: 150px; padding-top: 4px; padding-bottom: 4px; }
+.kp-round input { width: 80px; padding-top: 4px; padding-bottom: 4px; font-family: var(--font-mono); }

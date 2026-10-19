@@ -190,6 +190,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
     try {
       const payload = {
         ...form,
+        side_overlap: Math.max(0, (form.full_width || 0) - (form.useful_width || 0)),
         forbidden_lengths: JSON.parse(forbiddenInput || '[]'),
         stock_lengths: parseStock(stockInput),
       };
@@ -297,9 +298,6 @@ export default function ProductsPage({ category }: { category?: Category }) {
                 </Field>
               </Row>
               <Row>
-                <Field label="Мін. кут нахилу, °">
-                  <input type="number" className="form-control" value={form.min_slope_angle || 0} onChange={e => f('min_slope_angle', Number(e.target.value))} />
-                </Field>
                 <Field label="Порядок сортування">
                   <input type="number" className="form-control" value={form.sort_order} onChange={e => f('sort_order', Number(e.target.value))} />
                 </Field>
@@ -309,7 +307,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
             {/* Геометрія листа */}
             <Section title="Геометрія листа">
               <div style={{ marginBottom:'12px', padding:'12px', background:'var(--clr-info-bg)', borderRadius:'8px', fontSize:'.8rem', color:'var(--clr-info)' }}>
-                Схема: [—бокове перекриття—|———корисна ширина———|—бокове перекриття—] = повна ширина
+                Бокове перекриття рахується автоматично: повна ширина − корисна ширина = {Math.max(0, (form.full_width || 0) - (form.useful_width || 0))} мм
               </div>
               <Row>
                 <Field label="Повна ширина листа, мм">
@@ -317,9 +315,6 @@ export default function ProductsPage({ category }: { category?: Category }) {
                 </Field>
                 <Field label="Корисна ширина листа, мм">
                   <input type="number" className="form-control" value={form.useful_width} onChange={e => f('useful_width', Number(e.target.value))} />
-                </Field>
-                <Field label="Бокове перекриття, мм">
-                  <input type="number" className="form-control" value={form.side_overlap} onChange={e => f('side_overlap', Number(e.target.value))} />
                 </Field>
               </Row>
               <Row>
@@ -329,9 +324,6 @@ export default function ProductsPage({ category }: { category?: Category }) {
                 {cat === 'tile' && <>
                   <Field label="Крок хвилі, мм">
                     <input type="number" className="form-control" value={form.wave_step || ''} onChange={e => f('wave_step', Number(e.target.value))} />
-                  </Field>
-                  <Field label="Висота хвилі, мм">
-                    <input type="number" className="form-control" value={form.wave_height || ''} onChange={e => f('wave_height', Number(e.target.value))} />
                   </Field>
                 </>}
               </Row>
