@@ -10,6 +10,22 @@ import { ThemeToggle } from '../components/theme/theme';
 
 const limitText = (v: number | null | undefined, one: string, many: string) => (v ? `${v} ${v === 1 ? one : many}` : `без ліміту ${many}`);
 
+export function PlanCards({ plans }: { plans: Record<string, PlanDef> }) {
+  const paid = Object.entries(plans).filter(([k]) => k !== 'trial');
+  return (
+    <div className="reg-plan-row">
+      {paid.map(([k, p]) => (
+        <div key={k} className={`reg-plan${p.popular ? ' popular' : ''}`}>
+          <div className="reg-plan-head"><span>{p.name}</span>{p.popular && <em>ПОПУЛЯРНИЙ</em>}</div>
+          <div className="reg-plan-price">{p.price > 0 ? <>{p.price.toLocaleString('uk-UA')} <small>грн / міс</small></> : <small>ціну уточнюйте</small>}</div>
+          <div className="text-sm text-muted">{limitText(p.users, 'користувач', 'користувачів')} · {limitText(p.projects_month, 'розрахунок', 'розрахунків')}{p.projects_month ? ' / міс' : ''}</div>
+          <ul>{p.features.map(x => <li key={x}>{x}</li>)}</ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function RegisterPage({ onLogin }: { onLogin: () => void }) {
   const { acceptSession } = useAuth();
   const [plans, setPlans] = useState<Record<string, PlanDef>>({});
@@ -26,7 +42,7 @@ export default function RegisterPage({ onLogin }: { onLogin: () => void }) {
     try {
       const r = await authApi.register(f);
       await acceptSession(r.token, r.user);
-      window.history.replaceState(null, '', window.location.pathname);
+      window.history.replaceState(null, '', '/');
     } catch (er: any) { setError(er.message || 'Помилка реєстрації'); }
     setBusy(false);
   };
@@ -37,7 +53,7 @@ export default function RegisterPage({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="reg">
       <header className="reg-head">
-        <div className="reg-brand"><BrandMark size={34} /><span>ABT ПОКРІВЛЯ</span></div>
+        <a className="reg-brand" href="/" style={{ color: 'inherit', textDecoration: 'none' }}><BrandMark size={34} /><span>ROOFKIT</span></a>
         <div className="flex gap-3" style={{ alignItems: 'center' }}>
           <ThemeToggle />
           <button type="button" className="btn btn-secondary btn-sm" onClick={onLogin}>Увійти</button>
@@ -73,16 +89,7 @@ export default function RegisterPage({ onLogin }: { onLogin: () => void }) {
       {paid.length > 0 && (
         <section className="reg-plans" aria-label="Тарифи">
           <h2>Тарифи</h2>
-          <div className="reg-plan-row">
-            {paid.map(([k, p]) => (
-              <div key={k} className={`reg-plan${p.popular ? ' popular' : ''}`}>
-                <div className="reg-plan-head"><span>{p.name}</span>{p.popular && <em>ПОПУЛЯРНИЙ</em>}</div>
-                <div className="reg-plan-price">{p.price > 0 ? <>{p.price.toLocaleString('uk-UA')} <small>грн / міс</small></> : <small>ціну уточнюйте</small>}</div>
-                <div className="text-sm text-muted">{limitText(p.users, 'користувач', 'користувачів')} · {limitText(p.projects_month, 'розрахунок', 'розрахунків')}{p.projects_month ? ' / міс' : ''}</div>
-                <ul>{p.features.map(x => <li key={x}>{x}</li>)}</ul>
-              </div>
-            ))}
-          </div>
+          <PlanCards plans={plans} />
           <p className="text-sm text-muted">Після пробного періоду кабінет переходить у режим перегляду — розрахунки зберігаються. Для продовження оберіть тариф.</p>
         </section>
       )}

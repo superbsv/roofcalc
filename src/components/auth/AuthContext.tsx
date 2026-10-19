@@ -8,6 +8,7 @@ import { User, authApi, superApi } from '../../api/client';
 import BrandMark from '../brand/BrandMark';
 import { ThemeToggle } from '../theme/theme';
 import RegisterPage from '../../pages/RegisterPage';
+import LandingPage from '../../pages/LandingPage';
 
 interface AuthCtx {
   user: User | null;
@@ -97,14 +98,33 @@ export const useAuth = () => useContext(Ctx);
 // ============================================
 // Login Page
 // ============================================
-export function LoginPage() {
-  const [mode, setMode] = useState<'login' | 'register'>(() =>
-    (typeof window !== 'undefined' && /[?&]register\b/.test(window.location.search)) ? 'register' : 'login');
-  if (mode === 'register') return <RegisterPage onLogin={() => setMode('login')} />;
-  return <LoginForm onRegister={() => setMode('register')} />;
+type GuestMode = 'landing' | 'login' | 'register';
+const PATHS: Record<GuestMode, string> = { landing: '/', login: '/login', register: '/register' };
+function modeFromUrl(): GuestMode {
+  if (typeof window === 'undefined') return 'landing';
+  const { pathname, search } = window.location;
+  if (/^\/register\/?$/.test(pathname) || /[?&]register\b/.test(search)) return 'register';
+  if (/^\/login\/?$/.test(pathname)) return 'login';
+  return pathname === '/' || pathname === '' ? 'landing' : 'login';
 }
 
-function LoginForm({ onRegister }: { onRegister: () => void }) {
+export function LoginPage() {
+  const [mode, setModeState] = useState<GuestMode>(modeFromUrl);
+  useEffect(() => {
+    const onPop = () => setModeState(modeFromUrl());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  const go = (m: GuestMode) => {
+    if (window.location.pathname !== PATHS[m]) window.history.pushState(null, '', PATHS[m]);
+    setModeState(m); window.scrollTo(0, 0);
+  };
+  if (mode === 'landing') return <LandingPage onLogin={() => go('login')} onRegister={() => go('register')} />;
+  if (mode === 'register') return <RegisterPage onLogin={() => go('login')} />;
+  return <LoginForm onRegister={() => go('register')} onHome={() => go('landing')} />;
+}
+
+function LoginForm({ onRegister, onHome }: { onRegister: () => void; onHome: () => void }) {
   const { login } = useAuth();
   const [loginVal, setLoginVal] = useState('');
   const [password, setPassword] = useState('');
@@ -131,7 +151,7 @@ function LoginForm({ onRegister }: { onRegister: () => void }) {
       <div className="login-card">
         <div className="login-logo">
           <div className="login-logo-mark"><BrandMark size={56} /></div>
-          <div className="login-brand">ABT</div>
+          <div className="login-brand">ROOFKIT</div>
           <div className="login-sub">Калькулятор покрівельних матеріалів</div>
         </div>
 
@@ -180,7 +200,8 @@ function LoginForm({ onRegister }: { onRegister: () => void }) {
         </div>
 
         <div style={{marginTop:'24px',textAlign:'center',fontSize:'.75rem',color:'var(--clr-text-3)'}}>
-          © {new Date().getFullYear()} ArtBudTrading. Всі права захищено.
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onHome}>← Про RoofKit</button><br />
+          © {new Date().getFullYear()} RoofKit · ABT. Всі права захищено.
         </div>
       </div>
     </div>
