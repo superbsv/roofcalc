@@ -267,7 +267,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       const rect = svg.getBoundingClientRect();
       const f = SVG_W / rect.width;
       const sy = (ev.clientY - rect.top) * f;
-      let mm = Math.round((H - (sy - PADDING) / scale) / 10) * 10;
+      let mm = Math.round((vy1 - (sy - PADDING) / scale) / 10) * 10;
       if (jointRange) mm = Math.max(jointRange[0], Math.min(jointRange[1], mm));
       cur = mm; setJointDrag(mm);
     };
@@ -294,9 +294,26 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
     setSelected(new Set());
   }, [calcResult]);
 
-  const scale = Math.min((SVG_W - PADDING*2) / W, (SVG_H - PADDING*2) / H); // масштаб — через ширину SVG (zoom)
-  const tx = (x: number) => PADDING + x * scale;
-  const ty = (y: number) => PADDING + (H - y) * scale;
+  // Межі видимої області: скат + усі листи повнорозмірно (листи не обрізаються контуром ската)
+  let vx0 = 0, vx1 = W, vy0 = 0, vy1 = H;
+  for (const p of placements) {
+    if (p.deleted) continue;
+    const px = p.x + (p.offset_x ?? 0), py = p.y + (p.offset_y ?? 0), len = p.manual_length ?? p.length;
+    vx0 = Math.min(vx0, px); vx1 = Math.max(vx1, px + p.full_width);
+    vy0 = Math.min(vy0, py); vy1 = Math.max(vy1, py + len);
+  }
+  const VW = Math.max(1, vx1 - vx0), VH = Math.max(1, vy1 - vy0);
+  const scale = Math.min((SVG_W - PADDING*2) / VW, (SVG_H - PADDING*2) / VH); // масштаб — через ширину SVG (zoom)
+  const tx = (x: number) => PADDING + (x - vx0) * scale;
+  const ty = (y: number) => PADDING + (vy1 - y) * scale;
+  // Дрібна сітка: 0.1 м, основні лінії — кожен 1 м
+  const gridLines: { k: string; x1: number; y1: number; x2: number; y2: number; major: boolean }[] = [];
+  for (let gx = Math.ceil(vx0 / 100) * 100; gx <= vx1 + 0.5; gx += 100) {
+    gridLines.push({ k: `gx${gx}`, x1: tx(gx), y1: ty(vy1), x2: tx(gx), y2: ty(vy0), major: Math.round(gx) % 1000 === 0 });
+  }
+  for (let gy = Math.ceil(vy0 / 100) * 100; gy <= vy1 + 0.5; gy += 100) {
+    gridLines.push({ k: `gy${gy}`, x1: tx(vx0), y1: ty(gy), x2: tx(vx1), y2: ty(gy), major: Math.round(gy) % 1000 === 0 });
+  }
 
   const polyPath = polygonPoints.length >= 3
     ? polygonPoints.map((p, i) => `${i===0?'M':'L'} ${tx(p[0])} ${ty(p[1])}`).join(' ') + ' Z'
@@ -529,8 +546,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   };
 
   const svgToMm = (svgX: number, svgY: number) => ({
-    wx: (svgX - PADDING) / scale,
-    wy: H - (svgY - PADDING) / scale,
+    wx: vx0 + (svgX - PADDING) / scale,
+    wy: vy1 - (svgY - PADDING) / scale,
   });
 
   const onSvgMouseDown = (e: React.MouseEvent) => {
@@ -673,22 +690,17 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           style={{ display:'block', width:`${zoom*100}%`, height:'auto' }}
           onMouseDown={onSvgMouseDown} onMouseMove={onSvgMouseMove} onMouseUp={onSvgMouseUp} onClick={onSvgClick}>
           <rect width={SVG_W} height={SVG_H} fill={COLORS.bg}/>
-          {Array.from({length:Math.ceil(W/1000)+1},(_,i)=>i).map(i=>(
-            <line key={`gx${i}`} x1={tx(i*1000)} y1={PADDING} x2={tx(i*1000)} y2={PADDING+H*scale} stroke={COLORS.grid} strokeWidth="0.5"/>
-          ))}
-          {Array.from({length:Math.ceil(H/1000)+1},(_,i)=>i).map(i=>(
-            <line key={`gy${i}`} x1={PADDING} y1={ty(i*1000)} x2={PADDING+W*scale} y2={ty(i*1000)} stroke={COLORS.grid} strokeWidth="0.5"/>
+          {gridLines.map(g => (
+            <line key={g.k} x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2}
+              stroke={g.major ? 'var(--clr-grid-major)' : 'var(--clr-grid)'} strokeWidth={g.major ? 0.8 : 0.4}/>
           ))}
           <defs>
-            <clipPath id="slope-bounds">
-              <rect x={PADDING} y={PADDING-20} width={W*scale} height={(H+20)*scale+20}/>
-            </clipPath>
             <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
               <path d="M0,0 L6,3 L0,6 Z" fill="var(--clr-text-3)"/>
             </marker>
           </defs>
 
-          <g clipPath="url(#slope-bounds)">
+          <g>
             {visiblePlacements.map(p => {
               const length = getLen(p);
               const py     = getY(p);
@@ -724,10 +736,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
             const jy = ty(jointDrag ?? jointY);
             return (
               <g style={{ cursor: onJointChange ? 'ns-resize' : 'default' }} onMouseDown={startJointDrag}>
-                <line x1={tx(0) - 10} x2={tx(W) + 10} y1={jy} y2={jy} stroke="var(--clr-brand)" strokeWidth="2.5" strokeDasharray="10 5" />
-                <line x1={tx(0) - 10} x2={tx(W) + 10} y1={jy} y2={jy} stroke="transparent" strokeWidth="16" />
-                <rect x={tx(W) + 12} y={jy - 11} width="78" height="22" rx="4" fill="var(--clr-brand)" />
-                <text x={tx(W) + 51} y={jy + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--clr-on-brand)">
+                <line x1={tx(vx0) - 10} x2={tx(vx1) + 10} y1={jy} y2={jy} stroke="var(--clr-brand)" strokeWidth="2.5" strokeDasharray="10 5" />
+                <line x1={tx(vx0) - 10} x2={tx(vx1) + 10} y1={jy} y2={jy} stroke="transparent" strokeWidth="16" />
+                <rect x={tx(vx1) + 12} y={jy - 11} width="78" height="22" rx="4" fill="var(--clr-brand)" />
+                <text x={tx(vx1) + 51} y={jy + 4} textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--clr-on-brand)">
                   {((jointDrag ?? jointY) / 1000).toFixed(3)} м
                 </text>
               </g>
@@ -758,14 +770,14 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
 
           <line x1={tx(0)} y1={PADDING-20} x2={tx(W)} y2={PADDING-20} stroke="var(--clr-text-3)" strokeWidth="1" markerEnd="url(#arrow)"/>
           <text x={tx(W/2)} y={PADDING-28} textAnchor="middle" fill="var(--clr-text-2)" fontSize="11" fontWeight="600">{(W/1000).toFixed(2)} м</text>
-          <line x1={PADDING-20} y1={ty(0)} x2={PADDING-20} y2={ty(H)} stroke="var(--clr-text-3)" strokeWidth="1"/>
-          <text x={PADDING-35} y={ty(H/2)} textAnchor="middle" fill="var(--clr-text-2)" fontSize="11" fontWeight="600"
-            transform={`rotate(-90,${PADDING-35},${ty(H/2)})`}>{(H/1000).toFixed(2)} м</text>
+          <line x1={tx(vx0)-20} y1={ty(0)} x2={tx(vx0)-20} y2={ty(H)} stroke="var(--clr-text-3)" strokeWidth="1"/>
+          <text x={tx(vx0)-35} y={ty(H/2)} textAnchor="middle" fill="var(--clr-text-2)" fontSize="11" fontWeight="600"
+            transform={`rotate(-90,${tx(vx0)-35},${ty(H/2)})`}>{(H/1000).toFixed(2)} м</text>
           {Array.from({length:Math.ceil(W/1000)+1},(_,i)=>i).map(i=>(
-            <text key={`lx${i}`} x={tx(i*1000)} y={PADDING+H*scale+18} textAnchor="middle" fill="var(--clr-text-3)" fontSize="9">{i}</text>
+            <text key={`lx${i}`} x={tx(i*1000)} y={ty(vy0)+18} textAnchor="middle" fill="var(--clr-text-3)" fontSize="9">{i}</text>
           ))}
           {Array.from({length:Math.ceil(H/1000)+1},(_,i)=>i).map(i=>(
-            <text key={`ly${i}`} x={PADDING-8} y={ty(i*1000)+3} textAnchor="end" fill="var(--clr-text-3)" fontSize="9">{i}</text>
+            <text key={`ly${i}`} x={tx(vx0)-8} y={ty(i*1000)+3} textAnchor="end" fill="var(--clr-text-3)" fontSize="9">{i}</text>
           ))}
         </svg>
       </div>

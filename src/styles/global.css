@@ -39,7 +39,8 @@
   --clr-error-bg:     #2E1515;
   --clr-info-bg:      #12203A;
   --clr-canvas:       #111111;
-  --clr-grid:         #1C1C1C;
+  --clr-grid:         #1A1A1A;
+  --clr-grid-major:   #2E2E2E;
   --font-display:     'Montserrat', sans-serif;
   --font-body:        'Noto Sans', sans-serif;
   --font-mono:        'Noto Sans', sans-serif;
@@ -92,7 +93,8 @@
   --clr-error-bg:     #FDECEA;
   --clr-info-bg:      #E6EEFB;
   --clr-canvas:       #FAFAF8;
-  --clr-grid:         #E8E8E4;
+  --clr-grid:         #EFEFEB;
+  --clr-grid-major:   #D6D6D0;
   --clr-polygon:      #1A1A1A;
   --clr-sheet:        #7A7F85;
   --clr-sheet-2:      #4E5258;
