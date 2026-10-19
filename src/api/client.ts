@@ -68,6 +68,7 @@ export interface TenantBrief {
 export interface PlanDef {
   name: string; price: number; users: number | null; projects_month: number | null;
   days?: number | null; public?: boolean; popular?: boolean; features: string[];
+  price_year?: number | null; price_from?: boolean; // ціна за рік; «від …» для ціни за домовленістю
 }
 
 // Налаштування власного кабінету

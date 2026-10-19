@@ -51,6 +51,8 @@ export default function PlansPage() {
               </div>
               <div className="form-row form-row-2">
                 {k !== 'trial' && <label className="form-label">Ціна, грн / міс<input className="form-control" inputMode="numeric" value={p.price || ''} placeholder="уточнюйте" onChange={e => set(k, { price: Number(e.target.value) || 0 })} /></label>}
+                {k !== 'trial' && <label className="form-label">Ціна за рік, грн<input className="form-control" inputMode="numeric" value={p.price_year || ''} placeholder="немає" onChange={e => set(k, { price_year: Number(e.target.value) || null })} /></label>}
+                {k !== 'trial' && <label className="form-label" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={!!p.price_from} onChange={e => set(k, { price_from: e.target.checked })} /> Показувати «від» перед ціною</label>}
                 {k === 'trial' && <label className="form-label">Днів пробного<input className="form-control" inputMode="numeric" value={p.days ?? ''} onChange={e => set(k, { days: num(e.target.value) })} /></label>}
                 <label className="form-label">Користувачів<input className="form-control" inputMode="numeric" placeholder="∞" value={p.users ?? ''} onChange={e => set(k, { users: num(e.target.value) })} /></label>
                 <label className="form-label">Розрахунків / міс<input className="form-control" inputMode="numeric" placeholder="∞" value={p.projects_month ?? ''} onChange={e => set(k, { projects_month: num(e.target.value) })} /></label>

@@ -17,7 +17,8 @@ export function PlanCards({ plans }: { plans: Record<string, PlanDef> }) {
       {paid.map(([k, p]) => (
         <div key={k} className={`reg-plan${p.popular ? ' popular' : ''}`}>
           <div className="reg-plan-head"><span>{p.name}</span>{p.popular && <em>ПОПУЛЯРНИЙ</em>}</div>
-          <div className="reg-plan-price">{p.price > 0 ? <>{p.price.toLocaleString('uk-UA')} <small>грн / міс</small></> : <small>ціну уточнюйте</small>}</div>
+          <div className="reg-plan-price">{p.price > 0 ? <>{p.price_from && <small>від </small>}{p.price.toLocaleString('uk-UA')} <small>грн / міс</small></> : <small>ціну уточнюйте</small>}</div>
+          {p.price_year ? <div className="reg-plan-year">або {p.price_year.toLocaleString('uk-UA')} грн / рік — 2 місяці в подарунок</div> : null}
           <div className="text-sm text-muted">{limitText(p.users, 'користувач', 'користувачів')} · {limitText(p.projects_month, 'розрахунок', 'розрахунків')}{p.projects_month ? ' / міс' : ''}</div>
           <ul>{p.features.map(x => <li key={x}>{x}</li>)}</ul>
         </div>
