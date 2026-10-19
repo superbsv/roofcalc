@@ -341,21 +341,28 @@ class SheetLayoutEngine
             }
         }
 
-        $actual = null;
+        // фактична лінія після округлення нижнього листа найнижчої колонки
+        $actual = $minBottom + max($this->lmin, min($maxLower, $this->stdLen($joint - $minBottom, $maxLower)));
+        $joint = $actual;
         foreach ($columns as $i => $col) {
             $need = $col['need'];
-            if (!in_array($i, $split, true)) { $out[] = [$this->fit($need, $max)]; continue; }
+            // Ділимо ВСІ колонки, які перетинає лінія стику (а не лише ті, що довші за лист) —
+            // стик іде однією лінією по всій довжині ската. Колонки повністю нижче або вище лінії — одним листом.
+            $crosses = $col['bottom'] < $joint && $col['bottom'] + $need > $joint;
+            if (!in_array($i, $split, true) && !$crosses) { $out[] = [$this->fit($need, $max)]; continue; }
             // нижній лист — до лінії стику (стандартна довжина для металочерепиці)
-            $first = max($this->lmin, min($maxLower, $this->stdLen($joint - $col['bottom'], $maxLower)));
+            // Нижні листи всіх колонок закінчуються на одній лінії: від найнижчого карниза — стандартна довжина
+            // (хвиля × n + ПЗ), у колонках з вищим низом — рівно до цієї ж лінії.
+            $first = $col['bottom'] <= $minBottom
+                ? max($this->lmin, min($maxLower, $this->stdLen($actual - $col['bottom'], $maxLower)))
+                : max($this->lmin, min($maxLower, $this->fit($actual - $col['bottom'], $maxLower)));
             $lens = [$first];
-            if ($col['bottom'] === $minBottom) $actual = $col['bottom'] + $first;   // фактична лінія після округлення
             $left = $need - $first;
             for ($k = 0; $k < 50 && $left + $this->pz > $max; $k++) { $lens[] = $rowLen; $left -= ($rowLen - $this->pz); }
             if ($left > 0) $lens[] = $this->fit($left + $this->pz, $max);
             $out[] = $lens;
         }
-        $this->jointY = $actual ?? $joint;
-        $joint = $this->jointY;
+        $this->jointY = $actual;
         $this->jointRange = ($rows === 2 && $lo <= $hi) ? [$lo, $hi] : null;
         $this->warnings[] = sprintf('Скат довший за лист — укладка у %d ряди, лінія стику на висоті %.3f м, нахлест %d мм', $rows, $joint / 1000, $this->pz);
         return $out;
