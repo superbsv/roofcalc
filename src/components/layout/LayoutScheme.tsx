@@ -19,6 +19,7 @@ interface SheetPlacement {
   y: number;
   full_width: number;
   useful_width: number;
+  lap?: 'left' | 'right';
   length: number;
   intersect_area_m2?: number;
   full_area_m2?: number;
@@ -138,19 +139,20 @@ function generateFullLayout(
   maxSheetLength: number,
   eaveOverhang: number,   // карнизний звис (додається знизу)
   ridgeGap: number,       // ковзан (додається зверху)
+  rtl: boolean = false,   // укладка справа наліво: колонки від правого краю
 ): SheetPlacement[] {
   const placements: SheetPlacement[] = [];
   let sheetNum = 1;
 
-  const startCol = Math.floor((-layoutOffset / usefulWidth) - 1) + 1;
+  const shiftCols = Math.ceil(Math.abs(layoutOffset) / usefulWidth) + 1;
+  const maxCols = Math.ceil(slopeWidth / usefulWidth) + shiftCols + 1;
   const step = maxSheetLength;
   // Зсув сітки рядів у межах одного кроку
   const vMod = ((verticalOffset % step) + step) % step;
 
-  for (let col = startCol; ; col++) {
-    const x = layoutOffset + col * usefulWidth;
-    if (x >= slopeWidth) break;
-    if (x + usefulWidth <= 0) continue;
+  for (let col = -shiftCols; col <= maxCols; col++) {
+    const x = rtl ? slopeWidth + layoutOffset - (col + 1) * usefulWidth : layoutOffset + col * usefulWidth;
+    if (x >= slopeWidth || x + usefulWidth <= 0) continue;
 
     const range = getColumnRange(x, usefulWidth, slopeWidth, polygon);
     if (!range) continue;
@@ -176,7 +178,7 @@ function generateFullLayout(
           sheet_number: sheetNum++,
           col_index: col, row_index: row++,
           x, y: Math.round(visBottom),
-          full_width: fullWidth, useful_width: usefulWidth,
+          full_width: fullWidth, useful_width: usefulWidth, lap: rtl ? 'left' : 'right',
           length: Math.max(1, Math.round(visLen)),
         });
       }
@@ -246,6 +248,9 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   const eaveRidgeTotal = Math.max(0, sheetLength - H);
   const eaveOverhang = eaveRidgeTotal; // весь припуск — карнизний звис (як у KrovlyaProfy за замовч.)
   const ridgeGap = 0;
+  const rtl = calcResult.placements[0]?.lap === 'left';
+  // Ліва межа повного листа: нахлест виходить у бік, протилежний напрямку укладки
+  const fullX = (p: SheetPlacement) => p.x + (p.offset_x ?? 0) - (p.lap === 'left' ? p.full_width - p.useful_width : 0);
 
   const [placements, setPlacements]   = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
   const [layoutOffset, setLayoutOffset] = useState(0);
@@ -299,7 +304,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   let vx0 = 0, vx1 = W, vy0 = 0, vy1 = H;
   for (const p of placements) {
     if (p.deleted) continue;
-    const px = p.x + (p.offset_x ?? 0), py = p.y + (p.offset_y ?? 0), len = p.manual_length ?? p.length;
+    const px = fullX(p), py = p.y + (p.offset_y ?? 0), len = p.manual_length ?? p.length;
     vx0 = Math.min(vx0, px); vx1 = Math.max(vx1, px + p.full_width);
     vy0 = Math.min(vy0, py); vy1 = Math.max(vy1, py + len);
   }
@@ -335,12 +340,12 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
     setLayoutOffset(newOffset);
     setManualMode(true);
     if (polygonPoints.length >= 3) {
-      const np = generateFullLayout(newOffset, verticalOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap);
+      const np = generateFullLayout(newOffset, verticalOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, rtl);
       setPlacements(np);
       onUpdate?.(np);
     }
     setSelected(new Set());
-  }, [layoutOffset, verticalOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, onUpdate]);
+  }, [layoutOffset, verticalOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, rtl, onUpdate]);
 
   // Вертикальний зсув розкладки — перегенерація з обрізкою/додаванням листів
   const shiftVerticalLayout = useCallback((deltaMm: number) => {
@@ -348,12 +353,12 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
     setVerticalOffset(newV);
     setManualMode(true);
     if (polygonPoints.length >= 3) {
-      const np = generateFullLayout(layoutOffset, newV, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap);
+      const np = generateFullLayout(layoutOffset, newV, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, rtl);
       setPlacements(np);
       onUpdate?.(np);
     }
     setSelected(new Set());
-  }, [verticalOffset, layoutOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, onUpdate]);
+  }, [verticalOffset, layoutOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, rtl, onUpdate]);
 
   // ============================================
   // Зміна довжини виділеного листа з КОМПЕНСАЦІЄЮ
@@ -577,7 +582,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       const minX = Math.min(w1.wx, w2.wx), maxX = Math.max(w1.wx, w2.wx);
       const minY = Math.min(w1.wy, w2.wy), maxY = Math.max(w1.wy, w2.wy);
       const inRect = visiblePlacements.filter(p => {
-        const len = getLen(p), py = getY(p), px = getX(p);
+        const len = getLen(p), py = getY(p), px = fullX(p);
         return px < maxX && px + p.full_width > minX && py < maxY && py + len > minY;
       }).map(p => p.sheet_number);
       if (inRect.length > 0) {
@@ -705,9 +710,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
             {visiblePlacements.map(p => {
               const length = getLen(p);
               const py     = getY(p);
-              const px     = getX(p);
               const isSel  = selected.has(p.sheet_number);
-              const x1 = tx(px);
+              const x1 = tx(fullX(p));
               const y1 = ty(py);
               const w  = p.full_width * scale;
               const h  = length * scale;

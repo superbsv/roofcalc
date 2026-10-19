@@ -160,12 +160,16 @@ class SheetLayoutEngine
         // 1. Колонки і потрібні довжини
         $bbox = GeometryEngine::boundingBox($this->polygon);
         $cols = (int)ceil($bbox['width'] / $this->usefulWidth);
+        // Укладка справа наліво: перша колонка прилягає до правого краю ската, неповна — зліва
+        // (і навпаки для «зліва направо"). Нумерація листів — у напрямку укладки.
+        $rtl = $this->direction !== 'left_right';
         $order = range(0, max(0, $cols - 1));
-        if ($this->direction !== 'left_right') $order = array_reverse($order);
 
         $columns = [];
         foreach ($order as $c) {
-            $x = $bbox['minX'] + $c * $this->usefulWidth;
+            $x = $rtl
+                ? $bbox['maxX'] - ($c + 1) * $this->usefulWidth
+                : $bbox['minX'] + $c * $this->usefulWidth;
             $r = $this->columnRange($x, $x + $this->usefulWidth);
             if ($r === null) continue;
             $need = ($r[1] - $r[0]) + $this->k - $this->pk;
@@ -196,6 +200,7 @@ class SheetLayoutEngine
                         'sheet_number' => $num++, 'col_index' => $col['col'], 'row_index' => $row,
                         'x' => (int)$col['x'], 'y' => (int)$y,
                         'full_width' => $this->fullWidth, 'useful_width' => $this->usefulWidth, 'length' => $len,
+                        'lap' => $rtl ? 'left' : 'right', // бік, куди виходить нахлест (повна ширина − корисна)
                         'intersect_area_m2' => round($cover / 1e6, 4),
                         'full_area_m2'      => round($this->fullWidth * $len / 1e6, 4),
                         'waste_area_m2'     => round(max(0, $this->fullWidth * $len - $cover) / 1e6, 4),
