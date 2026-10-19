@@ -18,7 +18,7 @@ import {
 import { EDGE_TYPES, autoEdgeTypes, edgeColor, sideLengthMm, rectHole, mirrorElement, setSideLength } from '../components/roof/edges';
 import { useTheme } from '../components/theme/theme';
 import { CALC_TYPES, calcTypeInfo } from '../components/roof/calcTypes';
-import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter } from '../components/roof/templates';
+import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter, templateNums } from '../components/roof/templates';
 import { materialLabel } from '../components/roof/materials';
 import TemplateSketch from '../components/roof/TemplateSketch';
 import { useAuth } from '../components/auth/AuthContext';
@@ -98,7 +98,6 @@ export default function ProjectPage({ projectId }: Props) {
   const activeIdx = active ? slopes.findIndex(s => s.id === active.id) : -1;
   const ct = calcTypeInfo(settings.calc_type);
   const material = materials.find(m => m.id === settings.material_id);
-  const fixedCt = ct?.key === 'piece' || ct?.key === 'sheet'; // штучні / фіксовані листи не округлюються
   const typeMaterials = useMemo(() => materials.filter(m => ct?.materialTypes.includes(m.type)), [materials, ct]);
 
   // ---------- Завантаження ----------
@@ -220,14 +219,16 @@ export default function ProjectPage({ projectId }: Props) {
   // ---------- 2. Матеріал → «Далі»: застосувати до всіх скатів (експрес-розрахунок КП) ----------
   const materialNext = () => run('apply', async () => {
     if (!material) return;
+    const prevRound = (project?.settings as ProjectSettings | undefined)?.round_step ?? null;
     const st = await saveSettings({});
+    const roundChanged = prevRound !== (st.round_step ?? null); // інше округлення — перерахувати всі скати
     const body: Partial<Slope> = {
       material_profile_id: material.id, eave_overhang: st.k ?? 0, ridge_gap: st.pk ?? 0, calc_mode: modeOf(st),
       element_kind: ct?.facade ? 'facade' : 'roof',
     };
     const updated: Slope[] = [];
     for (const s of slopes) {
-      const same = s.material_profile_id === body.material_profile_id && s.eave_overhang === body.eave_overhang
+      const same = !roundChanged && s.material_profile_id === body.material_profile_id && s.eave_overhang === body.eave_overhang
         && s.ridge_gap === body.ridge_gap && (s.calc_mode || 'order') === body.calc_mode;
       updated.push(same ? s : { ...s, ...(await slopesApi.update(s.id, body)).slope });
     }
@@ -405,11 +406,6 @@ export default function ProjectPage({ projectId }: Props) {
 
   const resetLayout = () => active && run('calc', async () => {
     await patchSlope(active.id, { layout_shift: 0, joint_y: null, split_forced: false });
-    await calcSlope(active.id);
-  });
-
-  const setRound = (mm: number | null) => active && run('calc', async () => {
-    await patchSlope(active.id, { round_step: mm });
     await calcSlope(active.id);
   });
 
@@ -666,7 +662,7 @@ export default function ProjectPage({ projectId }: Props) {
                   <div className="kp-tpls">
                     {TEMPLATES.map(t => (
                       <button key={t.id} type="button" className="kp-tpl" title={t.name}
-                        onClick={() => setTpl({ t, v: Object.fromEntries(t.params.map(p => [p.key, String(p.default)])) })}>
+                        onClick={() => setTpl({ t, v: Object.fromEntries(t.params.map(p => [p.key, p.auto ? '' : String(p.default)])) })}>
                         <svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true"><polygon points={templateIconPoints(t)} fill="var(--clr-brand-pale)" stroke="currentColor" strokeWidth="1.4" /></svg>
                       </button>
                     ))}
@@ -758,8 +754,6 @@ export default function ProjectPage({ projectId }: Props) {
               <input key={`k${active.id}`} className="form-control" type="number" min={0} max={500} defaultValue={active.eave_overhang}
                 onBlur={e => +e.target.value !== active.eave_overhang && setSlopeK(+e.target.value)} />
             </label>
-            {!fixedCt && <RoundPicker key={`r${active.id}-${res?.rounding_mm ?? ''}`} value={active.round_step ?? null}
-              current={res?.rounding_mm ?? (material?.round_step || 10)} wave={material?.wave_step || 0} disabled={!!busy} onChange={setRound} />}
             <div className="kp-tools">
               <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>Друк</button>
               {!showExplorer && <button className="btn btn-secondary btn-sm" onClick={() => setShowExplorer(true)}>Провідник</button>}
@@ -851,11 +845,13 @@ export default function ProjectPage({ projectId }: Props) {
                 {tpl.t.params.map((p, i) => (
                   <label key={p.key}><span>{p.label}</span>
                     <input className="form-control" inputMode="decimal" autoFocus={i === 0} value={tpl.v[p.key] ?? ''}
+                      placeholder={p.auto ? `авто: ${(Math.round(p.auto(templateNums(tpl.t, tpl.v)) * 1000) / 1000).toString().replace('.', ',')}` : undefined}
                       onFocus={() => setTplFocus(p.key)} onBlur={() => setTplFocus(null)}
                       onChange={e => setTpl(v => v && ({ ...v, v: { ...v.v, [p.key]: e.target.value } }))}
                       onKeyDown={e => e.key === 'Enter' && applyTemplate()} />
                   </label>
                 ))}
+                {tpl.t.params.some(p => p.auto) && <div className="text-xs text-muted">Поле відступу порожнє — фігура рівнобічна (симетрична). Вкажіть відступ, щоб зробити її несиметричною.</div>}
               </div>
             </div>
             <div className="kp-modal-foot">
@@ -941,8 +937,7 @@ function RoundPicker({ value, current, wave, disabled, onChange }: {
   const [custom, setCustom] = useState(value != null && !opts.includes(value));
   const sel = value == null ? 'mat' : custom ? 'custom' : String(value);
   return (
-    <div className="kp-round" role="group" aria-label="Округлення довжин листів">
-      <span>Округлення до, мм</span>
+    <div className="kp-round">
       <select className="form-control" value={sel} disabled={disabled}
         onChange={e => {
           const v = e.target.value;
@@ -950,7 +945,7 @@ function RoundPicker({ value, current, wave, disabled, onChange }: {
           else if (v === 'custom') setCustom(true);
           else { setCustom(false); onChange(+v); }
         }}>
-        <option value="mat">як у матеріалі{value == null ? ` (${current})` : ''}</option>
+        <option value="mat">як у довіднику ({current})</option>
         {opts.map(o => <option key={o} value={o}>{o}{o === wave ? ' — хвиля' : ''}</option>)}
         <option value="custom">вручну…</option>
       </select>
@@ -996,8 +991,6 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
     next[i][j] = mm;
     onChange({ forbidden_lengths: next });
   };
-  const optText = (o?: string[]) => (o || []).join(', ');
-  const parseOpts = (v: string) => v.split(',').map(x => x.trim()).filter(Boolean);
 
   return (
     <section className={`kp-pane kp-matpane${edit ? ' kp-editing' : ''}`}>
@@ -1021,25 +1014,6 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
             <label key={v}><input type="radio" checked={settings.direction === v} onChange={() => setSettings(s => ({ ...s, direction: v }))} /> {l}</label>
           ))}
         </fieldset>
-        <div className="kp-params">
-          {edit ? (
-            <>
-              <label>Покриття (через кому)<input key={`${rk}-coat`} className="form-control kp-editable kp-left-text" defaultValue={optText(m.coating_options)} onBlur={e => onChange({ coating_options: parseOpts(e.target.value) })} /></label>
-              <label>Кольори (через кому)<input key={`${rk}-col`} className="form-control kp-editable kp-left-text" defaultValue={optText(m.color_options)} onBlur={e => onChange({ color_options: parseOpts(e.target.value) })} /></label>
-            </>
-          ) : (
-            <>
-              <label>Покриття
-                <select className="form-control" value={settings.coating || ''} onChange={e => setSettings(s => ({ ...s, coating: e.target.value }))}>
-                  <option value="">—</option>{(m.coating_options || []).map(o => <option key={o}>{o}</option>)}
-                </select></label>
-              <label>Колір
-                <select className="form-control" value={settings.color || ''} onChange={e => setSettings(s => ({ ...s, color: e.target.value }))}>
-                  <option value="">—</option>{(m.color_options || []).map(o => <option key={o}>{o}</option>)}
-                </select></label>
-            </>
-          )}
-        </div>
       </div>
 
       {!fixed && (
@@ -1049,7 +1023,12 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
             <div className="kp-params kp-params-2">
               <label>Lmax, м{mf('max_length', m.max_length)}</label>
               <label>Lmin, м{mf('min_length', m.min_length)}</label>
-              <label>Величина округлення, м{mf('round_step', round)}</label>
+              {edit
+                ? <label>Округлення в довіднику, мм{mf('round_step', round, 'num')}</label>
+                : <label>Округлення довжин листів, мм
+                    <RoundPicker value={settings.round_step ?? null} current={round} wave={ct === 'tile' ? (m.wave_step || 0) : 0} disabled={false}
+                      onChange={mm => setSettings(s => ({ ...s, round_step: mm }))} />
+                  </label>}
               {(m.max_std_length || (edit && ct === 'tile')) ? <label>Lmax стандартна, м{mf('max_std_length', m.max_std_length)}</label> : null}
             </div>
             <div className="kp-check"><input type="checkbox" readOnly checked={ranges.length > 0} /> Враховувати діапазони невиконуваних розмірів листів</div>
@@ -1078,7 +1057,7 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
       )}
       <div className="text-xs text-muted">
         {edit ? 'Режим редагування довідника: змініть параметри і натисніть «Зберегти». Розрахунки ідентифікують матеріал за назвою — змінюючи параметри, краще копіюйте матеріал під новою назвою.'
-          : 'Параметри матеріалу змінюються кнопкою «Дозволити редагування». ПК, К, напрямок, покриття і колір — параметри цього проєкту.'}
+          : 'Параметри матеріалу змінюються кнопкою «Дозволити редагування». ПК, К, напрямок і округлення — параметри цього розрахунку.'}
       </div>
     </section>
   );

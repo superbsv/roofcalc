@@ -71,9 +71,6 @@ class SheetLayoutEngine
         $this->wave        = $this->type === 'tile' ? (int)($profile['wave_step'] ?? 0) : 0;
         $this->round       = (int)($profile['round_step'] ?? 0) ?: (int)($profile['cut_step'] ?? 0);
         if ($this->type === 'tile' && $this->round === $this->wave) $this->round = 10; // старі дані: крок різання = хвиля
-        // Округлення, задане для ската вручну, має пріоритет над матеріалом
-        $slopeRound = (int)($slope['round_step'] ?? 0);
-        if ($slopeRound > 0) $this->round = min(1000, $slopeRound);
         if ($this->round <= 0) $this->round = 1;
         $this->forbidden   = self::normalizeRanges($profile['forbidden_lengths'] ?? null);
         $this->stock       = self::normalizeStock($profile['stock_lengths'] ?? null);

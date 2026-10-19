@@ -1,7 +1,7 @@
 // Схема шаблону ската з розмірними лініями і буквами параметрів (a, c, h, a1…), як у вікні шаблону КП.
 // Малюється з поточних введених розмірів, тож схема змінюється разом із полями.
 import React from 'react';
-import { Template } from './templates';
+import { Template, templateNums } from './templates';
 import { interiorAngles, fmtAngle } from './edges';
 
 interface Props {
@@ -11,16 +11,11 @@ interface Props {
 }
 
 export default function TemplateSketch({ t, values, focus }: Props) {
-  const nums: Record<string, number> = {};
-  t.params.forEach(p => {
-    const v = parseFloat(String(values[p.key] ?? '').replace(',', '.'));
-    nums[p.key] = Number.isFinite(v) && v > 0 ? v : p.default;
-  });
+  let nums = templateNums(t, values);
   let pts = t.build(nums);
   if (pts.some(p => !Number.isFinite(p[0]) || !Number.isFinite(p[1]))) {
-    const d: Record<string, number> = {};
-    t.params.forEach(p => { d[p.key] = p.default; });
-    pts = t.build(d);
+    nums = templateNums(t, {}, true);
+    pts = t.build(nums);
   }
   const xs0 = pts.map(p => p[0]), ys0 = pts.map(p => p[1]);
   const size = Math.max(Math.max(...xs0) - Math.min(...xs0), Math.max(...ys0) - Math.min(...ys0), 0.1);

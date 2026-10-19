@@ -634,7 +634,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   function openTemplate(idx: number) {
     setTplIdx(idx);
     const defaults: Record<string,string> = {};
-    TEMPLATES[idx].params.forEach(p => { defaults[p.key] = String(p.default); });
+    TEMPLATES[idx].params.forEach(p => { defaults[p.key] = p.auto ? '' : String(p.default); });
     setTplValues(defaults);
     setTplModal(true);
   }

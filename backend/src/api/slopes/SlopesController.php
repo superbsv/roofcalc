@@ -287,7 +287,12 @@ class SlopesController
             'min_slope_angle'    => $slope['min_slope_angle'],
             'price_per_m2'       => $slope['price_per_m2'],
         ];
-        $profile['round_step']     = $slope['round_step'] ?? null;
+        $profile['round_step']     = $slope['round_step'] ?? null; // (mp.* перекриває s.round_step — це значення матеріалу)
+        // Округлення довжин, задане на вкладці «Матеріал» для всього розрахунку, має пріоритет над довідником
+        $proj = Database::fetchOne('SELECT settings FROM projects WHERE id = ?', [(int)$slope['project_id']]);
+        $ps = $proj && $proj['settings'] ? json_decode($proj['settings'], true) : null;
+        $pr = is_array($ps) ? (int)($ps['round_step'] ?? 0) : 0;
+        if ($pr > 0) $profile['round_step'] = min(1000, $pr);
         $profile['max_std_length'] = $slope['max_std_length'] ?? null;
         $profile['type']           = $slope['type'];
         // Розрахунок лише «на замовлення» (режими «зі складу» прибрано з програми)

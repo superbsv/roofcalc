@@ -136,6 +136,7 @@ export interface ProjectSettings {
   k?: number; pk?: number;
   direction?: 'left_right' | 'right_left';
   coating?: string; color?: string;
+  round_step?: number | null;   // округлення довжин листів для всього розрахунку, мм (null — з матеріалу)
   step?: string;
 }
 
