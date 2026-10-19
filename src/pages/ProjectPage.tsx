@@ -8,7 +8,7 @@
 // ТЗ: docs/TZ-analog-krovlya-profi.md, розділ 13
 // ============================================
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SlopeEditor from '../components/editor/SlopeEditor';
 import LayoutScheme from '../components/layout/LayoutScheme';
 import {
@@ -90,6 +90,8 @@ export default function ProjectPage({ projectId }: Props) {
   const [loaded, setLoaded] = useState(false);
 
   const active = slopes.find(s => s.id === activeId) || null;
+  const slopesRef = useRef<Slope[]>([]);
+  slopesRef.current = slopes;
   const activeIdx = active ? slopes.findIndex(s => s.id === active.id) : -1;
   const ct = calcTypeInfo(settings.calc_type);
   const material = materials.find(m => m.id === settings.material_id);
@@ -221,7 +223,10 @@ export default function ProjectPage({ projectId }: Props) {
   const onPolygonChange = useCallback(async (p: Point[]) => {
     if (!activeId) return;
     try {
-      const r = await slopesApi.update(activeId, { polygon_points: p, edge_types: p.length >= 3 ? autoEdgeTypes(p) : [] });
+      const cur = slopesRef.current.find(s => s.id === activeId);
+      // Перетягування вершини не змінює кількість сторін — доборні на сторонах зберігаємо
+      const keep = cur?.edge_types?.length === p.length && (cur?.polygon_points?.length || 0) === p.length;
+      const r = await slopesApi.update(activeId, { polygon_points: p, edge_types: p.length >= 3 ? (keep ? cur!.edge_types : autoEdgeTypes(p)) : [] });
       replaceSlope({ ...r.slope, calc_result: undefined });
     } catch (e: any) { setError(e.message); }
   }, [activeId]);
@@ -563,6 +568,7 @@ export default function ProjectPage({ projectId }: Props) {
                   </div>
                   <div className="text-xs text-muted" style={{ marginTop: 8 }}>
                     Або намалюйте контур мишею: клік — вершина, права кнопка / Enter — замкнути, Ctrl+Z — скасувати сторону.
+                    Готовий контур змінюйте, перетягуючи вершини лівою кнопкою (крок 1 см, з Shift — 1 мм).
                   </div>
                 </>
               ) : cutouts ? (
@@ -608,6 +614,7 @@ export default function ProjectPage({ projectId }: Props) {
                       </select>
                     </div>
                   ))}
+                  <div className="text-xs text-muted" style={{ marginTop: 6 }}>Перетягніть вершину лівою кнопкою миші, щоб змінити розміри: крок 1 см, із Shift — 1 мм.</div>
                   <dl className="kp-mini">
                     <dt>Площа ската</dt><dd>{f2(polyArea(pts) / 1e6, 3)} м²</dd>
                     {holes.length > 0 && <><dt>Вирізи</dt><dd>{holes.length} шт</dd></>}

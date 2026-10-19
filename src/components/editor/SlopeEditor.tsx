@@ -346,6 +346,14 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
         ctx.fillStyle = COLORS.dim;
         const label = `(${p[0].toFixed(3)}; ${p[1].toFixed(3)})`;
         ctx.fillText(label, sx + 12, sy - 8);
+        if (closed && points.length >= 3 && i === dragIdx) {
+          // Довжини прилеглих сторін — як при точному доведенні вершини у КП
+          const n = points.length, pi = (i - 1 + n) % n, ni = (i + 1) % n;
+          const len = (a: Point, b: Point) => Math.hypot(b[0] - a[0], b[1] - a[1]).toFixed(3);
+          ctx.font = '600 12px "Noto Sans", system-ui, sans-serif';
+          ctx.fillStyle = COLORS.pointFirst;
+          ctx.fillText(`${sideLetter(pi)} = ${len(points[pi], p)}   ${sideLetter(i)} = ${len(p, points[ni])}`, sx + 12, sy + 16);
+        }
       }
     });
   }
@@ -409,16 +417,17 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     setMouse([sx, sy]);
 
     if (dragIdx >= 0) {
-      // Перетягуємо точку (прив'язка до 1мм вже в s2w)
+      // Перетягуємо вершину: крок 1 см, із Shift — 1 мм. Зберігаємо при відпусканні кнопки.
+      const step = e.shiftKey ? 0.001 : 0.01;
+      const snap = (v: number) => Math.round(v / step) * step;
       const next = [...points];
-      next[dragIdx] = [wx, wy];
+      next[dragIdx] = [snap(wx), snap(wy)];
       setPoints(next);
-      notifyChange(next);
       return;
     }
 
-    // Підсвічування точки під курсором (в режимі move, коли контур замкнено)
-    if (mode === 'move' && points.length > 0) {
+    // Підсвічування вершини під курсором (замкнений контур або режим редагування)
+    if ((closed || mode === 'move') && points.length > 0 && !readOnly) {
       let found = -1;
       const R = 12; // збільшена зона наведення
       points.forEach((p, i) => {
@@ -444,8 +453,19 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       if (!closed && points.length >= 3) { setClosed(true); notifyChange(points); }
       return;
     }
+    // Замкнений контур: ЛКМ на вершині — захопити і тягнути (як у КП)
+    if (closed || mode === 'move') {
+      let found = -1;
+      let bestDist = Infinity;
+      points.forEach((p, i) => {
+        const [px, py] = w2s(p[0], p[1], H);
+        const d = (sx-px)**2 + (sy-py)**2;
+        if (d < 196 && d < bestDist) { found = i; bestDist = d; }
+      });
+      setDragIdx(found);
+      return;
+    }
     if (mode === 'draw') {
-      if (closed) { setClosed(false); setPoints([]); setShowLayout(false); return; }
       if (points.length >= 3) {
         const [fx, fy] = w2s(points[0][0], points[0][1], H);
         if ((sx-fx)**2 + (sy-fy)**2 < 100) {
@@ -468,7 +488,12 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   };
 
   const onMouseUp = () => {
-    if (dragIdx >= 0) notifyChange(points);
+    if (dragIdx >= 0) {
+      const orig = slope?.polygon_points?.[dragIdx];
+      const p = points[dragIdx];
+      // не зберігаємо, якщо вершину лише клацнули без зсуву
+      if (!orig || Math.round(p[0] * 1000) !== orig[0] || Math.round(p[1] * 1000) !== orig[1]) notifyChange(points);
+    }
     setDragIdx(-1);
   };
 
@@ -595,10 +620,11 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       <div className="editor-canvas-wrap" ref={wrapRef}>
         <canvas
           ref={canvasRef}
-          style={{display:'block',width:'100%',height:'100%',cursor:mode==='draw'?'crosshair':(dragIdx>=0?'grabbing':(hoverIdx>=0?'grab':'default'))}}
+          style={{display:'block',width:'100%',height:'100%',cursor:dragIdx>=0?'grabbing':(hoverIdx>=0?'grab':(mode==='draw'&&!closed?'crosshair':'default'))}}
           onMouseMove={onMouseMove}
           onMouseDown={onMouseDown}
           onMouseUp={onMouseUp}
+          onMouseLeave={onMouseUp}
           onWheel={onWheel}
           onContextMenu={e => e.preventDefault()}
         />
