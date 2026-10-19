@@ -9,7 +9,6 @@ RewriteRule (^|/)\.env - [F,L]
 RewriteRule (^|/)\.ftp-deploy - [F,L]
 RewriteRule ^(vendor|src)/ - [F,L]
 
-RewriteRule ^api/ - [L]
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^ index.html [L]
+# Калькулятор переїхав: усе перенаправляємо на roofkit.com.ua з тим самим шляхом
+RewriteRule ^api/(.*)$ https://roofkit.com.ua/api/$1 [R=308,L]
+RewriteRule ^(.*)$ https://roofkit.com.ua/$1 [R=301,L]
