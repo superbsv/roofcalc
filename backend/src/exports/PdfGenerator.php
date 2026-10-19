@@ -10,6 +10,13 @@ namespace RoofCalc\Exports;
 
 use RoofCalc\Core\Database;
 
+// Власна копія класичного TCPDF 6.7.5 (backend/src/lib/tcpdf): версія з vendor/ на сервері
+// (TCPDF 7 на tc-lib-pdf) не має файлів шрифтів і падає з «unable to read file: helvetica.json».
+// Підключаємо свою до того, як автозавантажувач візьме клас з vendor/.
+if (!class_exists('TCPDF', false)) {
+    require_once __DIR__ . '/../lib/tcpdf/tcpdf.php';
+}
+
 class PdfGenerator
 {
     private array  $project;
@@ -54,7 +61,7 @@ class PdfGenerator
 
         // Заголовок
         $pdf->SetFont('dejavusans', 'B', 16);
-        $pdf->SetTextColor(27, 94, 46);
+        $pdf->SetTextColor(26, 26, 26);
         $pdf->Cell(0, 10, 'КОМЕРЦІЙНА ПРОПОЗИЦІЯ', 0, 1, 'C');
         $pdf->SetFont('dejavusans', '', 9);
         $pdf->SetTextColor(100, 100, 100);
@@ -64,9 +71,9 @@ class PdfGenerator
 
         // Дані клієнта та об'єкта
         $pdf->SetFont('dejavusans', 'B', 10);
-        $pdf->SetTextColor(27, 94, 46);
+        $pdf->SetTextColor(26, 26, 26);
         $pdf->Cell(0, 7, 'ДАНІ ОБ\'ЄКТА', 0, 1);
-        $pdf->SetDrawColor(27, 94, 46);
+        $pdf->SetDrawColor(255, 122, 0);
         $pdf->Line(15, $pdf->GetY(), 195, $pdf->GetY());
         $pdf->Ln(2);
 
@@ -93,9 +100,9 @@ class PdfGenerator
         // --- Схеми скатів ---
         if (!empty($this->slopes)) {
             $pdf->SetFont('dejavusans', 'B', 10);
-            $pdf->SetTextColor(27, 94, 46);
+            $pdf->SetTextColor(26, 26, 26);
             $pdf->Cell(0, 7, 'СКАТИ ПОКРІВЛІ', 0, 1);
-            $pdf->SetDrawColor(27, 94, 46);
+            $pdf->SetDrawColor(255, 122, 0);
             $pdf->Line(15, $pdf->GetY(), 195, $pdf->GetY());
             $pdf->Ln(3);
 
@@ -124,9 +131,9 @@ class PdfGenerator
         $this->addHeader($pdf);
 
         $pdf->SetFont('dejavusans', 'B', 10);
-        $pdf->SetTextColor(27, 94, 46);
+        $pdf->SetTextColor(26, 26, 26);
         $pdf->Cell(0, 7, 'СПЕЦИФІКАЦІЯ МАТЕРІАЛІВ', 0, 1);
-        $pdf->SetDrawColor(27, 94, 46);
+        $pdf->SetDrawColor(255, 122, 0);
         $pdf->Line(15, $pdf->GetY(), 195, $pdf->GetY());
         $pdf->Ln(3);
 
@@ -141,8 +148,8 @@ class PdfGenerator
             if (empty($items)) continue;
 
             $pdf->SetFont('dejavusans', 'B', 9);
-            $pdf->SetFillColor(232, 245, 236);
-            $pdf->SetTextColor(27, 94, 46);
+            $pdf->SetFillColor(244, 244, 242);
+            $pdf->SetTextColor(26, 26, 26);
             $pdf->Cell(0, 6, $title, 0, 1, 'L', true);
             $pdf->SetTextColor(30, 30, 30);
 
@@ -198,7 +205,7 @@ class PdfGenerator
         $this->addHeader($pdf, true);
 
         $pdf->SetFont('dejavusans', 'B', 12);
-        $pdf->SetTextColor(27, 94, 46);
+        $pdf->SetTextColor(26, 26, 26);
         $pdf->Cell(0, 8, 'КАРТА РОЗКРОЮ — ' . strtoupper($this->project['name'] ?? ''), 0, 1, 'C');
         $pdf->SetFont('dejavusans', '', 8);
         $pdf->SetTextColor(100, 100, 100);
@@ -210,8 +217,8 @@ class PdfGenerator
             if (!$cr || !empty($cr['errors'])) continue;
 
             $pdf->SetFont('dejavusans', 'B', 10);
-            $pdf->SetTextColor(27, 94, 46);
-            $pdf->SetFillColor(232, 245, 236);
+            $pdf->SetTextColor(26, 26, 26);
+            $pdf->SetFillColor(244, 244, 242);
             $pdf->Cell(0, 7, $slope['name'] . ' — ' . ($slope['material_name'] ?? ''), 0, 1, 'L', true);
             $pdf->SetTextColor(30, 30, 30);
             $pdf->SetFont('dejavusans', '', 8);
@@ -273,7 +280,7 @@ class PdfGenerator
         }
 
         $pdf->SetFont('dejavusans', 'B', 11);
-        $pdf->SetTextColor(27, 94, 46);
+        $pdf->SetTextColor(26, 26, 26);
         $pdf->SetXY($landscape ? 120 : 60, 10);
         $pdf->Cell($pageW - 75, 6, $this->settings['company_name'] ?? 'ArtBudTrading', 0, 1, 'R');
         $pdf->SetFont('dejavusans', '', 8);
@@ -284,7 +291,7 @@ class PdfGenerator
         $pdf->SetX($landscape ? 120 : 60);
         $pdf->Cell($pageW - 75, 4, $this->settings['company_address'] ?? 'Україна', 0, 1, 'R');
 
-        $pdf->SetDrawColor(27, 94, 46);
+        $pdf->SetDrawColor(255, 122, 0);
         $pdf->Line(15, 25, $pageW - 15, 25);
         $pdf->Ln(6);
     }
@@ -293,7 +300,7 @@ class PdfGenerator
     {
         // Header row
         $pdf->SetFont('dejavusans', 'B', 8);
-        $pdf->SetFillColor(27, 94, 46);
+        $pdf->SetFillColor(26, 26, 26);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetDrawColor(200, 200, 200);
         foreach ($headers as $i => $h) {
