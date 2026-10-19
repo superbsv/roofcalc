@@ -56,7 +56,11 @@ class ExportController
     // GET /api/projects/{id}/export/production-pdf
     public function productionPdf(int $id): void
     {
+        // Посилання відкривається в новій вкладці — токен приходить у ?token=, як для КП/Excel
         $user = Auth::currentUser();
+        if (!$user && !empty($_GET['token'])) {
+            $user = Auth::validateToken($_GET['token']);
+        }
         if (!$user) { $this->authError(); return; }
 
         // Виробництво бачить тільки свій PDF без цін
