@@ -7,7 +7,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { TEMPLATES, buildTemplate, templateIconPoints, sideLetter } from '../roof/templates';
 import { useTheme, Theme } from '../theme/theme';
 import { Point, Slope, SheetPlacement, CalcResult, EdgeType } from '../../api/client';
-import { edgeColor } from '../roof/edges';
+import { edgeColor, interiorAngles, fmtAngle } from '../roof/edges';
 
 interface Props {
   slope: Slope | null;
@@ -96,6 +96,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     drawPolygon(ctx, H);
     drawHoles(ctx, H);
     drawEdgeTypes(ctx, H);
+    drawAngles(ctx, H);
     drawPoints(ctx, H);
     if (mode === 'draw' && !closed) drawCursorInfo(ctx, H);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -221,6 +222,29 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
         ctx.fillText(`${sideLetter(i)} = ${len.toFixed(3)}`, mx + 4, my - 4);
       }
     }
+    ctx.restore();
+  }
+
+  // Внутрішні кути площини біля кожної вершини (дуга + значення в градусах)
+  function drawAngles(ctx: CanvasRenderingContext2D, H: number) {
+    if (!closed || points.length < 3) return;
+    const angs = interiorAngles(points);
+    ctx.save();
+    ctx.font = '600 11px "Noto Sans", system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    angs.forEach((a, i) => {
+      if (Math.abs(a.deg - 180) < 0.05) return;
+      const [sx, sy] = w2s(points[i][0], points[i][1], H);
+      ctx.strokeStyle = COLORS.pointFirst; ctx.lineWidth = 1.2; ctx.globalAlpha = 0.85;
+      ctx.beginPath(); ctx.arc(sx, sy, 18, -a.start, -(a.start + a.sweep), true); ctx.stroke();
+      ctx.globalAlpha = 1;
+      const b = a.start + a.sweep / 2;
+      const lx = sx + Math.cos(b) * 36, ly = sy - Math.sin(b) * 36;
+      const t = fmtAngle(a.deg);
+      const w = ctx.measureText(t).width + 6;
+      ctx.fillStyle = COLORS.tooltipBg; ctx.fillRect(lx - w / 2, ly - 8, w, 16);
+      ctx.fillStyle = COLORS.tooltipText; ctx.fillText(t, lx, ly);
+    });
     ctx.restore();
   }
 

@@ -9,6 +9,7 @@
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Point as ApiPoint } from '../../api/client';
+import { interiorAngles, fmtAngle } from '../roof/edges';
 
 interface SheetPlacement {
   sheet_number: number;
@@ -235,7 +236,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
     setSelected(new Set());
   }, [calcResult]);
 
-  const scale = Math.min((SVG_W - PADDING*2) / W, (SVG_H - PADDING*2) / H) * zoom;
+  const scale = Math.min((SVG_W - PADDING*2) / W, (SVG_H - PADDING*2) / H); // масштаб — через ширину SVG (zoom)
   const tx = (x: number) => PADDING + x * scale;
   const ty = (y: number) => PADDING + (H - y) * scale;
 
@@ -611,9 +612,9 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
       </div>
 
       {/* SVG */}
-      <div style={{ overflowX:'auto', overflowY:'auto', maxHeight:'580px', border:'1px solid var(--clr-border)', borderRadius:'8px', background:COLORS.bg }}>
-        <svg ref={svgRef} width={SVG_W*zoom} height={SVG_H*zoom} viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-          style={{ display:'block' }}
+      <div style={{ overflowX:'auto', overflowY:'auto', maxHeight:'75vh', border:'1px solid var(--clr-border)', borderRadius:'8px', background:COLORS.bg }}>
+        <svg ref={svgRef} viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+          style={{ display:'block', width:`${zoom*100}%`, height:'auto' }}
           onMouseDown={onSvgMouseDown} onMouseMove={onSvgMouseMove} onMouseUp={onSvgMouseUp} onClick={onSvgClick}>
           <rect width={SVG_W} height={SVG_H} fill={COLORS.bg}/>
           {Array.from({length:Math.ceil(W/1000)+1},(_,i)=>i).map(i=>(
@@ -662,6 +663,23 @@ export default function LayoutScheme({ calcResult, polygonPoints, slopeName, onU
           </g>
 
           <path d={polyPath} fill="none" stroke={COLORS.polygon} strokeWidth="2"/>
+          {/* Внутрішні кути площини */}
+          {polygonPoints.length >= 3 && interiorAngles(polygonPoints).map((a, i) => {
+            if (Math.abs(a.deg - 180) < 0.05) return null;
+            const cx = tx(polygonPoints[i][0]), cy = ty(polygonPoints[i][1]);
+            const r = 18, e = a.start + a.sweep;
+            const x1 = cx + Math.cos(a.start) * r, y1 = cy - Math.sin(a.start) * r;
+            const x2 = cx + Math.cos(e) * r, y2 = cy - Math.sin(e) * r;
+            const b = a.start + a.sweep / 2;
+            const lx = cx + Math.cos(b) * 38, ly = cy - Math.sin(b) * 38;
+            return (
+              <g key={`ang${i}`} pointerEvents="none">
+                <path d={`M ${x1} ${y1} A ${r} ${r} 0 ${a.sweep > Math.PI ? 1 : 0} 1 ${x2} ${y2}`} fill="none" stroke="var(--clr-brand)" strokeWidth="1.2" />
+                <text x={lx} y={ly + 4.5} textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--clr-brand)"
+                  stroke="var(--clr-canvas)" strokeWidth="3" style={{ paintOrder: 'stroke' }}>{fmtAngle(a.deg)}</text>
+              </g>
+            );
+          })}
 
           {rubberBand && (
             <rect x={rubberBand.x1} y={rubberBand.y1} width={rubberBand.x2-rubberBand.x1} height={rubberBand.y2-rubberBand.y1}

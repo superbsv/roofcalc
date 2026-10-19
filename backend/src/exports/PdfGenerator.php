@@ -136,7 +136,6 @@ class PdfGenerator
             'fastener' => 'Кріплення',
         ];
 
-        $grandTotal = 0;
         foreach ($types as $type => $title) {
             $items = array_filter($this->specItems, fn($i) => $i['type'] === $type);
             if (empty($items)) continue;
@@ -148,51 +147,17 @@ class PdfGenerator
             $pdf->SetTextColor(30, 30, 30);
 
             $this->drawTable($pdf,
-                ['Найменування', 'Од.', 'К-сть', 'Ціна, грн', 'Сума, грн'],
-                [80, 15, 20, 30, 35],
+                ['Найменування', 'Од.', 'К-сть'],
+                [130, 20, 30],
                 array_values(array_map(fn($i) => [
                     $i['name'],
                     $i['unit'],
-                    $i['quantity'],
-                    number_format($i['price'], 2),
-                    number_format($i['total'], 2),
+                    rtrim(rtrim(number_format((float)$i['quantity'], 3, '.', ''), '0'), '.'),
                 ], $items))
             );
-
-            $sectionTotal = array_sum(array_column(array_values($items), 'total'));
-            $grandTotal  += $sectionTotal;
-
-            $pdf->SetFont('dejavusans', 'B', 9);
-            $pdf->SetFillColor(245, 245, 245);
-            $pdf->Cell(145, 6, 'Підсумок розділу:', 0, 0, 'R');
-            $pdf->Cell(35, 6, number_format($sectionTotal, 2) . ' грн', 0, 1, 'R');
             $pdf->Ln(2);
         }
 
-        // Підсумкова рядок
-        $discount = $grandTotal * (float)($this->project['discount_pct'] ?? 0) / 100;
-        $totalWithDiscount = $grandTotal - $discount;
-        $vatPct    = (float)($this->project['vat_pct'] ?? 20);
-        $vatAmount = $totalWithDiscount * $vatPct / (100 + $vatPct);
-
-        $pdf->Ln(4);
-        $pdf->SetFont('dejavusans', 'B', 10);
-        $pdf->SetFillColor(27, 94, 46);
-        $pdf->SetTextColor(255, 255, 255);
-        $pdf->Cell(145, 8, 'ЗАГАЛЬНА СУМА:', 0, 0, 'R', true);
-        $pdf->Cell(35, 8, number_format($totalWithDiscount, 2) . ' грн', 0, 1, 'R', true);
-
-        if ($discount > 0) {
-            $pdf->SetTextColor(100, 100, 100);
-            $pdf->SetFont('dejavusans', '', 8);
-            $pdf->Cell(145, 5, 'Знижка ' . $this->project['discount_pct'] . '%:', 0, 0, 'R');
-            $pdf->Cell(35, 5, '- ' . number_format($discount, 2) . ' грн', 0, 1, 'R');
-        }
-
-        $pdf->SetTextColor(60, 60, 60);
-        $pdf->SetFont('dejavusans', '', 8);
-        $pdf->Cell(145, 5, 'у тому числі ПДВ ' . $vatPct . '%:', 0, 0, 'R');
-        $pdf->Cell(35, 5, number_format($vatAmount, 2) . ' грн', 0, 1, 'R');
 
         // Нотатки
         if (!empty($this->project['notes'])) {

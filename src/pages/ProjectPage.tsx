@@ -478,12 +478,6 @@ export default function ProjectPage({ projectId }: Props) {
               <input className="form-control" value={settings.company ?? 'ТОВ «АртБудТрейдинг»'} onChange={e => setSettings(s => ({ ...s, company: e.target.value }))} />
               <label>Відповідальний</label>
               <input className="form-control" value={settings.responsible || ''} onChange={e => setSettings(s => ({ ...s, responsible: e.target.value }))} />
-              <label>Грошова одиниця</label>
-              <div className="kp-inline">
-                <input className="form-control" value={settings.currency || ''} onChange={e => setSettings(s => ({ ...s, currency: e.target.value }))} style={{ maxWidth: 90 }} />
-                <span>курс до у.о.</span>
-                <input className="form-control" type="number" min={0} step="0.01" value={settings.rate ?? ''} onChange={e => setSettings(s => ({ ...s, rate: e.target.value === '' ? undefined : +e.target.value }))} style={{ maxWidth: 110 }} placeholder="—" />
-              </div>
               <label>Назва проєкту</label>
               <input className="form-control" value={info.name} onChange={e => setInfo(v => ({ ...v, name: e.target.value }))} placeholder={`Замовлення №${settings.order_no}`} />
             </div>
@@ -566,16 +560,16 @@ export default function ProjectPage({ projectId }: Props) {
                 <h3 className="kp-h3">Доборні елементи</h3>
                 <div className="table-wrap">
                   <table className="kp-table">
-                    <thead><tr><th>Найменування</th><th title="Ділити навпіл — сопряження двох скатів">1/2</th><th>Довжина, м</th><th>Нахлест, м</th><th>Ціна</th></tr></thead>
+                    <thead><tr><th>Найменування</th><th title="Ділити навпіл — сопряження двох скатів">1/2</th><th>Довжина, м</th><th>Нахлест, м</th></tr></thead>
                     <tbody>
                       {EDGE_TYPES.filter(e => e.key !== 'none').map(e => (
-                        <tr key={e.key} className="kp-kit"><td>&lt;{e.label}&gt;</td><td></td><td>-</td><td>-</td><td>-</td></tr>
+                        <tr key={e.key} className="kp-kit"><td>&lt;{e.label}&gt;</td><td></td><td>-</td><td>-</td></tr>
                       ))}
                       {accessories.map(a => (
                         <tr key={a.id}>
                           <td>{a.name}</td>
                           <td><input type="checkbox" readOnly checked={['ridge', 'hip', 'valley'].includes(a.calc_rule)} aria-label="1/2" /></td>
-                          <td>{m3(a.working_length)}</td><td>{m3(a.default_overlap)}</td><td>{f2(Number(a.price))}</td>
+                          <td>{m3(a.working_length)}</td><td>{m3(a.default_overlap)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -946,7 +940,7 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
           const val = unit === 'm' ? Math.round(v * 1000) : v;
           onChange({ [key]: val, ...(extra ? extra(val) : {}) } as Partial<MaterialProfile>);
         }} />
-    ) : <input className="form-control" readOnly value={unit === 'm' ? m3(value) : (unit === 'num' && key === 'price_per_m2' ? f2(value) : String(value ?? ''))} />
+    ) : <input className="form-control" readOnly value={unit === 'm' ? m3(value) : String(value ?? '')} />
   );
   const setRange = (i: number, j: 0 | 1, mm: number) => {
     const next = ranges.map(r => [...r] as [number, number]);
@@ -1001,7 +995,6 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
                 </select></label>
             </>
           )}
-          <label>Ціна, {settings.currency || 'грн'} за 1 м²{mf('price_per_m2', m.price_per_m2, 'num')}</label>
           <label>Мін. уклон покрівлі, °{mf('min_slope_angle', m.min_slope_angle, 'num')}</label>
         </div>
       </div>
@@ -1105,7 +1098,6 @@ function Specification({ project, settings, slopes, material, items, projectId, 
   project: Project | null; settings: ProjectSettings; slopes: Slope[]; material?: MaterialProfile;
   items: SpecItem[]; projectId: number; onBack: () => void; onMaterial: () => void;
 }) {
-  const cur = settings.currency || 'грн';
   const calc = slopes.filter(s => s.calc_result && !s.calc_result.errors?.length);
   const sum = (f: (s: Slope) => number) => calc.reduce((a, s) => a + (f(s) || 0), 0);
   const tot = {
@@ -1123,7 +1115,7 @@ function Specification({ project, settings, slopes, material, items, projectId, 
   const group = (list: SpecItem[]) => {
     const map: Record<string, SpecItem> = {};
     list.forEach(i => {
-      const k = i.name + '|' + i.unit + '|' + i.price;
+      const k = i.name + '|' + i.unit;
       map[k] = map[k] ? { ...map[k], quantity: Number(map[k].quantity) + Number(i.quantity), total: Number(map[k].total) + Number(i.total) }
         : { ...i, quantity: Number(i.quantity), total: Number(i.total) };
     });
@@ -1131,8 +1123,6 @@ function Specification({ project, settings, slopes, material, items, projectId, 
   };
   const sheetItems = items.filter(i => i.type === 'sheet');
   const accItems = group(items.filter(i => i.type !== 'sheet'));
-  const sheetTotal = sheetItems.reduce((a, i) => a + Number(i.total), 0);
-  const grand = items.reduce((a, i) => a + Number(i.total), 0);
   const ct = calcTypeInfo(settings.calc_type);
 
   return (
@@ -1198,7 +1188,6 @@ function Specification({ project, settings, slopes, material, items, projectId, 
             <tr className="tr-total"><td>Всього:</td><td></td><td>{f2(tot.area, 3)}</td><td>{f2(tot.useful, 3)}</td><td>{f2(tot.full, 3)}</td><td>{tot.sheets}</td><td>{f2(waste, 2)}</td></tr>
           </tbody>
         </table>
-        {sheetTotal > 0 && <div className="kp-paper-line">Сума за покрівельний матеріал, {cur}: <b>{f2(sheetTotal)}</b></div>}
 
         {lenRows.length > 0 && (
           <div className="kp-lens">
@@ -1213,14 +1202,6 @@ function Specification({ project, settings, slopes, material, items, projectId, 
           </div>
         )}
 
-        <h3 className="kp-paper-h">ДОБОРНІ ЕЛЕМЕНТИ ПОСКАТНО</h3>
-        {slopes.map((s, i) => {
-          const a = s.calc_result?.accessories;
-          if (!a) return null;
-          const parts = a.items.map(it => `${it.name} = ${it.quantity} ${it.unit}`);
-          return <div key={s.id} className="kp-paper-line">Скат №{i + 1}: {parts.length ? parts.join('; ') : 'без доборних'}</div>;
-        })}
-
         {calc.some(s => s.calc_result?.cutting?.length) && (
           <>
             <h3 className="kp-paper-h">ТАБЛИЦЯ РОЗКРОЮ</h3>
@@ -1232,16 +1213,14 @@ function Specification({ project, settings, slopes, material, items, projectId, 
 
         <h3 className="kp-paper-h">ДОБОРНІ ЕЛЕМЕНТИ, КОМПЛЕКТУЮЧІ — ЗАГАЛЬНА КІЛЬКІСТЬ</h3>
         <table className="kp-table kp-paper-table">
-          <thead><tr><th>Найменування</th><th>Од.</th><th>Кількість</th><th>Ціна, {cur}</th><th>Сума, {cur}</th></tr></thead>
+          <thead><tr><th>Найменування</th><th>Од.</th><th>Кількість</th></tr></thead>
           <tbody>
-            {sheetItems.length > 0 && <tr><td>{material?.name || 'Покрівельний матеріал'} — {sheetItems.reduce((a, i) => a + Number(i.quantity), 0)} листів</td><td>м²</td><td>{f2(tot.full, 3)}</td><td>{f2(material?.price_per_m2)}</td><td>{f2(sheetTotal)}</td></tr>}
+            {sheetItems.length > 0 && <tr><td>{material?.name || 'Покрівельний матеріал'} — {sheetItems.reduce((a, i) => a + Number(i.quantity), 0)} листів</td><td>м²</td><td>{f2(tot.full, 3)}</td></tr>}
             {accItems.map(i => (
-              <tr key={i.name + i.price}><td>{i.name}</td><td>{i.unit}</td><td>{Number(i.quantity).toFixed(i.unit === 'шт' ? 0 : 2)}</td><td>{f2(i.price)}</td><td>{f2(i.total)}</td></tr>
+              <tr key={i.name + i.unit}><td>{i.name}</td><td>{i.unit}</td><td>{Number(i.quantity).toFixed(i.unit === 'шт' ? 0 : 2)}</td></tr>
             ))}
-            <tr className="tr-total"><td colSpan={4}>ПІДСУМОК:</td><td>{f2(grand)}</td></tr>
           </tbody>
         </table>
-        {settings.rate ? <div className="kp-paper-line">У у.о. за курсом {settings.rate}: <b>{f2(grand / settings.rate)}</b></div> : null}
         <div className="kp-paper-sign"><span>Менеджер:</span> {settings.responsible || project?.manager_name || '________________'}</div>
         {!items.length && <div className="alert alert-info">Специфікація порожня: розрахуйте хоча б один скат.</div>}
       </article>

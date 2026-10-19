@@ -105,7 +105,6 @@ export default function ProjectsPage({ onOpenProject }: Props) {
                 <th>Клієнт</th>
                 <th>Об'єкт</th>
                 <th>Тип розрахунку</th>
-                <th>Сума, грн</th>
                 <th>Статус</th>
                 <th>Оновлено</th>
                 <th></th>
@@ -113,11 +112,11 @@ export default function ProjectsPage({ onOpenProject }: Props) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} style={{textAlign:'center',padding:'32px',color:'var(--clr-text-3)'}}>
+                <tr><td colSpan={7} style={{textAlign:'center',padding:'32px',color:'var(--clr-text-3)'}}>
                   Завантаження…
                 </td></tr>
               ) : !projects.length ? (
-                <tr><td colSpan={8} style={{textAlign:'center',padding:'32px',color:'var(--clr-text-3)'}}>
+                <tr><td colSpan={7} style={{textAlign:'center',padding:'32px',color:'var(--clr-text-3)'}}>
                   Проектів поки немає. Натисніть «Новий розрахунок»
                 </td></tr>
               ) : projects.map(p => {
@@ -137,12 +136,6 @@ export default function ProjectsPage({ onOpenProject }: Props) {
                       {p.object_address || '—'}
                     </td>
                     <td>{calcTypeInfo(p.settings?.calc_type)?.label || ROOF_TYPES.find(t => t.value === p.roof_type)?.label || '—'}</td>
-                    <td>
-                      {p.total_price
-                        ? <b>{p.total_price.toLocaleString('uk-UA', {maximumFractionDigits:0})} грн</b>
-                        : '—'
-                      }
-                    </td>
                     <td><span className={`badge ${statusClass}`}>{statusLabel}</span></td>
                     <td className="text-muted text-xs">{fmt(p.updated_at)}</td>
                     <td>

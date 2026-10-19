@@ -55,3 +55,24 @@ export function mirrorElement(pts: Point[], edgeTypes: EdgeType[], holes: Point[
   const newHoles = holes.map(h => h.map(m).reverse());
   return { pts: newPts, edgeTypes: newEdges, holes: newHoles };
 }
+
+// Внутрішні кути контуру. Для кожної вершини: кут у градусах і сектор усередині площини
+// (start — напрям у радіанах у світових координатах з віссю Y угору, sweep — розмах проти годинникової).
+export function interiorAngles(pts: Point[]): { deg: number; start: number; sweep: number }[] {
+  const n = pts.length;
+  if (n < 3) return [];
+  let area = 0;
+  for (let i = 0; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n]; area += a[0] * b[1] - b[0] * a[1]; }
+  const ccw = area > 0;
+  const TAU = Math.PI * 2;
+  return pts.map((v, i) => {
+    const p = pts[(i - 1 + n) % n], q = pts[(i + 1) % n];
+    const au = Math.atan2(p[1] - v[1], p[0] - v[0]);   // на попередню вершину
+    const aw = Math.atan2(q[1] - v[1], q[0] - v[0]);   // на наступну
+    const start = ccw ? aw : au;
+    const sweep = ((ccw ? au - aw : aw - au) % TAU + TAU) % TAU;
+    return { deg: sweep * 180 / Math.PI, start, sweep };
+  });
+}
+
+export const fmtAngle = (deg: number) => `${(Math.round(deg * 10) / 10).toString().replace('.', ',')}°`;

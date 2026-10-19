@@ -96,9 +96,10 @@ class ExcelGenerator
         $row = 8;
 
         // Заголовки колонок
-        $headers = ['№', 'Найменування', 'Од. вим.', 'К-сть', 'Ціна, грн', 'Сума, грн'];
-        $colW    = [6, 60, 12, 12, 16, 18];
-        $cols    = ['A','B','C','D','E','F'];
+        // Вартість не показуємо — лише кількість
+        $headers = ['№', 'Найменування', 'Од. вим.', 'К-сть'];
+        $colW    = [6, 70, 12, 14];
+        $cols    = ['A','B','C','D'];
 
         foreach ($headers as $i => $h) {
             $ws->setCellValue($cols[$i] . $row, $h);
@@ -115,82 +116,35 @@ class ExcelGenerator
         ];
 
         $num         = 1;
-        $grandTotal  = 0;
 
         foreach ($types as $type => $title) {
             $items = array_values(array_filter($this->specItems, fn($i) => $i['type'] === $type));
             if (!$items) continue;
 
             // Заголовок розділу
-            $ws->mergeCells("A{$row}:F{$row}");
+            $ws->mergeCells("A{$row}:D{$row}");
             $ws->setCellValue("A{$row}", $title);
             $ws->getStyle("A{$row}")->applyFromArray($sectionStyle);
             $ws->getRowDimension($row)->setRowHeight(18);
             $row++;
 
-            $sectionTotal = 0;
             foreach ($items as $item) {
                 $ws->setCellValue("A{$row}", $num++);
                 $ws->setCellValue("B{$row}", $item['name']);
                 $ws->setCellValue("C{$row}", $item['unit']);
                 $ws->setCellValue("D{$row}", $item['quantity']);
-                $ws->setCellValue("E{$row}", $item['price']);
-                $ws->setCellValue("F{$row}", $item['total']);
-
-                // Формула для суми
-                $ws->setCellValue("F{$row}", "=D{$row}*E{$row}");
-
-                // Числовий формат
-                $ws->getStyle("E{$row}:F{$row}")->getNumberFormat()
-                   ->setFormatCode('#,##0.00');
-                $ws->getStyle("D{$row}")->getNumberFormat()->setFormatCode('#,##0.000');
+                $ws->getStyle("D{$row}")->getNumberFormat()->setFormatCode('#,##0.###');
 
                 // Alternating rows
                 if ($num % 2 === 0) {
-                    $ws->getStyle("A{$row}:F{$row}")->getFill()
+                    $ws->getStyle("A{$row}:D{$row}")->getFill()
                        ->setFillType('solid')->getStartColor()->setRGB('F5F8F5');
                 }
 
-                $sectionTotal += (float)$item['total'];
-                $grandTotal   += (float)$item['total'];
                 $row++;
             }
-
-            // Підсумок розділу
-            $ws->setCellValue("E{$row}", 'Підсумок:');
-            $ws->setCellValue("F{$row}", $sectionTotal);
-            $ws->getStyle("E{$row}:F{$row}")->getFont()->setBold(true);
-            $ws->getStyle("F{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
-            $row += 2;
-        }
-
-        // Знижка
-        $discountPct = (float)($this->project['discount_pct'] ?? 0);
-        $discount    = $grandTotal * $discountPct / 100;
-        if ($discount > 0) {
-            $ws->setCellValue("E{$row}", "Знижка {$discountPct}%:");
-            $ws->setCellValue("F{$row}", -$discount);
-            $ws->getStyle("F{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
-            $ws->getStyle("E{$row}:F{$row}")->getFont()->setColor(
-                (new \PhpOffice\PhpSpreadsheet\Style\Color())->setRGB('C62828')
-            );
             $row++;
         }
-
-        // ПДВ
-        $vatPct   = (float)($this->project['vat_pct'] ?? 20);
-        $total    = $grandTotal - $discount;
-        $vatAmount = $total * $vatPct / (100 + $vatPct);
-        $ws->setCellValue("E{$row}", "у т.ч. ПДВ {$vatPct}%:");
-        $ws->setCellValue("F{$row}", $vatAmount);
-        $ws->getStyle("F{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
-        $row++;
-
-        // Загальна сума
-        $ws->setCellValue("E{$row}", 'ЗАГАЛЬНА СУМА:');
-        $ws->setCellValue("F{$row}", $total);
-        $ws->getStyle("E{$row}:F{$row}")->applyFromArray($totalStyle);
-        $ws->getStyle("F{$row}")->getNumberFormat()->setFormatCode('#,##0.00 "грн"');
     }
 
     // ============================================
@@ -264,11 +218,10 @@ class ExcelGenerator
 
     private function fallbackCsv(): string
     {
-        $lines = ["Найменування;Од.;К-сть;Ціна;Сума"];
+        $lines = ["Найменування;Од.;К-сть"];
         foreach ($this->specItems as $item) {
             $lines[] = implode(';', [
-                $item['name'], $item['unit'],
-                $item['quantity'], $item['price'], $item['total']
+                $item['name'], $item['unit'], $item['quantity']
             ]);
         }
         return implode("\n", $lines);
