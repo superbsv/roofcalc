@@ -285,15 +285,35 @@ class SheetLayoutEngine
         if ($this->mode === 'stock3')   { $max = $maxLower = $this->stockMax(); }
         if ($this->mode === 'sheetcut') { $max = $maxLower = $this->lmax; }
 
+        // Висота ряду: якщо скат не вкривається одним листом, ряди ділимо порівну за найвищою колонкою,
+        // щоб стики листів ішли однією горизонталлю посередині (а не довгий лист + короткий обрізок).
+        $rowLen = $maxLower;
+        if ($this->mode !== 'sheetcut') {
+            $maxNeed = 0;
+            foreach ($columns as $col) if ($col['need'] > $max) $maxNeed = max($maxNeed, $col['need']);
+            if ($maxNeed > 0 && $maxLower > $this->pz) {
+                $rows = (int)ceil(($maxNeed - $this->pz) / ($maxLower - $this->pz));
+                $even = (int)ceil(($maxNeed + ($rows - 1) * $this->pz) / $rows);
+                if ($this->wave > 0) {
+                    // стандартна довжина: хвиля × n + ПЗ — малюнок черепиці суміщається
+                    $even = (int)(ceil(($even - $this->pz) / $this->wave) * $this->wave + $this->pz);
+                    if ($even > $maxLower) $even = $maxLower;
+                } else {
+                    $even = $this->fit($even, $maxLower);
+                }
+                $rowLen = max($this->lmin, min($maxLower, $even));
+            }
+        }
+
         $out = [];
         $multi = false;
         foreach ($columns as $col) {
             $left = $col['need'];
             $lens = [];
-            // Нижні ряди — стандартна довжина; коньковий ряд — до реальної максимальної (КП 13.3)
+            // Нижні ряди — однакова висота ряду; коньковий ряд — залишок до реальної максимальної (КП 13.3)
             for ($i = 0; $i < 50 && $left > $max; $i++) {
-                $lens[] = $maxLower;
-                $left -= ($maxLower - $this->pz);
+                $lens[] = $rowLen;
+                $left -= ($rowLen - $this->pz);
                 $multi = true;
             }
             if ($left > 0) {
@@ -303,7 +323,7 @@ class SheetLayoutEngine
             $out[] = $lens;
         }
         if ($multi) {
-            $this->warnings[] = sprintf('Скат довший за максимальну довжину листа — укладка в кілька рядів: нижні ряди %d мм, нахлест %d мм', $maxLower, $this->pz);
+            $this->warnings[] = sprintf('Скат довший за максимальну довжину листа — укладка в кілька рядів: висота нижніх рядів %d мм, нахлест %d мм', $rowLen, $this->pz);
         }
         return $out;
     }
