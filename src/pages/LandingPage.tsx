@@ -33,32 +33,55 @@ const FAQ: [string, string][] = [
 
 const STEPS = ['Замовлення', 'Матеріал', 'Скати', 'Укладка', 'Специфікація'];
 
+// Ілюстрація — справжній розрахунок: трапеція 8.8 × 4.0 м (верх 3.0), металочерепиця 1180/1100,
+// хвиля 350, ПЗ 150, К 50, укладка справа наліво. Дані — з движка SheetLayoutEngine.
+const HERO_POLY: [number, number][] = [[0, 0], [8800, 0], [5900, 4000], [2900, 4000]];
+const HERO_SHEETS: [number, number, number][] = [
+  [7700, -50, 1570], [6600, -50, 3090], [5500, -50, 4050], [4400, -50, 4050],
+  [3300, -50, 4050], [2200, -50, 4050], [1100, -50, 3090], [0, -50, 1570],
+];
+const HERO_SIDES: { k: string; v: string; i: number }[] = [
+  { k: 'a', v: '4.941', i: 3 }, { k: 'b', v: '3.000', i: 2 }, { k: 'c', v: '4.941', i: 1 }, { k: 'd', v: '8.800', i: 0 },
+];
+
 function HeroScheme() {
-  // Ілюстрація: трапецієподібний скат, листи двома рядами з лінією стику
-  const cols = [0, 1, 2, 3, 4, 5, 6, 7];
+  const K = 0.052, OX = 30, OY = 296;
+  const X = (x: number) => OX + x * K, Y = (y: number) => OY - y * K;
+  const lap = 80; // повна ширина − корисна: нахлест у бік укладки (вліво)
+  const full = (x: number) => x >= 3300 && x <= 4400; // листи без підрізки
+  const poly = HERO_POLY.map(([x, y]) => `${X(x)},${Y(y)}`).join(' ');
+  const cx = HERO_POLY.reduce((s, p) => s + p[0], 0) / 4, cy = HERO_POLY.reduce((s, p) => s + p[1], 0) / 4;
   return (
-    <svg className="land-scheme" viewBox="0 0 520 340" role="img" aria-label="Приклад схеми укладки листів на скаті">
+    <svg className="land-scheme" viewBox="0 0 520 340" role="img" aria-label="Приклад розрахунку: трапецієподібний скат, 8 листів металочерепиці з довжинами">
       <defs>
-        <pattern id="land-grid" width="13" height="13" patternUnits="userSpaceOnUse">
-          <path d="M13 0H0V13" fill="none" stroke="currentColor" strokeOpacity=".08" strokeWidth="1" />
+        <pattern id="land-grid" width="5.2" height="5.2" patternUnits="userSpaceOnUse" x={OX} y={OY}>
+          <path d="M5.2 0H0V5.2" fill="none" stroke="currentColor" strokeOpacity=".05" strokeWidth=".6" />
+        </pattern>
+        <pattern id="land-grid-m" width="52" height="52" patternUnits="userSpaceOnUse" x={OX} y={OY}>
+          <path d="M52 0H0V52" fill="none" stroke="currentColor" strokeOpacity=".12" strokeWidth=".8" />
         </pattern>
       </defs>
       <rect x="0" y="0" width="520" height="340" fill="url(#land-grid)" />
-      {cols.map(c => {
-        const x = 40 + c * 55;
-        const cut = c === 0 || c === 7;
-        const top = c < 2 ? 150 + (1 - c) * 50 : c > 5 ? 150 + (c - 6) * 50 : 60;
+      <rect x="0" y="0" width="520" height="340" fill="url(#land-grid-m)" />
+      {HERO_SHEETS.map(([x, y, len], n) => (
+        <g key={n}>
+          <rect x={X(x - lap)} y={Y(y + len)} width={(1100 + lap) * K} height={len * K} className={full(x) ? 'land-sheet full' : 'land-sheet'} />
+          <text x={X(x + 550)} y={Y(y + len / 2) + 4} textAnchor="middle" className="land-len">{(len / 1000).toFixed(3)}</text>
+          <text x={X(x + 550)} y={Y(y + len / 2) + 17} textAnchor="middle" className="land-no">№{n + 1}</text>
+        </g>
+      ))}
+      <polygon points={poly} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
+      {HERO_SIDES.map(sd => {
+        const p = HERO_POLY[sd.i], q = HERO_POLY[(sd.i + 1) % 4];
+        const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+        const dx = mx - cx, dy = my - cy, d = Math.hypot(dx, dy) || 1;
+        const lx = X(mx) + (dx / d) * 22, ly = Y(my) - (dy / d) * 22;
         return (
-          <g key={c}>
-            <rect x={x} y={top} width="56" height={170 - top} className={cut ? 'land-sheet waste' : 'land-sheet'} />
-            <rect x={x} y="170" width="56" height="130" className={cut ? 'land-sheet waste' : 'land-sheet full'} />
-          </g>
+          <text key={sd.k} x={lx} y={ly + 4} textAnchor="middle" className="land-side">
+            <tspan className="land-side-k">{sd.k}</tspan> = {sd.v}
+          </text>
         );
       })}
-      <polygon points="40,300 480,300 370,64 150,64" fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
-      <line x1="28" y1="170" x2="492" y2="170" stroke="var(--clr-brand)" strokeWidth="3" strokeDasharray="10 6" />
-      <rect x="402" y="157" width="88" height="26" rx="4" fill="var(--clr-brand)" />
-      <text x="446" y="175" textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--clr-on-brand)">2.350 м</text>
     </svg>
   );
 }
