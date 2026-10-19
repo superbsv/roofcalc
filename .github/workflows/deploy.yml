@@ -32,3 +32,36 @@ jobs:
           exclude: |
             **/.git*
             **/.git*/**
+
+      # Бекенд (PHP): код і маршрутизатор API. .env і vendor/ на сервері не чіпаємо.
+      - name: Deploy backend src
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          protocol: ftps
+          port: 21
+          local-dir: ./backend/src/
+          server-dir: /artbudtrading.com.ua/www/calculator/src/
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.env
+            config/.env
+      - name: Deploy backend api
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          protocol: ftps
+          port: 21
+          local-dir: ./backend/api/
+          server-dir: /artbudtrading.com.ua/www/calculator/api/
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.env

@@ -121,6 +121,7 @@ class ProjectsController
         foreach ($slopes as &$slope) {
             $slope = \RoofCalc\Api\Slopes\SlopesController::decodeSlope($slope);
         }
+        unset($slope);
 
         $this->json([
             'project' => $project,

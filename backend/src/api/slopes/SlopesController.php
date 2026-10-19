@@ -22,6 +22,8 @@ class SlopesController
     public function __construct()
     {
         Database::ensureColumn('slopes', 'edge_types', 'TEXT NULL');
+        // Елемент покрівлі (скат) або фасад — як у провіднику «Кровля Профи»
+        Database::ensureColumn('slopes', 'element_kind', "VARCHAR(16) NOT NULL DEFAULT 'roof'");
     }
 
     // Розпаковка JSON-полів ската для відповіді API
@@ -103,8 +105,8 @@ class SlopesController
         $id = Database::insert(
             'INSERT INTO slopes (project_id, name, sort_order, polygon_points, holes,
              slope_angle, eave_side, ridge_side, laying_direction, eave_overhang, ridge_gap,
-             material_profile_id, material_color, material_coating, material_thickness, edge_types)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+             material_profile_id, material_color, material_coating, material_thickness, edge_types, element_kind)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             [
                 $projectId,
                 $body['name']          ?? 'Скат ' . ($maxOrder + 1),
@@ -122,6 +124,7 @@ class SlopesController
                 $body['material_coating']    ?? null,
                 $body['material_thickness']  ?? null,
                 json_encode(self::cleanEdgeTypes($body['edge_types'] ?? [])),
+                (($body['element_kind'] ?? 'roof') === 'facade') ? 'facade' : 'roof',
             ]
         );
 
@@ -140,7 +143,7 @@ class SlopesController
         $fields = [];
         $params = [];
 
-        $allowed = ['name','polygon_points','holes','edge_types','slope_angle','eave_side','ridge_side',
+        $allowed = ['name','polygon_points','holes','edge_types','element_kind','slope_angle','eave_side','ridge_side',
                     'laying_direction','eave_overhang','ridge_gap',
                     'material_profile_id','material_color','material_coating','material_thickness'];
 
@@ -152,6 +155,9 @@ class SlopesController
             } elseif ($f === 'edge_types') {
                 $fields[] = "$f = ?";
                 $params[] = json_encode(self::cleanEdgeTypes($body[$f]));
+            } elseif ($f === 'element_kind') {
+                $fields[] = "$f = ?";
+                $params[] = $body[$f] === 'facade' ? 'facade' : 'roof';
             } elseif ($f === 'polygon_points') {
                 $fields[] = "$f = ?";
                 $params[] = json_encode($body[$f]);

@@ -1,7 +1,7 @@
 Options -Indexes
 Options -MultiViews
 
-AddHandler application/x-httpd-php74lts .php
+# Версія PHP задається в панелі ADM.TOOLS (потрібна 8.1+ для TCPDF/PhpSpreadsheet з vendor/)
 
 RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f

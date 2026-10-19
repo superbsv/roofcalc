@@ -5,7 +5,8 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useTheme, Theme } from '../theme/theme';
-import { Point, Slope, SheetPlacement, CalcResult } from '../../api/client';
+import { Point, Slope, SheetPlacement, CalcResult, EdgeType } from '../../api/client';
+import { edgeColor } from '../roof/edges';
 
 interface Props {
   slope: Slope | null;
@@ -13,6 +14,8 @@ interface Props {
   onPolygonChange: (points: Point[]) => void;
   readOnly?: boolean;
   gridScale?: number;
+  edgeTypes?: EdgeType[];   // підсвітка ребер за типом
+  holes?: Point[][];        // вирізи, мм
 }
 
 // Палітри полотна ABT для темної і світлої теми (canvas не читає CSS-змінні, тому hex)
@@ -135,7 +138,7 @@ const ICON_SVG: Record<string, string> = {
 // Точність прив'язки — 1мм
 const SNAP_PRECISION = 0.001;
 
-export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOnly, gridScale = 1 }: Props) {
+export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOnly, gridScale = 1, edgeTypes, holes }: Props) {
   const theme  = useTheme();
   const COLORS = PALETTES[theme];
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -183,10 +186,12 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     drawGrid(ctx, W, H);
     if (showLayout && calcResult?.placements) drawLayout(ctx, calcResult.placements);
     drawPolygon(ctx, H);
+    drawHoles(ctx, H);
+    drawEdgeTypes(ctx, H);
     drawPoints(ctx, H);
     if (mode === 'draw' && !closed) drawCursorInfo(ctx, H);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, closed, mouse, scale, offset, mode, showLayout, calcResult, hoverIdx, dragIdx, theme]);
+  }, [points, closed, mouse, scale, offset, mode, showLayout, calcResult, hoverIdx, dragIdx, theme, edgeTypes, holes]);
 
   useEffect(() => { render(); }, [render]);
 
@@ -299,7 +304,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
 
     // Підписи довжин сторін
     if (closed) {
-      ctx.font = '11px Inter, system-ui, sans-serif';
+      ctx.font = '11px "Noto Sans", system-ui, sans-serif';
       ctx.fillStyle = COLORS.dim;
       for (let i = 0; i < points.length; i++) {
         const a = points[i], b = points[(i + 1) % points.length];
@@ -311,13 +316,55 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     ctx.restore();
   }
 
+  // Ребра, пофарбовані за типом (карниз, конек, хребет…)
+  function drawEdgeTypes(ctx: CanvasRenderingContext2D, H: number) {
+    if (!closed || !edgeTypes || edgeTypes.length !== points.length) return;
+    ctx.save();
+    ctx.lineWidth = 5; ctx.lineCap = 'round';
+    for (let i = 0; i < points.length; i++) {
+      const t = edgeTypes[i];
+      if (t === 'none') continue;
+      const a = points[i], b = points[(i + 1) % points.length];
+      const [ax, ay] = w2s(a[0], a[1], H);
+      const [bx, by] = w2s(b[0], b[1], H);
+      ctx.strokeStyle = edgeColor(t, theme);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Вирізи (труби, вікна) — штрихова рамка
+  function drawHoles(ctx: CanvasRenderingContext2D, H: number) {
+    if (!holes?.length) return;
+    ctx.save();
+    holes.forEach((h, hi) => {
+      if (h.length < 3) return;
+      ctx.beginPath();
+      h.forEach(([x, y], i) => {
+        const [sx, sy] = w2s(x / 1000, y / 1000, H);
+        if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+      });
+      ctx.closePath();
+      ctx.fillStyle = theme === 'dark' ? '#111111' : '#FAFAF8';
+      ctx.fill();
+      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = COLORS.polygon; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.setLineDash([]);
+      const [lx, ly] = w2s(h[0][0] / 1000, h[0][1] / 1000, H);
+      ctx.font = '10px "Noto Sans", system-ui, sans-serif';
+      ctx.fillStyle = COLORS.label;
+      ctx.fillText(`Виріз ${hi + 1}`, lx + 4, ly - 4);
+    });
+    ctx.restore();
+  }
+
   // Підсвічування координат та довжини поточного відрізка
   function drawCursorInfo(ctx: CanvasRenderingContext2D, H: number) {
     const [wx, wy] = s2w(mouse[0], mouse[1], H);
     const mx = mouse[0], my = mouse[1];
 
     ctx.save();
-    ctx.font = '11px Inter, system-ui, sans-serif';
+    ctx.font = '11px "Noto Sans", system-ui, sans-serif';
 
     // Перехрестя на курсорі
     ctx.strokeStyle = 'rgba(255,122,0,0.6)';
@@ -387,7 +434,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       ctx.strokeStyle = COLORS.pointStroke; ctx.lineWidth = 1.5; ctx.stroke();
       // Координати активної точки
       if (isActive) {
-        ctx.font = '11px Inter, system-ui, sans-serif';
+        ctx.font = '11px "Noto Sans", system-ui, sans-serif';
         ctx.fillStyle = COLORS.dim;
         const label = `(${p[0].toFixed(3)}; ${p[1].toFixed(3)})`;
         ctx.fillText(label, sx + 12, sy - 8);

@@ -103,8 +103,12 @@ export interface Slope {
   material_profile_id?: number; material_name?: string; material_type?: string;
   material_color?: string; material_coating?: string; material_thickness?: number;
   calc_result?: CalcResult; calc_at?: string;
+  edge_types?: EdgeType[];            // тип кожного ребра (сторона i → i+1)
+  element_kind?: 'roof' | 'facade';   // скат покрівлі або фасад
   created_at: string; updated_at: string;
 }
+
+export type EdgeType = 'eave' | 'ridge' | 'hip' | 'valley' | 'end' | 'abutment' | 'none';
 
 export interface CalcResult {
   profile_name: string; slope_area_m2: number;
@@ -119,6 +123,7 @@ export interface CalcResult {
   warnings: string[]; errors: string[];
   sheet_full_width?: number;
   sheet_useful_width?: number;
+  holes_area_m2?: number;
 }
 
 export interface SheetGroup {
@@ -136,6 +141,8 @@ export interface AccessoryResult {
   items: AccessoryItem[];
   eave_length_m: number; ridge_length_m: number;
   end_length_m: number; valley_length_m: number;
+  hip_length_m?: number; abutment_length_m?: number;
+  edges_by_type?: boolean;
   slope_area_m2: number;
 }
 

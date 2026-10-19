@@ -88,6 +88,13 @@ try {
         case $method==='GET' &&$uri==='/admin/settings':       (new AdminController)->settings(); break;
         case $method==='PUT' &&$uri==='/admin/settings':       (new AdminController)->updateSettings(); break;
        case $uri==='/debug-calc':
+    // Діагностика — лише для адміністратора
+    $dbgUser = Auth::currentUser();
+    if (!$dbgUser || ($dbgUser['role'] ?? '') !== 'admin') {
+        http_response_code(403);
+        echo json_encode(['error' => 'Доступ заборонено'], JSON_UNESCAPED_UNICODE);
+        break;
+    }
     $slope_id = (int)($_GET['id'] ?? 0);
     $pdo = new PDO(
         'mysql:host=' . $cfg['db']['host'] . ';dbname=' . $cfg['db']['name'] . ';charset=utf8mb4',
