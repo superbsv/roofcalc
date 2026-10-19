@@ -36,13 +36,20 @@ interface Material {
   max_length: number;
   cut_step?: number;
   forbidden_lengths?: number[][];
-  stock_lengths?: number[];
+  stock_lengths?: any[];
+  round_step?: number | null;
+  max_std_length?: number | null;
   lock_type?: string;
   min_joint_distance?: number;
   join_overlap?: number;
   min_slope_angle?: number;
   is_active: boolean;
   sort_order: number;
+}
+
+function stockToText(raw: any[] | undefined): string {
+  return (raw || []).map(r => Array.isArray(r) ? (r[1] == null ? `${r[0]}` : `${r[0]}:${r[1]}`)
+    : typeof r === 'object' && r ? (r.qty == null ? `${r.length}` : `${r.length}:${r.qty}`) : String(r)).join(', ');
 }
 
 const EMPTY: Omit<Material, 'id'> = {
@@ -158,7 +165,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
     setIsNew(false);
     setForm({ ...m });
     setForbiddenInput(JSON.stringify(m.forbidden_lengths || []));
-    setStockInput((m.stock_lengths || []).join(', '));
+    setStockInput(stockToText(m.stock_lengths));
     setError(''); setSuccess('');
   };
 
@@ -171,8 +178,12 @@ export default function ProductsPage({ category }: { category?: Category }) {
     setError(''); setSuccess('');
   };
 
-  const parseNumberArray = (val: string): number[] =>
-    val.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n) && n > 0);
+  // Склад як у КП: «довжина:наявність», напр. «2250:40, 3650:12, 4500» (без кількості — необмежено)
+  const parseStock = (val: string): [number, number | null][] =>
+    val.split(/[,;\n]+/).map(x => x.trim()).filter(Boolean).map(x => {
+      const [l, q] = x.split(/[:x×*]/).map(v => v.trim());
+      return [Number(l), q === undefined || q === '' ? null : Number(q)] as [number, number | null];
+    }).filter(([l, q]) => l > 0 && (q === null || q >= 0)).slice(0, 10);
 
   const save = async () => {
     setLoading(true); setError(''); setSuccess('');
@@ -180,7 +191,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
       const payload = {
         ...form,
         forbidden_lengths: JSON.parse(forbiddenInput || '[]'),
-        stock_lengths: parseNumberArray(stockInput),
+        stock_lengths: parseStock(stockInput),
       };
       if (isNew) {
         await api('POST', '/admin/materials', payload);
@@ -346,14 +357,20 @@ export default function ProductsPage({ category }: { category?: Category }) {
                 <Field label="Максимальна довжина, мм">
                   <input type="number" className="form-control" value={form.max_length} onChange={e => f('max_length', Number(e.target.value))} />
                 </Field>
-                <Field label="Крок різання (округлення), мм">
-                  <input type="number" className="form-control" value={form.cut_step || ''} onChange={e => f('cut_step', Number(e.target.value))} />
+                <Field label="Величина округлення, мм">
+                  <input type="number" className="form-control" value={form.round_step ?? form.cut_step ?? ''} onChange={e => f('round_step', Number(e.target.value))} />
+                  <div style={{ fontSize:'.75rem', color:'var(--clr-text-3)', marginTop:'4px' }}>КП рекомендує 10 мм (0.010 м)</div>
                 </Field>
+                {cat === 'tile' && (
+                  <Field label="Lmax стандартна, мм">
+                    <input type="number" className="form-control" value={form.max_std_length ?? ''} placeholder="авто: хвиля×n+ПЗ" onChange={e => f('max_std_length', e.target.value === '' ? null : Number(e.target.value))} />
+                  </Field>
+                )}
               </Row>
               <Row>
-                <Field label="Складські довжини, мм (через кому)" style={{ flex:2 }}>
-                  <input className="form-control" value={stockInput} onChange={e => setStockInput(e.target.value)} placeholder="Н-р: 2000, 3000, 4000, 5000, 6000" />
-                  <div style={{ fontSize:'.75rem', color:'var(--clr-text-3)', marginTop:'4px' }}>Якщо порожньо — довжина розраховується автоматично</div>
+                <Field label="Склад: довжина:наявність, мм:шт (до 10 позицій)" style={{ flex:2 }}>
+                  <input className="form-control" value={stockInput} onChange={e => setStockInput(e.target.value)} placeholder="Н-р: 1200:40, 2250:40, 3650:12, 4500:10" />
+                  <div style={{ fontSize:'.75rem', color:'var(--clr-text-3)', marginTop:'4px' }}>Порожньо — лише «на замовлення». Без «:кількості» — наявність не обмежена.</div>
                 </Field>
               </Row>
               <Row>

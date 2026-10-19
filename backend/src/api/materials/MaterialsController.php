@@ -33,6 +33,16 @@ class MaterialsController
         $this->json(['profiles' => $this->decode($profiles)]);
     }
 
+    // GET /api/accessories — перелік доборних елементів (вікно матеріалу, права частина як у КП)
+    public function accessories(): void
+    {
+        $rows = Database::fetchAll(
+            'SELECT id, code, name_uk AS name, unit, working_length, default_overlap, price, calc_rule
+             FROM accessory_types WHERE is_active = 1 ORDER BY id'
+        );
+        $this->json(['accessories' => $rows]);
+    }
+
     // GET /api/materials/{id}
     public function show(int $id): void
     {

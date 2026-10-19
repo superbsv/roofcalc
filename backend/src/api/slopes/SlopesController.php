@@ -93,6 +93,14 @@ class SlopesController
         $this->json(['slopes' => $slopes]);
     }
 
+    // Режим розрахунку КП: order | stock1 | stock2 | stock3 (старе 'stock' = stock2)
+    public static function cleanMode($m): string
+    {
+        $m = (string)$m;
+        if ($m === 'stock') return 'stock2';
+        return in_array($m, ['order', 'stock1', 'stock2', 'stock3'], true) ? $m : 'order';
+    }
+
     // POST /api/projects/{projectId}/slopes
     public function create(int $projectId): void
     {
@@ -110,8 +118,8 @@ class SlopesController
         $id = Database::insert(
             'INSERT INTO slopes (project_id, name, sort_order, polygon_points, holes,
              slope_angle, eave_side, ridge_side, laying_direction, eave_overhang, ridge_gap,
-             material_profile_id, material_color, material_coating, material_thickness, edge_types, element_kind)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+             material_profile_id, material_color, material_coating, material_thickness, edge_types, element_kind, calc_mode)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             [
                 $projectId,
                 $body['name']          ?? 'Скат ' . ($maxOrder + 1),
@@ -130,6 +138,7 @@ class SlopesController
                 $body['material_thickness']  ?? null,
                 json_encode(self::cleanEdgeTypes($body['edge_types'] ?? [])),
                 (($body['element_kind'] ?? 'roof') === 'facade') ? 'facade' : 'roof',
+                self::cleanMode($body['calc_mode'] ?? 'order'),
             ]
         );
 
@@ -149,7 +158,7 @@ class SlopesController
         $params = [];
 
         $allowed = ['name','polygon_points','holes','edge_types','element_kind','calc_mode','slope_angle','eave_side','ridge_side',
-                    'laying_direction','eave_overhang','ridge_gap',
+                    'laying_direction','eave_overhang','ridge_gap','sort_order',
                     'material_profile_id','material_color','material_coating','material_thickness'];
 
         foreach ($allowed as $f) {
@@ -162,7 +171,7 @@ class SlopesController
                 $params[] = json_encode(self::cleanEdgeTypes($body[$f]));
             } elseif ($f === 'calc_mode') {
                 $fields[] = "$f = ?";
-                $params[] = $body[$f] === 'stock' ? 'stock' : 'order';
+                $params[] = self::cleanMode($body[$f]);
             } elseif ($f === 'element_kind') {
                 $fields[] = "$f = ?";
                 $params[] = $body[$f] === 'facade' ? 'facade' : 'roof';
@@ -178,8 +187,11 @@ class SlopesController
         if (!$fields) $this->error('Немає полів для оновлення', 400);
 
         // Скидаємо кешований результат при зміні геометрії або матеріалу
-        $fields[] = 'calc_result = NULL';
-        $fields[] = 'calc_at = NULL';
+        // (назва, порядок і кут нахилу — «лише для специфікації» — укладку не змінюють)
+        if (array_diff(array_keys(array_intersect_key($body, array_flip($allowed))), ['name', 'sort_order', 'slope_angle'])) {
+            $fields[] = 'calc_result = NULL';
+            $fields[] = 'calc_at = NULL';
+        }
 
         $params[] = $id;
         Database::query('UPDATE slopes SET ' . implode(', ', $fields) . ' WHERE id = ?', $params);
@@ -255,7 +267,10 @@ class SlopesController
             'min_slope_angle'    => $slope['min_slope_angle'],
             'price_per_m2'       => $slope['price_per_m2'],
         ];
-        $mode = (($slope['calc_mode'] ?? 'order') === 'stock') ? 'stock' : 'order';
+        $profile['round_step']     = $slope['round_step'] ?? null;
+        $profile['max_std_length'] = $slope['max_std_length'] ?? null;
+        $profile['type']           = $slope['type'];
+        $mode = self::cleanMode($slope['calc_mode'] ?? 'order');
 
         switch ($slope['type']) {
             // Листові та штучні матеріали — єдиний движок укладки (режими як у «Кровля Профи»)

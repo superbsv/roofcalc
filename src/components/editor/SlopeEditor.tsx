@@ -4,6 +4,7 @@
 // ============================================
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { TEMPLATES, buildTemplate, templateIconPoints, sideLetter } from '../roof/templates';
 import { useTheme, Theme } from '../theme/theme';
 import { Point, Slope, SheetPlacement, CalcResult, EdgeType } from '../../api/client';
 import { edgeColor } from '../roof/edges';
@@ -16,6 +17,7 @@ interface Props {
   gridScale?: number;
   edgeTypes?: EdgeType[];   // підсвітка ребер за типом
   holes?: Point[][];        // вирізи, мм
+  bare?: boolean;           // без власних бічних панелей (вікно ската КП)
 }
 
 // Палітри полотна ABT для темної і світлої теми (canvas не читає CSS-змінні, тому hex)
@@ -41,104 +43,10 @@ const PALETTES: Record<Theme, Palette> = {
   },
 };
 
-interface TplParam { key: string; label: string; default: number; }
-interface Template {
-  name: string;
-  icon: string;
-  params: TplParam[];
-  build: (p: Record<string, number>) => Point[];
-}
-
-const TEMPLATES: Template[] = [
-  {
-    name: 'Прямокутник', icon: 'rect',
-    params: [
-      { key:'a', label:'a — ширина, м',  default: 6 },
-      { key:'h', label:'h — висота, м',  default: 4 },
-    ],
-    build: ({a,h}) => [[0,0],[a,0],[a,h],[0,h]],
-  },
-  {
-    name: 'Трапеція', icon: 'trap',
-    params: [
-      { key:'a',  label:'a — нижня основа, м', default: 6 },
-      { key:'c',  label:'c — верхня основа, м', default: 4 },
-      { key:'h',  label:'h — висота, м',        default: 4 },
-      { key:'a1', label:'a1 — зміщення, м',     default: 1 },
-    ],
-    build: ({a,c,h,a1}) => [[0,0],[a,0],[a1+c,h],[a1,h]],
-  },
-  {
-    name: 'Прав. трикутник', icon: 'rtri',
-    params: [
-      { key:'a', label:'a — основа, м', default: 6 },
-      { key:'h', label:'h — висота, м', default: 4 },
-    ],
-    build: ({a,h}) => [[0,0],[a,0],[0,h]],
-  },
-  {
-    name: 'Рівнобедр. трикутник', icon: 'itri',
-    params: [
-      { key:'a', label:'a — основа, м', default: 6 },
-      { key:'h', label:'h — висота, м', default: 4 },
-    ],
-    build: ({a,h}) => [[0,0],[a,0],[a/2,h]],
-  },
-  {
-    name: 'Паралелограм', icon: 'para',
-    params: [
-      { key:'a',  label:'a — основа, м',    default: 6 },
-      { key:'h',  label:'h — висота, м',    default: 4 },
-      { key:'a1', label:'a1 — зміщення, м', default: 1 },
-    ],
-    build: ({a,h,a1}) => [[0,0],[a,0],[a+a1,h],[a1,h]],
-  },
-  {
-    name: 'Пятикутник', icon: 'pent',
-    params: [
-      { key:'a',  label:'a — ширина, м',        default: 6 },
-      { key:'h',  label:'h — повна висота, м',  default: 4 },
-      { key:'h1', label:'h1 — висота зрізу, м', default: 1 },
-    ],
-    build: ({a,h,h1}) => [[0,0],[a,0],[a,h-h1],[a/2,h],[0,h-h1]],
-  },
-  {
-    name: 'Г-подібний', icon: 'lshp',
-    params: [
-      { key:'a', label:'a — повна ширина, м', default: 6 },
-      { key:'b', label:'b — повна висота, м', default: 4 },
-      { key:'c', label:'c — виріз ширина, м', default: 2 },
-      { key:'d', label:'d — виріз висота, м', default: 2 },
-    ],
-    build: ({a,b,c,d}) => [[0,0],[a,0],[a,d],[a-c,d],[a-c,b],[0,b]],
-  },
-  {
-    name: 'Ступінчатий', icon: 'step',
-    params: [
-      { key:'a', label:'a — повна ширина, м',   default: 6 },
-      { key:'b', label:'b — повна висота, м',   default: 4 },
-      { key:'c', label:'c — ступінь ширина, м', default: 3 },
-      { key:'d', label:'d — ступінь висота, м', default: 2 },
-    ],
-    build: ({a,b,c,d}) => [[0,0],[c,0],[c,d],[a,d],[a,b],[0,b]],
-  },
-];
-
-const ICON_SVG: Record<string, string> = {
-  rect: '<rect x="3" y="4" width="36" height="22" fill="none" stroke="currentColor" stroke-width="1.5"/>',
-  trap: '<polygon points="6,24 36,24 31,4 11,4" fill="none" stroke="currentColor" stroke-width="1.5"/>',
-  rtri: '<polygon points="4,24 36,24 4,4" fill="none" stroke="currentColor" stroke-width="1.5"/>',
-  itri: '<polygon points="4,24 36,24 20,4" fill="none" stroke="currentColor" stroke-width="1.5"/>',
-  para: '<polygon points="10,24 38,24 30,4 2,4" fill="none" stroke="currentColor" stroke-width="1.5"/>',
-  pent: '<polygon points="3,24 37,24 37,12 20,4 3,12" fill="none" stroke="currentColor" stroke-width="1.5"/>',
-  lshp: '<polyline points="3,24 3,4 22,4 22,14 37,14 37,24 3,24" fill="none" stroke="currentColor" stroke-width="1.5"/>',
-  step: '<polyline points="3,24 3,4 18,4 18,13 37,13 37,24 3,24" fill="none" stroke="currentColor" stroke-width="1.5"/>',
-};
-
 // Точність прив'язки — 1мм
 const SNAP_PRECISION = 0.001;
 
-export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOnly, gridScale = 1, edgeTypes, holes }: Props) {
+export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOnly, gridScale = 1, edgeTypes, holes, bare }: Props) {
   const theme  = useTheme();
   const COLORS = PALETTES[theme];
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -310,7 +218,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
         const a = points[i], b = points[(i + 1) % points.length];
         const len = Math.sqrt((b[0]-a[0])**2 + (b[1]-a[1])**2);
         const [mx, my] = w2s((a[0]+b[0])/2, (a[1]+b[1])/2, H);
-        ctx.fillText(len.toFixed(3) + 'м', mx + 4, my - 4);
+        ctx.fillText(`${sideLetter(i)} = ${len.toFixed(3)}`, mx + 4, my - 4);
       }
     }
     ctx.restore();
@@ -611,9 +519,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
 
   function applyTemplate() {
     const tpl = TEMPLATES[tplIdx];
-    const nums: Record<string,number> = {};
-    tpl.params.forEach(p => { nums[p.key] = parseFloat(tplValues[p.key]) || p.default; });
-    const pts = tpl.build(nums) as Point[];
+    const pts = buildTemplate(tpl, tplValues);
     setActiveTemplate(tplIdx);
     setPoints(pts);
     setClosed(true);
@@ -635,9 +541,9 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   const coordsText = `X: ${curWx.toFixed(3)} м  Y: ${curWy.toFixed(3)} м`;
 
   return (
-    <div className="editor-wrap">
+    <div className={`editor-wrap${bare ? ' editor-bare' : ''}`}>
       {/* Sidebar */}
-      <div className="editor-sidebar">
+      {!bare && <div className="editor-sidebar">
         <div style={{padding:'8px 12px 4px',fontSize:'.65rem',fontWeight:600,color:'var(--clr-text-3)',textTransform:'uppercase',letterSpacing:'.5px'}}>
           Шаблони
         </div>
@@ -650,7 +556,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
               title={tpl.name}
             >
               <svg viewBox="0 0 42 30" style={{color:'var(--clr-brand)'}}>
-                <g dangerouslySetInnerHTML={{__html: ICON_SVG[tpl.icon]}} />
+                <polygon points={templateIconPoints(tpl, 42, 30)} fill="none" stroke="currentColor" strokeWidth="1.5" />
               </svg>
               <span>{tpl.name}</span>
             </button>
@@ -683,7 +589,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
           Ctrl+Z — відмінити<br/>
           Esc — скинути
         </div>
-      </div>
+      </div>}
 
       {/* Canvas */}
       <div className="editor-canvas-wrap" ref={wrapRef}>
@@ -719,7 +625,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       </div>
 
       {/* Right panel */}
-      <div className="editor-panel">
+      {!bare && <div className="editor-panel">
         {closed && points.length >= 3 && (
           <div>
             <div style={{fontSize:'.72rem',fontWeight:600,color:'var(--clr-text-3)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'8px'}}>
@@ -799,7 +705,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
             Оберіть шаблон зліва або намалюйте скат клацаючи мишею. Замкніть контур правою кнопкою або Enter.
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Модальне вікно шаблону */}
       {tplModal && (
@@ -810,7 +716,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
 
             <div style={{textAlign:'center',marginBottom:'16px',background:'var(--clr-canvas)',borderRadius:'8px',padding:'12px'}}>
               <svg viewBox="0 0 42 30" width="120" height="86" style={{color:'var(--clr-brand)'}}>
-                <g dangerouslySetInnerHTML={{__html: ICON_SVG[TEMPLATES[tplIdx].icon]}} />
+                <polygon points={templateIconPoints(TEMPLATES[tplIdx], 42, 30)} fill="none" stroke="currentColor" strokeWidth="1.5" />
               </svg>
             </div>
 

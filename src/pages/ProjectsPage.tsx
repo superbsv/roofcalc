@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Project, projectsApi } from '../api/client';
+import { calcTypeInfo } from '../components/roof/calcTypes';
 
 interface Props { onOpenProject: (id: number) => void; }
 
@@ -29,13 +30,7 @@ export default function ProjectsPage({ onOpenProject }: Props) {
   const [search,   setSearch]   = useState('');
   const [loading,  setLoading]  = useState(true);
   const [creating, setCreating] = useState(false);
-  const [showForm, setShowForm] = useState(false);
   const [error,    setError]    = useState('');
-
-  const [form, setForm] = useState({
-    name: '', client_name: '', client_phone: '',
-    object_address: '', roof_type: 'gable', notes: '',
-  });
 
   const load = async (q?: string) => {
     setLoading(true);
@@ -55,15 +50,11 @@ export default function ProjectsPage({ onOpenProject }: Props) {
     (window as any)._srch = setTimeout(() => load(e.target.value), 400);
   };
 
-  const createProject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim()) { setError('Введіть назву проекту'); return; }
+  // «Файл → Новий» у КП: одразу відкривається вікно реквізитів замовлення і вибору типу розрахунку
+  const createProject = async () => {
     setCreating(true); setError('');
     try {
-      const res = await projectsApi.create(form);
-      setProjects(prev => [res.project, ...prev]);
-      setShowForm(false);
-      setForm({ name:'', client_name:'', client_phone:'', object_address:'', roof_type:'gable', notes:'' });
+      const res = await projectsApi.create({ name: 'Новий розрахунок' });
       onOpenProject(res.project.id);
     } catch (e: any) { setError(e.message); }
     setCreating(false);
@@ -87,8 +78,8 @@ export default function ProjectsPage({ onOpenProject }: Props) {
           <h1 className="page-title">Мої проекти</h1>
           <div className="page-subtitle">Всього: {total} проектів</div>
         </div>
-        <button className="btn btn-primary btn-lg" onClick={() => setShowForm(true)}>
-          + Створити розрахунок
+        <button className="btn btn-primary btn-lg" onClick={createProject} disabled={creating}>
+          {creating ? 'Створення…' : '+ Новий розрахунок'}
         </button>
       </div>
 
@@ -113,7 +104,7 @@ export default function ProjectsPage({ onOpenProject }: Props) {
                 <th>Назва проекту</th>
                 <th>Клієнт</th>
                 <th>Об'єкт</th>
-                <th>Тип даху</th>
+                <th>Тип розрахунку</th>
                 <th>Сума, грн</th>
                 <th>Статус</th>
                 <th>Оновлено</th>
@@ -127,7 +118,7 @@ export default function ProjectsPage({ onOpenProject }: Props) {
                 </td></tr>
               ) : !projects.length ? (
                 <tr><td colSpan={8} style={{textAlign:'center',padding:'32px',color:'var(--clr-text-3)'}}>
-                  Проектів поки немає. Натисніть «Створити розрахунок»
+                  Проектів поки немає. Натисніть «Новий розрахунок»
                 </td></tr>
               ) : projects.map(p => {
                 const [statusLabel, statusClass] = STATUS_LABELS[p.status] || ['', 'badge-gray'];
@@ -135,6 +126,7 @@ export default function ProjectsPage({ onOpenProject }: Props) {
                   <tr key={p.id} style={{cursor:'pointer'}} onClick={() => onOpenProject(p.id)}>
                     <td>
                       <div style={{fontWeight:600}}>{p.name}</div>
+                      {p.settings?.order_no && <div className="text-xs text-muted">№{p.settings.order_no}{p.settings.order_date ? ` від ${p.settings.order_date.split('-').reverse().join('.')}` : ''}</div>}
                       {p.manager_name && <div className="text-xs text-muted">{p.manager_name}</div>}
                     </td>
                     <td>
@@ -144,7 +136,7 @@ export default function ProjectsPage({ onOpenProject }: Props) {
                     <td style={{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                       {p.object_address || '—'}
                     </td>
-                    <td>{ROOF_TYPES.find(t => t.value === p.roof_type)?.label || p.roof_type || '—'}</td>
+                    <td>{calcTypeInfo(p.settings?.calc_type)?.label || ROOF_TYPES.find(t => t.value === p.roof_type)?.label || '—'}</td>
                     <td>
                       {p.total_price
                         ? <b>{p.total_price.toLocaleString('uk-UA', {maximumFractionDigits:0})} грн</b>
@@ -169,77 +161,6 @@ export default function ProjectsPage({ onOpenProject }: Props) {
         </div>
       </div>
 
-      {/* Create modal */}
-      {showForm && (
-        <div style={{
-          position:'fixed', inset:0, background:'rgba(0,0,0,.5)',
-          display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000,
-        }} onClick={e => { if (e.target === e.currentTarget) setShowForm(false); }}>
-          <div className="card" style={{width:'100%',maxWidth:'520px',maxHeight:'90vh',overflow:'auto'}}>
-            <div className="card-header">
-              <span className="card-title">Новий проект</span>
-              <button className="btn btn-ghost btn-icon" onClick={() => setShowForm(false)}>✕</button>
-            </div>
-
-            <form onSubmit={createProject}>
-              <div className="form-group">
-                <label className="form-label">Назва проекту *</label>
-                <input className="form-control" value={form.name}
-                  onChange={e => setForm(f => ({...f, name: e.target.value}))}
-                  placeholder="Приватний будинок по вул. Зелена 5" autoFocus />
-              </div>
-
-              <div className="form-row form-row-2">
-                <div className="form-group">
-                  <label className="form-label">Ім'я клієнта</label>
-                  <input className="form-control" value={form.client_name}
-                    onChange={e => setForm(f => ({...f, client_name: e.target.value}))}
-                    placeholder="Іваненко Іван Іванович" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Телефон клієнта</label>
-                  <input className="form-control" value={form.client_phone}
-                    onChange={e => setForm(f => ({...f, client_phone: e.target.value}))}
-                    placeholder="+38 050 000 00 00" />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Адреса об'єкта</label>
-                <input className="form-control" value={form.object_address}
-                  onChange={e => setForm(f => ({...f, object_address: e.target.value}))}
-                  placeholder="м. Київ, вул. Зелена 5" />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Тип даху</label>
-                <select className="form-control" value={form.roof_type}
-                  onChange={e => setForm(f => ({...f, roof_type: e.target.value}))}>
-                  {ROOF_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Примітки</label>
-                <textarea className="form-control" rows={2} value={form.notes}
-                  onChange={e => setForm(f => ({...f, notes: e.target.value}))}
-                  placeholder="Додаткова інформація…" />
-              </div>
-
-              {error && <div className="alert alert-error mb-4" style={{marginBottom:'12px'}}>⚠ {error}</div>}
-
-              <div className="flex gap-3">
-                <button type="submit" className="btn btn-primary" disabled={creating}>
-                  {creating ? 'Створення…' : 'Створити проект'}
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
-                  Скасувати
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

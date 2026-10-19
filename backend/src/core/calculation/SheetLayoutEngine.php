@@ -2,15 +2,22 @@
 // ============================================
 // ABT Покрівля — core/calculation/SheetLayoutEngine.php
 //
-// Єдиний розрахунок укладки листових і штучних матеріалів, як у «Кровля Профи»:
-//   tile          металочерепиця         — «на замовлення» (крок хвилі, заборонені довжини)
-//                                           або «зі складу» (лише складський типоряд довжин)
-//   profile       профнастил             — «на замовлення» (округлення) або «зі складу»
-//   tile_module   одномодульна (Метробонд) — модуль фіксованої довжини, не ріжеться
-//   sheet         листові (ондулін, шифер) — лист фіксованого розміру, нахлести в обидва боки
-//   natural_tile  натуральна черепиця    — штучний розрахунок, ряди × штуки
+// Розрахунок укладки листових і штучних матеріалів за правилами «Кровля Профи» 8.15
+// (docs/TZ-analog-krovlya-profi.md, розділ 13).
 //
-// Усі розміри — цілі мм. Площі — м². PHP 7.4+.
+// Позначення КП:  К  — карнизний звис (капельник) = slope.eave_overhang
+//                 ПК — перекриття конькове: лист не доходить до конька на ПК = slope.ridge_gap
+//                 ПЗ — перекриття замкове (нахлест рядів) = profile.length_overlap
+// Потрібна довжина колонки = висота ската в колонці + К − ПК.
+//
+// Режими (slope.calc_mode):
+//   order    «на замовлення»: металочерепиця, профнастил, фальц
+//   stock1   «зі складу» цілими листами з дотриманням рядності (перебір сполучень, варіанти)
+//   stock2   «зі складу» цілими листами з мінімізацією витрати (кожна колонка окремо)
+//   stock3   «зі складу» розрахунковими листами з розкроєм складських (таблиця розкрою)
+//   fixed    «Черепиця» (одномодульна, натуральна): цілі елементи, обрізки не використовуються
+//   sheetcut «Листовий матеріал» (ондулін, шифер): лист фіксованої довжини, обрізки використовуються
+// Усі розміри — цілі мм. PHP 7.4+.
 // ============================================
 
 namespace RoofCalc\Core\Calculation;
@@ -19,26 +26,27 @@ use RoofCalc\Core\Geometry\GeometryEngine;
 
 class SheetLayoutEngine
 {
-    public const FIXED_TYPES = ['tile_module', 'sheet', 'natural_tile'];
+    public const FIXED_TYPES = ['tile_module', 'natural_tile'];
 
     private array $profile;
     private array $slope;
     private array $polygon;
     private array $holes;
     private string $type;
-    private string $mode;        // order | stock | fixed
+    private string $mode;
 
     private int $fullWidth;
     private int $usefulWidth;
-    private int $lengthOverlap;
-    private int $minLength;
-    private int $maxLength;
-    private int $waveStep;
-    private int $roundStep;
-    private array $forbidden;    // [[min,max], ...]
-    private array $stock;        // [len, ...] за зростанням
-    private int $eaveOverhang;
-    private int $ridgeGap;
+    private int $pz;            // ПЗ
+    private int $k;             // К
+    private int $pk;            // ПК
+    private int $lmin;
+    private int $lmax;          // максимальна реальна довжина
+    private int $lmaxStd;       // максимальна стандартна довжина (МЧ: хвиля × n + ПЗ)
+    private int $wave;
+    private int $round;         // величина округлення
+    private array $forbidden;   // [[min,max]] — межі виконувані
+    private array $stock;       // [[len, qty|null]] за зростанням
     private string $direction;
 
     private array $warnings = [];
@@ -51,35 +59,48 @@ class SheetLayoutEngine
         $this->holes   = $slope['holes'] ?? [];
         $this->type    = (string)($profile['type'] ?? 'tile');
 
-        $this->fullWidth     = max(1, (int)$profile['full_width']);
-        $this->usefulWidth   = max(1, (int)$profile['useful_width']);
-        $this->lengthOverlap = max(0, (int)$profile['length_overlap']);
-        $this->minLength     = max(1, (int)$profile['min_length']);
-        $this->maxLength     = max($this->minLength, (int)$profile['max_length']);
-        // Крок хвилі — лише для металочерепиці; профнастил округлюється кроком різання
-        $this->waveStep      = ($profile['type'] ?? '') === 'tile' ? (int)($profile['wave_step'] ?? 0) : 0;
-        // Крок округлення довжини: «Крок різання» з довідника матеріалів (cut_step)
-        $this->roundStep     = (int)($profile['round_step'] ?? 0) ?: (int)($profile['cut_step'] ?? 0);
-        $this->forbidden     = self::normalizeRanges($profile['forbidden_lengths'] ?? null);
-        $this->stock         = self::normalizeStock($profile['stock_lengths'] ?? null);
-        $this->eaveOverhang  = (int)($slope['eave_overhang'] ?? 0);
-        $this->ridgeGap      = (int)($slope['ridge_gap'] ?? 0);
-        $this->direction     = (string)($slope['laying_direction'] ?? 'right_left');
+        $this->fullWidth   = max(1, (int)$profile['full_width']);
+        $this->usefulWidth = max(1, (int)$profile['useful_width']);
+        $this->pz          = max(0, (int)$profile['length_overlap']);
+        $this->k           = (int)($slope['eave_overhang'] ?? 0);
+        $this->pk          = max(0, (int)($slope['ridge_gap'] ?? 0));
+        $this->lmin        = max(1, (int)$profile['min_length']);
+        $this->lmax        = max($this->lmin, (int)$profile['max_length']);
+        $this->wave        = $this->type === 'tile' ? (int)($profile['wave_step'] ?? 0) : 0;
+        $this->round       = (int)($profile['round_step'] ?? 0) ?: (int)($profile['cut_step'] ?? 0);
+        if ($this->type === 'tile' && $this->round === $this->wave) $this->round = 10; // старі дані: крок різання = хвиля
+        if ($this->round <= 0) $this->round = 1;
+        $this->forbidden   = self::normalizeRanges($profile['forbidden_lengths'] ?? null);
+        $this->stock       = self::normalizeStock($profile['stock_lengths'] ?? null);
+        $this->direction   = (string)($slope['laying_direction'] ?? 'right_left');
+
+        $std = (int)($profile['max_std_length'] ?? 0);
+        if ($this->wave > 0) {
+            $base = $std > 0 ? $std : $this->lmax;
+            $n = (int)floor(($base - $this->pz) / $this->wave);
+            $this->lmaxStd = max($this->lmin, $n * $this->wave + $this->pz);
+        } else {
+            $this->lmaxStd = $this->lmax;
+        }
 
         if (in_array($this->type, self::FIXED_TYPES, true)) {
             $this->mode = 'fixed';
-        } elseif ($mode === 'stock') {
-            $this->mode = 'stock';
+        } elseif ($this->type === 'sheet') {
+            $this->mode = 'sheetcut';
+        } elseif (in_array($mode, ['stock', 'stock1', 'stock2', 'stock3'], true)) {
+            $this->mode = $mode === 'stock' ? 'stock2' : $mode;
             if (!$this->stock) {
                 $this->mode = 'order';
-                $this->warnings[] = 'Для матеріалу не задано складський типоряд довжин — розраховано «на замовлення»';
+                $this->warnings[] = 'Для матеріалу не задано складські довжини — розраховано «на замовлення»';
             }
         } else {
             $this->mode = 'order';
         }
     }
 
-    // Заборонені довжини приходять у двох форматах: [{min,max}] (старий) і [[min,max]] (адмінка)
+    // ---------- Нормалізація довідникових даних ----------
+
+    // Діапазони невиконуваних розмірів: [{min,max}] або [[min,max]]
     public static function normalizeRanges($raw): array
     {
         if (is_string($raw)) $raw = json_decode($raw, true);
@@ -87,20 +108,36 @@ class SheetLayoutEngine
         $out = [];
         foreach ($raw as $r) {
             if (!is_array($r)) continue;
-            $min = $r['min'] ?? ($r[0] ?? null);
-            $max = $r['max'] ?? ($r[1] ?? null);
-            if ($min === null || $max === null) continue;
-            $out[] = [(int)min($min, $max), (int)max($min, $max)];
+            $a = $r['min'] ?? ($r[0] ?? null);
+            $b = $r['max'] ?? ($r[1] ?? null);
+            if ($a === null || $b === null) continue;
+            $out[] = [(int)min($a, $b), (int)max($a, $b)];
         }
         return $out;
     }
 
+    // Складські довжини: [len, ...] або [[len, qty], ...] або [{length, qty}]
     public static function normalizeStock($raw): array
     {
         if (is_string($raw)) $raw = json_decode($raw, true);
         if (!is_array($raw)) return [];
-        $out = array_values(array_unique(array_filter(array_map('intval', $raw), function ($v) { return $v > 0; })));
-        sort($out);
+        $map = [];
+        foreach ($raw as $r) {
+            if (is_array($r)) {
+                $len = (int)($r['length'] ?? ($r[0] ?? 0));
+                $qty = $r['qty'] ?? ($r[1] ?? null);
+            } else {
+                $len = (int)$r; $qty = null;
+            }
+            if ($len <= 0) continue;
+            $qty = ($qty === null || $qty === '') ? null : max(0, (int)$qty);
+            if (!array_key_exists($len, $map)) $map[$len] = $qty;
+            elseif ($map[$len] !== null && $qty !== null) $map[$len] += $qty;
+            else $map[$len] = null;
+        }
+        ksort($map);
+        $out = [];
+        foreach ($map as $len => $qty) $out[] = [$len, $qty];
         return $out;
     }
 
@@ -112,203 +149,411 @@ class SheetLayoutEngine
         $geoErrors = GeometryEngine::validate($this->polygon);
         if (!empty($geoErrors)) return ['errors' => $geoErrors, 'warnings' => []];
 
-        $angle    = (float)($this->slope['slope_angle'] ?? 0);
+        $angle = (float)($this->slope['slope_angle'] ?? 0);
         $minAngle = (float)($this->profile['min_slope_angle'] ?? 0);
         if ($minAngle > 0 && $angle > 0 && $angle < $minAngle) {
             $this->warnings[] = sprintf('Кут нахилу %.1f° менше мінімального для матеріалу (%.1f°)', $angle, $minAngle);
         }
 
+        // 1. Колонки і потрібні довжини
         $bbox = GeometryEngine::boundingBox($this->polygon);
         $cols = (int)ceil($bbox['width'] / $this->usefulWidth);
-        $colOrder = range(0, max(0, $cols - 1));
-        if ($this->direction !== 'left_right') $colOrder = array_reverse($colOrder);
+        $order = range(0, max(0, $cols - 1));
+        if ($this->direction !== 'left_right') $order = array_reverse($order);
 
+        $columns = [];
+        foreach ($order as $c) {
+            $x = $bbox['minX'] + $c * $this->usefulWidth;
+            $r = $this->columnRange($x, $x + $this->usefulWidth);
+            if ($r === null) continue;
+            $need = ($r[1] - $r[0]) + $this->k - $this->pk;
+            if ($need <= 0) continue;
+            $columns[] = ['col' => $c, 'x' => $x, 'bottom' => $r[0] - $this->k, 'need' => $need];
+        }
+
+        // 2. Довжини листів у кожній колонці (знизу вгору)
+        $alternatives = [];
+        switch ($this->mode) {
+            case 'stock1': $lens = $this->planStockRows($columns, $alternatives); break;
+            case 'stock2': $lens = $this->planStockColumns($columns); break;
+            case 'fixed':  $lens = $this->planFixed($columns); break;
+            default:       $lens = $this->planOrder($columns); break; // order, stock3, sheetcut
+        }
+
+        // 3. Розміщення листів і площі
         $placements = [];
         $num = 1;
         $maxRows = 0;
-        $usefulPieceArea = 0.0;   // корисна площа, що лягла на скат (мм²)
-        $fullArea = 0.0;          // площа замовлених листів по повній ширині (мм²)
-
-        foreach ($colOrder as $col) {
-            $x  = $bbox['minX'] + $col * $this->usefulWidth;
-            $yr = $this->columnRange($x, $x + $this->usefulWidth);
-            if ($yr === null) continue;
-            [$yBottom, $yTop] = $yr;
-
-            $need    = ($yTop - $yBottom) + $this->eaveOverhang + $this->ridgeGap;
-            $lengths = $this->splitColumn($need);
-            $maxRows = max($maxRows, count($lengths));
-
-            $y = $yBottom - $this->eaveOverhang;
-            foreach ($lengths as $row => $len) {
-                $cover = $this->coveredArea($x, $y, $this->usefulWidth, $len);
+        foreach ($columns as $i => $col) {
+            $y = $col['bottom'];
+            $maxRows = max($maxRows, count($lens[$i]));
+            foreach ($lens[$i] as $row => $len) {
+                $cover = $this->coveredArea($col['x'], $y, $this->usefulWidth, $len);
                 if ($cover > 1.0) {
                     $placements[] = [
-                        'sheet_number'      => $num++,
-                        'col_index'         => $col,
-                        'row_index'         => $row,
-                        'x'                 => (int)$x,
-                        'y'                 => (int)$y,
-                        'full_width'        => $this->fullWidth,
-                        'useful_width'      => $this->usefulWidth,
-                        'length'            => $len,
+                        'sheet_number' => $num++, 'col_index' => $col['col'], 'row_index' => $row,
+                        'x' => (int)$col['x'], 'y' => (int)$y,
+                        'full_width' => $this->fullWidth, 'useful_width' => $this->usefulWidth, 'length' => $len,
                         'intersect_area_m2' => round($cover / 1e6, 4),
                         'full_area_m2'      => round($this->fullWidth * $len / 1e6, 4),
                         'waste_area_m2'     => round(max(0, $this->fullWidth * $len - $cover) / 1e6, 4),
                     ];
-                    $usefulPieceArea += $cover;
-                    $fullArea        += $this->fullWidth * $len;
                 }
-                $y += $len - $this->lengthOverlap;
+                $y += $len - $this->pz;
             }
         }
 
-        $slopeArea = GeometryEngine::polygonAreaM2($this->polygon);
-        $groups    = $this->groupByLength($placements);
-        $total     = count($placements);
-        $longest   = $groups ? max(array_column($groups, 'length_mm')) : 0;
+        // 4. Що купувати: листи укладки або складські / цілі листи після розкрою
+        $laid = array_column($placements, 'length');
+        $cutting = [];
+        $purchase = $laid;
+        if ($this->mode === 'stock3') {
+            $purchase = $this->cutFromStock($laid, $cutting);
+        } elseif ($this->mode === 'sheetcut') {
+            $purchase = $this->cutFromSheets($laid, $cutting);
+        } elseif (in_array($this->mode, ['stock1', 'stock2', 'fixed'], true)) {
+            $this->checkStockQty($laid);
+        }
 
-        if ($this->mode === 'stock') {
-            $this->warnings[] = 'Режим «зі складу»: довжини з типоряду ' . implode(', ', $this->stock) . ' мм';
+        // 5. Показники за формулами КП (розділ 13.10 ТЗ)
+        $slopeArea = GeometryEngine::polygonAreaM2($this->polygon);
+        $holesArea = 0.0;
+        foreach ($this->holes as $h) if (is_array($h) && count($h) >= 3) $holesArea += GeometryEngine::polygonAreaM2($h);
+        $netArea  = max(0.0, $slopeArea - $holesArea);
+        $running  = array_sum($purchase) / 1000;               // погонні метри
+        $sUseful  = $this->usefulWidth / 1000 * $running;
+        $sFull    = $this->fullWidth / 1000 * $running;
+        $wastePct = $sUseful > 0 ? max(0, ($sUseful - $netArea) * 100 / $sUseful) : 0;
+
+        if (in_array($this->mode, ['stock1', 'stock2', 'stock3'], true)) {
+            $this->warnings[] = 'Режим «зі складу» ' . substr($this->mode, -1) . ': ' . self::modeLabel($this->mode);
         }
 
         return [
-            'profile_name'        => $this->profile['name'] ?? '',
-            'material_type'       => $this->type,
-            'mode'                => $this->mode,
-            'slope_area_m2'       => round($slopeArea, 3),
-            'slope_width_mm'      => (int)$bbox['width'],
-            'slope_height_mm'     => (int)$bbox['height'],
-            'cols_count'          => $cols,
-            'rows_count'          => $maxRows,
-            'total_sheets'        => $total,
-            'sheet_length_mm'     => $longest,
-            'sheet_full_width'    => $this->fullWidth,
-            'sheet_useful_width'  => $this->usefulWidth,
-            'sheets_by_length'    => $groups,
-            'placements'          => $placements,
-            'total_full_area_m2'  => round($fullArea / 1e6, 3),
-            'order_area_m2'       => round($fullArea / 1e6, 3),
-            'useful_area_m2'      => round($usefulPieceArea / 1e6, 3),
-            'total_waste_area_m2' => round(max(0, $fullArea - $usefulPieceArea) / 1e6, 3),
-            'waste_pct'           => $fullArea > 0 ? round(max(0, $fullArea - $usefulPieceArea) / $fullArea * 100, 1) : 0,
-            'warnings'            => array_values(array_unique($this->warnings)),
-            'errors'              => [],
+            'profile_name'       => $this->profile['name'] ?? '',
+            'material_type'      => $this->type,
+            'mode'               => $this->mode,
+            'slope_area_m2'      => round($slopeArea, 3),
+            'slope_width_mm'     => (int)$bbox['width'],
+            'slope_height_mm'    => (int)$bbox['height'],
+            'cols_count'         => $cols,
+            'rows_count'         => $maxRows,
+            'total_sheets'       => count($purchase),
+            'laid_sheets'        => count($laid),
+            'sheet_length_mm'    => $purchase ? max($purchase) : 0,
+            'sheet_full_width'   => $this->fullWidth,
+            'sheet_useful_width' => $this->usefulWidth,
+            'sheets_by_length'   => self::groupLengths($purchase, $this->fullWidth),
+            'laid_by_length'     => self::groupLengths($laid, $this->fullWidth),
+            'cutting'            => $cutting,
+            'stock_usage'        => $this->stockUsage($purchase),
+            'alternatives'       => $alternatives,
+            'placements'         => $placements,
+            'running_m'          => round($running, 3),
+            'useful_area_m2'     => round($sUseful, 3),
+            'total_full_area_m2' => round($sFull, 3),
+            'order_area_m2'      => round($sFull, 3),
+            'waste_pct'          => round($wastePct, 1),
+            'max_real_length_mm' => $this->lmax,
+            'max_std_length_mm'  => $this->lmaxStd,
+            'rounding_mm'        => $this->round,
+            'warnings'           => array_values(array_unique($this->warnings)),
+            'errors'             => [],
         ];
     }
 
-    // ============================================
-    // Довжини листів у колонці (знизу вгору)
-    // ============================================
-    public function splitColumn(int $need): array
+    public static function modeLabel(string $m): string
     {
-        if ($need <= 0) return [];
-        switch ($this->mode) {
-            case 'fixed': return $this->splitFixed($need);
-            case 'stock': return $this->splitStock($need);
-            default:      return $this->splitOrder($need);
-        }
+        $labels = [
+            'order'    => 'на замовлення',
+            'stock1'   => 'цілими складськими листами з дотриманням рядності',
+            'stock2'   => 'цілими складськими листами з мінімізацією витрати',
+            'stock3'   => 'розрахунковими листами з розкроєм складських',
+            'fixed'    => 'цілими елементами',
+            'sheetcut' => 'з розкроєм листів і використанням обрізків',
+        ];
+        return $labels[$m] ?? $m;
     }
 
-    // «На замовлення»: якщо вміщується — один лист; інакше кілька рядів рівної довжини з нахлестом
-    private function splitOrder(int $need): array
+    // ============================================
+    // «На замовлення» (і основа для stock3 / sheetcut)
+    // ============================================
+    private function planOrder(array $columns): array
     {
-        $max = $this->maxAllowedLength();
-        if ($need <= $max) return [$this->fitOrderLength($need)];
-
-        $step = max(1, $max - $this->lengthOverlap);
-        $rows = (int)ceil(($need - $this->lengthOverlap) / $step);
-        $rows = max(2, $rows);
-        $each = (int)ceil(($need + ($rows - 1) * $this->lengthOverlap) / $rows);
-        $this->warnings[] = "Скат довший за максимальний лист ({$this->maxLength} мм) — {$rows} ряди з нахлестом {$this->lengthOverlap} мм";
+        $max = $this->lmax;
+        $maxLower = $this->lmaxStd;
+        if ($this->mode === 'stock3')   { $max = $maxLower = $this->stockMax(); }
+        if ($this->mode === 'sheetcut') { $max = $maxLower = $this->lmax; }
 
         $out = [];
-        $left = $need;
-        for ($r = 0; $r < $rows; $r++) {
-            $isLast = ($r === $rows - 1);
-            $len = $isLast ? $this->fitOrderLength($left) : $this->fitOrderLength($each);
-            $out[] = $len;
-            $left -= ($len - $this->lengthOverlap);
-            if ($left <= $this->lengthOverlap && !$isLast) break;
+        $multi = false;
+        foreach ($columns as $col) {
+            $left = $col['need'];
+            $lens = [];
+            // Нижні ряди — стандартна довжина; коньковий ряд — до реальної максимальної (КП 13.3)
+            for ($i = 0; $i < 50 && $left > $max; $i++) {
+                $lens[] = $maxLower;
+                $left -= ($maxLower - $this->pz);
+                $multi = true;
+            }
+            if ($left > 0) {
+                if (count($lens)) $left += $this->pz; // верхній лист теж заходить на нижній
+                $lens[] = $this->mode === 'sheetcut' ? min($left, $this->lmax) : $this->fit($left, $max);
+            }
+            $out[] = $lens;
+        }
+        if ($multi) {
+            $this->warnings[] = sprintf('Скат довший за максимальну довжину листа — укладка в кілька рядів: нижні ряди %d мм, нахлест %d мм', $maxLower, $this->pz);
         }
         return $out;
     }
 
-    // Найбільша довжина, яку реально можна замовити (з урахуванням кроку хвилі і заборонених діапазонів)
-    private function maxAllowedLength(): int
+    // Довжина «на замовлення»: округлення → Lmin → невиконувані діапазони (межі виконувані)
+    public function fit(int $len, ?int $max = null): int
     {
-        $len = $this->maxLength;
-        if ($this->waveStep > 0) $len = (int)(floor($len / $this->waveStep) * $this->waveStep);
-        for ($i = 0; $i < 200 && $this->isForbidden($len); $i++) $len -= max(1, $this->waveStep ?: $this->roundStep ?: 10);
-        return max($this->minLength, $len);
-    }
-
-    // Довжина «на замовлення»: крок хвилі / округлення → мінімум → обхід заборонених довжин
-    public function fitOrderLength(int $len): int
-    {
-        $step = $this->waveStep > 0 ? $this->waveStep : $this->roundStep;
-        if ($step > 0) $len = (int)(ceil($len / $step) * $step);
-        if ($len < $this->minLength) {
-            $len = $this->minLength;
-            if ($step > 0) $len = (int)(ceil($len / $step) * $step);
-        }
-        $range = $this->forbiddenRange($len);
-        if ($range) {
+        $max = $max ?? $this->lmax;
+        $len = (int)(ceil($len / $this->round) * $this->round);
+        if ($len < $this->lmin) $len = $this->lmin;
+        $r = $this->forbiddenRange($len);
+        if ($r) {
             $orig = $len;
-            $up = $range[1] + 1;
-            if ($step > 0) $up = (int)(ceil($up / $step) * $step);
-            $tries = 0;
-            while ($this->isForbidden($up) && $tries++ < 50) $up += max(1, $step ?: 10);
-            if ($up <= $this->maxLength) {
-                $len = $up;
-            } else {
-                $down = $range[0] - 1;
-                if ($step > 0) $down = (int)(floor($down / $step) * $step);
-                $len = max($this->minLength, $down);
-            }
-            $this->warnings[] = sprintf('Довжина %d мм у забороненому діапазоні %d–%d мм — скориговано до %d мм', $orig, $range[0], $range[1], $len);
+            $len = $r[1] <= $max ? $r[1] : max($this->lmin, $r[0]);
+            $this->warnings[] = sprintf('Довжина %d мм у діапазоні невиконуваних розмірів %d–%d мм — взято %d мм', $orig, $r[0], $r[1], $len);
         }
-        return min($len, max($this->maxLength, $this->minLength));
+        return min($len, $max);
     }
 
     private function forbiddenRange(int $len): ?array
     {
-        foreach ($this->forbidden as $r) if ($len >= $r[0] && $len <= $r[1]) return $r;
+        foreach ($this->forbidden as $r) if ($len > $r[0] && $len < $r[1]) return $r;
         return null;
     }
-    private function isForbidden(int $len): bool { return $this->forbiddenRange($len) !== null; }
 
-    // «Зі складу»: найменша складська довжина, що перекриває залишок; інакше найдовша і наступний ряд
-    private function splitStock(int $need): array
+    // ============================================
+    // «Зі складу» 2: кожна колонка — мінімальна сумарна довжина цілих складських листів
+    // ============================================
+    private function planStockColumns(array $columns): array
     {
-        $maxStock = end($this->stock);
+        $lengths = array_column($this->stock, 0);
         $out = [];
-        $left = $need;
-        for ($i = 0; $i < 50 && $left > 0; $i++) {
-            $pick = null;
-            foreach ($this->stock as $s) { if ($s >= $left) { $pick = $s; break; } }
-            if ($pick === null) $pick = $maxStock;
-            $out[] = $pick;
-            if ($pick >= $left) break;
-            $left -= ($pick - $this->lengthOverlap);
+        foreach ($columns as $col) $out[] = $this->bestStack($col['need'], $lengths);
+        return $out;
+    }
+
+    private function bestStack(int $need, array $lengths, int $maxRows = 4): array
+    {
+        $best = null; $bestSum = PHP_INT_MAX;
+        $pz = $this->pz;
+        $search = function (array $seq, int $covered) use (&$search, &$best, &$bestSum, $need, $lengths, $maxRows, $pz) {
+            if ($covered >= $need) {
+                $sum = array_sum($seq);
+                if ($sum < $bestSum || ($sum === $bestSum && count($seq) < count($best))) { $best = $seq; $bestSum = $sum; }
+                return;
+            }
+            if (count($seq) >= $maxRows) return;
+            foreach ($lengths as $l) {
+                $add = count($seq) ? $l - $pz : $l;
+                if ($add <= 0) continue;
+                $search(array_merge($seq, [$l]), $covered + $add);
+            }
+        };
+        $search([], 0);
+        if ($best === null) {
+            $this->warnings[] = 'На складі недостатньо довгих листів! Спробуйте знизити висоту ряду або збільште кількість довгих листів';
+            return [(int)end($lengths)];
+        }
+        return $best;
+    }
+
+    // ============================================
+    // «Зі складу» 1: однакові нижні ряди на весь скат, верхній лист колонки — найменший достатній.
+    // Повний перебір сполучень; найкращий за витратою + перелік варіантів (як у КП «9-й з 15»).
+    // ============================================
+    private function planStockRows(array $columns, array &$alternatives): array
+    {
+        $lengths = array_column($this->stock, 0);
+
+        $cands = [[]];
+        $frontier = [[]];
+        for ($d = 1; $d <= 3; $d++) {
+            $next = [];
+            foreach ($frontier as $seq) foreach ($lengths as $l) $next[] = array_merge($seq, [$l]);
+            $cands = array_merge($cands, $next);
+            $frontier = $next;
+        }
+
+        $results = [];
+        foreach ($cands as $lower) {
+            $plan = []; $total = 0; $ok = true; $usedLower = false;
+            foreach ($columns as $col) {
+                $lens = []; $covered = 0;
+                foreach ($lower as $i => $l) {
+                    if ($covered >= $col['need']) break;
+                    $rest = $col['need'] - $covered + ($i ? $this->pz : 0);
+                    if ($rest <= $l && $i === count($lower) - 1) break; // останній нижній ряд не потрібен — піде верхній лист
+                    $lens[] = $l;
+                    $covered += $i ? $l - $this->pz : $l;
+                    $usedLower = true;
+                }
+                if ($covered < $col['need']) {
+                    $rem = $col['need'] - $covered + ($lens ? $this->pz : 0);
+                    $top = null;
+                    foreach ($lengths as $l) if ($l >= $rem) { $top = $l; break; }
+                    if ($top === null) { $ok = false; break; }
+                    $lens[] = $top;
+                }
+                $plan[] = $lens;
+                $total += array_sum($lens);
+            }
+            if (!$ok || ($lower && !$usedLower)) continue;
+            $key = implode('+', $lower);
+            if (!isset($results[$key])) $results[$key] = ['lower' => $lower, 'plan' => $plan, 'total' => $total];
+        }
+        if (!$results) {
+            $this->warnings[] = 'На складі недостатньо довгих листів! Спробуйте знизити висоту ряду або збільште кількість довгих листів';
+            return $this->planStockColumns($columns);
+        }
+        uasort($results, function ($a, $b) {
+            return ($a['total'] <=> $b['total']) ?: (count($a['lower']) <=> count($b['lower']));
+        });
+        $i = 0;
+        foreach ($results as $r) {
+            if ($i++ >= 15) break;
+            $alternatives[] = ['rows' => $r['lower'], 'running_m' => round($r['total'] / 1000, 3)];
+        }
+        $first = reset($results);
+        return $first['plan'];
+    }
+
+    // ============================================
+    // «Черепиця»: фіксований елемент, обрізки не використовуються
+    // ============================================
+    private function planFixed(array $columns): array
+    {
+        $L = $this->lmax;
+        $step = max(1, $L - $this->pz);
+        $out = [];
+        foreach ($columns as $col) {
+            $n = $col['need'] <= $L ? 1 : (int)ceil(($col['need'] - $L) / $step) + 1;
+            $out[] = array_fill(0, $n, $L);
         }
         return $out;
     }
 
-    // Фіксований лист / модуль / черепиця: ряди однакових елементів
-    private function splitFixed(int $need): array
+    // ============================================
+    // Розкрій
+    // ============================================
+
+    // stock3: розрахункові листи кроїмо зі складських (найкраще входження, далі — найменший достатній лист)
+    private function cutFromStock(array $pieces, array &$cutting): array
     {
-        $len  = $this->maxLength;
-        $step = max(1, $len - $this->lengthOverlap);
-        $rows = $need <= $len ? 1 : (int)ceil(($need - $len) / $step) + 1;
-        return array_fill(0, $rows, $len);
+        $avail = [];
+        foreach ($this->stock as $s) $avail[$s[0]] = $s[1]; // null = без обмеження
+        $need = array_sum($pieces);
+        $have = 0; $unlimited = false;
+        foreach ($avail as $len => $q) { if ($q === null) $unlimited = true; else $have += $len * $q; }
+        if (!$unlimited && $have < $need) $this->warnings[] = 'На складі недостатньо матеріалу!';
+
+        $minRemainder = $this->wave > 0 ? $this->wave + $this->pz : 1;
+        rsort($pieces);
+        $sheets = [];
+        foreach ($pieces as $p) {
+            $bi = -1; $bestRest = PHP_INT_MAX;
+            foreach ($sheets as $i => $s) {
+                if ($s['rest'] >= $p && $s['rest'] - $p < $bestRest) { $bi = $i; $bestRest = $s['rest'] - $p; }
+            }
+            if ($bi < 0) {
+                $pick = null;
+                foreach ($avail as $len => $q) if ($len >= $p && ($q === null || $q > 0)) { $pick = $len; break; }
+                if ($pick === null) {
+                    $this->warnings[] = 'На складі недостатньо довгих листів! Спробуйте знизити висоту ряду або збільште кількість довгих листів';
+                    $sheets[] = ['len' => $p, 'rest' => 0, 'cuts' => [$p], 'missing' => true];
+                    continue;
+                }
+                if ($avail[$pick] !== null) $avail[$pick]--;
+                $sheets[] = ['len' => $pick, 'rest' => $pick, 'cuts' => []];
+                $bi = count($sheets) - 1;
+            }
+            $sheets[$bi]['cuts'][] = $p;
+            $sheets[$bi]['rest'] -= $p;
+        }
+        $cutting = self::groupCutting($sheets, $minRemainder);
+        return array_column($sheets, 'len');
+    }
+
+    // sheetcut: листи фіксованої довжини, обрізки йдуть у справу
+    private function cutFromSheets(array $pieces, array &$cutting): array
+    {
+        $L = $this->lmax;
+        rsort($pieces);
+        $sheets = [];
+        foreach ($pieces as $p) {
+            $p = min($p, $L);
+            $bi = -1; $bestRest = PHP_INT_MAX;
+            foreach ($sheets as $i => $s) {
+                if ($s['rest'] >= $p && $s['rest'] - $p < $bestRest) { $bi = $i; $bestRest = $s['rest'] - $p; }
+            }
+            if ($bi < 0) { $sheets[] = ['len' => $L, 'rest' => $L, 'cuts' => []]; $bi = count($sheets) - 1; }
+            $sheets[$bi]['cuts'][] = $p;
+            $sheets[$bi]['rest'] -= $p;
+        }
+        $cutting = self::groupCutting($sheets, 1);
+        return array_column($sheets, 'len');
+    }
+
+    // Однакові схеми розкрою групуються: «1–10  2600 → 2561  залишок»
+    private static function groupCutting(array $sheets, int $minRemainder): array
+    {
+        $groups = []; $n = 0;
+        foreach ($sheets as $s) {
+            $n++;
+            $cuts = $s['cuts']; rsort($cuts);
+            $rest = $s['rest'] >= $minRemainder ? $s['rest'] : 0;
+            $key = $s['len'] . ':' . implode(',', $cuts) . ':' . $rest . ':' . (empty($s['missing']) ? 0 : 1);
+            if (!isset($groups[$key])) {
+                $groups[$key] = ['from' => $n, 'to' => $n, 'count' => 0, 'sheet_length' => $s['len'], 'cuts' => $cuts, 'remainder' => $rest, 'missing' => !empty($s['missing'])];
+            }
+            $groups[$key]['count']++;
+            $groups[$key]['to'] = $n;
+        }
+        return array_values($groups);
     }
 
     // ============================================
-    // Геометрія колонки
+    // Склад: перевірка наявності
     // ============================================
+    private function checkStockQty(array $used): void
+    {
+        $limited = false;
+        foreach ($this->stock as $s) if ($s[1] !== null) $limited = true;
+        if (!$limited) return;
+        $cnt = array_count_values($used);
+        $short = [];
+        foreach ($this->stock as $s) {
+            if ($s[1] === null) continue;
+            $u = $cnt[$s[0]] ?? 0;
+            if ($u > $s[1]) $short[] = sprintf('%d мм: потрібно %d, є %d', $s[0], $u, $s[1]);
+        }
+        if ($short) $this->warnings[] = 'На складі недостатньо листів — ' . implode('; ', $short);
+    }
 
-    // Мін. і макс. Y полігону в смузі x0..x1 (вершини всередині смуги + перетини з її краями та серединою)
+    private function stockUsage(array $purchase): array
+    {
+        if (!$this->stock || in_array($this->mode, ['order', 'sheetcut'], true)) return [];
+        $cnt = array_count_values($purchase);
+        $out = [];
+        foreach ($this->stock as $s) $out[] = ['length' => $s[0], 'used' => $cnt[$s[0]] ?? 0, 'available' => $s[1]];
+        return $out;
+    }
+
+    private function stockMax(): int
+    {
+        return $this->stock ? (int)$this->stock[count($this->stock) - 1][0] : $this->lmax;
+    }
+
+    // ============================================
+    // Геометрія
+    // ============================================
     private function columnRange(float $x0, float $x1): ?array
     {
         $ys = [];
@@ -323,35 +568,28 @@ class SheetLayoutEngine
                 $ys[] = $ay + $t * ($by - $ay);
             }
         }
-        foreach ($this->polygon as [$px, $py]) {
-            if ($px >= $x0 && $px <= $x1) $ys[] = $py;
-        }
+        foreach ($this->polygon as [$px, $py]) if ($px >= $x0 && $px <= $x1) $ys[] = $py;
         if (count($ys) < 2) return null;
-        $lo = (int)floor(min($ys));
-        $hi = (int)ceil(max($ys));
+        $lo = (int)floor(min($ys)); $hi = (int)ceil(max($ys));
         return $hi - $lo > 0 ? [$lo, $hi] : null;
     }
 
-    // Площа корисної частини листа, що лягає на скат, без вирізів (мм²)
     private function coveredArea(float $x, float $y, int $w, int $h): float
     {
         $a = GeometryEngine::rectPolygonIntersectionArea((int)$x, (int)$y, $w, $h, $this->polygon);
         foreach ($this->holes as $hole) {
-            if (is_array($hole) && count($hole) >= 3) {
-                $a -= GeometryEngine::rectPolygonIntersectionArea((int)$x, (int)$y, $w, $h, $hole);
-            }
+            if (is_array($hole) && count($hole) >= 3) $a -= GeometryEngine::rectPolygonIntersectionArea((int)$x, (int)$y, $w, $h, $hole);
         }
         return max(0.0, $a);
     }
 
-    private function groupByLength(array $placements): array
+    public static function groupLengths(array $lens, int $fullWidth): array
     {
         $g = [];
-        foreach ($placements as $p) {
-            $L = $p['length'];
-            if (!isset($g[$L])) $g[$L] = ['length_mm' => $L, 'full_width_mm' => $this->fullWidth, 'count' => 0, 'full_area_m2' => 0.0];
+        foreach ($lens as $L) {
+            if (!isset($g[$L])) $g[$L] = ['length_mm' => $L, 'full_width_mm' => $fullWidth, 'count' => 0, 'full_area_m2' => 0.0];
             $g[$L]['count']++;
-            $g[$L]['full_area_m2'] = round($g[$L]['full_area_m2'] + $this->fullWidth * $L / 1e6, 4);
+            $g[$L]['full_area_m2'] = round($g[$L]['full_area_m2'] + $fullWidth * $L / 1e6, 4);
         }
         krsort($g);
         return array_values($g);

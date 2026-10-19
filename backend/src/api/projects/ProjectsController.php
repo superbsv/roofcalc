@@ -11,6 +11,32 @@ use RoofCalc\Core\Database;
 
 class ProjectsController
 {
+    public function __construct()
+    {
+        Database::ensureProjectSchema();
+    }
+
+    // settings: реквізити замовлення і параметри проєкту як у КП
+    public static function decodeProject(?array $p): ?array
+    {
+        if (!$p) return $p;
+        $s = isset($p['settings']) && is_string($p['settings']) ? json_decode($p['settings'], true) : null;
+        $p['settings'] = is_array($s) ? $s : (object)[];
+        return $p;
+    }
+
+    private static function cleanSettings($raw): string
+    {
+        if (!is_array($raw)) $raw = [];
+        $out = [];
+        foreach ($raw as $k => $v) {
+            if (!is_string($k) || strlen($k) > 40) continue;
+            if (is_array($v) || is_object($v)) continue;
+            $out[$k] = is_string($v) ? mb_substr($v, 0, 255) : $v;
+        }
+        return json_encode($out, JSON_UNESCAPED_UNICODE);
+    }
+
     // GET /api/projects
     public function index(): void
     {
@@ -49,7 +75,7 @@ class ProjectsController
         )['cnt'];
 
         $projects = Database::fetchAll(
-            "SELECT p.id, p.name, p.client_name, p.object_address, p.roof_type,
+            "SELECT p.id, p.name, p.client_name, p.object_address, p.roof_type, p.settings,
                     p.status, p.total_area, p.total_price, p.created_at, p.updated_at,
                     u.name as manager_name
              FROM projects p
@@ -61,7 +87,7 @@ class ProjectsController
         );
 
         $this->json([
-            'data'  => $projects,
+            'data'  => array_map([self::class, 'decodeProject'], $projects),
             'total' => (int)$total,
             'page'  => $page,
             'limit' => $limit,
@@ -80,8 +106,8 @@ class ProjectsController
 
         $id = Database::insert(
             'INSERT INTO projects (user_id, name, client_name, client_phone, client_email,
-             object_address, roof_type, notes, discount_pct, vat_pct, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+             object_address, roof_type, notes, discount_pct, vat_pct, status, settings)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $user['sub'],
                 trim($body['name']),
@@ -94,11 +120,12 @@ class ProjectsController
                 $body['discount_pct']   ?? 0,
                 $body['vat_pct']        ?? 20,
                 'draft',
+                self::cleanSettings($body['settings'] ?? []),
             ]
         );
 
         $this->log($user['sub'], 'project.create', 'project', $id);
-        $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$id]);
+        $project = self::decodeProject(Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$id]));
         $this->json(['project' => $project], 201);
     }
 
@@ -124,7 +151,7 @@ class ProjectsController
         unset($slope);
 
         $this->json([
-            'project' => $project,
+            'project' => self::decodeProject($project),
             'slopes'  => $slopes,
         ]);
     }
@@ -140,12 +167,12 @@ class ProjectsController
         $params = [];
 
         $allowed = ['name','client_name','client_phone','client_email',
-                    'object_address','roof_type','notes','discount_pct','vat_pct','status'];
+                    'object_address','roof_type','notes','discount_pct','vat_pct','status','settings'];
 
         foreach ($allowed as $f) {
             if (array_key_exists($f, $body)) {
                 $fields[] = "$f = ?";
-                $params[] = $body[$f];
+                $params[] = $f === 'settings' ? self::cleanSettings($body[$f]) : $body[$f];
             }
         }
 
@@ -155,7 +182,7 @@ class ProjectsController
         Database::query("UPDATE projects SET " . implode(', ', $fields) . " WHERE id = ?", $params);
 
         $this->log($user['sub'], 'project.update', 'project', $id);
-        $this->json(['project' => Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$id])]);
+        $this->json(['project' => self::decodeProject(Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$id]))]);
     }
 
     // DELETE /api/projects/{id}

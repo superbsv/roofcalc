@@ -25,7 +25,9 @@ export function autoEdgeTypes(pts: Point[]): EdgeType[] {
     const b = pts[(i + 1) % n];
     if (a[1] === b[1] && a[1] === minY) return 'eave';
     if (a[1] === b[1] && a[1] === maxY) return 'ridge';
-    return 'end';
+    if (a[0] === b[0]) return 'end';          // вертикальна сторона — фронтон
+    if (a[1] !== b[1]) return 'hip';          // похила — хребет (ребро)
+    return 'none';
   });
 }
 

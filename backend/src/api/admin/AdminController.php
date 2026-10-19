@@ -179,6 +179,7 @@ class AdminController
         $allowed    = ['name','manufacturer','full_width','useful_width','side_overlap','length_overlap',
                        'wave_step','wave_height','min_length','max_length','cut_step','lock_type',
                        'min_joint_distance','join_overlap','min_slope_angle','price_per_m2','is_active','sort_order','type',
+                       'round_step','max_std_length',
                        ...$jsonFields];
 
         $fields = []; $params = [];

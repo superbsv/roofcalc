@@ -115,5 +115,14 @@ class Database
     {
         self::ensureVarchar('material_profiles', 'type', 32);
         self::ensureColumn('slopes', 'calc_mode', "VARCHAR(8) NOT NULL DEFAULT 'order'");
+        // Етап 3 (КП 8.15): величина округлення і максимальна стандартна довжина
+        self::ensureColumn('material_profiles', 'round_step', 'INT NULL');
+        self::ensureColumn('material_profiles', 'max_std_length', 'INT NULL');
+    }
+
+    // Реквізити замовлення і параметри проєкту як у КП (тип розрахунку, матеріал, К, ПК, валюта…)
+    public static function ensureProjectSchema(): void
+    {
+        self::ensureColumn('projects', 'settings', 'TEXT NULL');
     }
 }

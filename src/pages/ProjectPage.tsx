@@ -1,734 +1,1098 @@
 // ============================================
-// ABT Покрівля — сторінка проєкту
-// Структура як у «Кровля Профи»: провідник проєкту (покрівля / фасади / вузли проєкту)
-// + режими елемента: Форма · Матеріал · Укладка · Доборні.
-// ТЗ: docs/TZ-analog-krovlya-profi.md
+// ABT Покрівля — проєкт. Порядок роботи як у «Кровля Профи» 8.15:
+//   1. Реквізити замовлення і вибір типу розрахунку
+//   2. Матеріал (параметри зліва, доборні справа)
+//   3. Скати: шаблон / малювання, таблиця сторін з доборними, вирізи, провідник проєкту
+//   4. Схема укладки листів на скаті
+//   5. Специфікація
+// ТЗ: docs/TZ-analog-krovlya-profi.md, розділ 13
 // ============================================
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import SlopeEditor from '../components/editor/SlopeEditor';
 import LayoutScheme from '../components/layout/LayoutScheme';
 import {
-  Project, Slope, CalcResult, MaterialProfile, Point, EdgeType,
-  projectsApi, slopesApi, materialsApi, specApi, SpecItem, exportApi
+  Project, ProjectSettings, Slope, MaterialProfile, Point, EdgeType, CalcMode, AccessoryType,
+  projectsApi, slopesApi, materialsApi, specApi, SpecItem, exportApi,
 } from '../api/client';
-import { EDGE_TYPES, autoEdgeTypes, edgeColor, edgeLabel, sideLengthMm, rectHole, mirrorElement } from '../components/roof/edges';
+import { EDGE_TYPES, autoEdgeTypes, edgeColor, sideLengthMm, rectHole, mirrorElement } from '../components/roof/edges';
 import { useTheme } from '../components/theme/theme';
-import { MATERIAL_TYPES, materialLabel, isFixedType, supportsStock } from '../components/roof/materials';
+import { CALC_TYPES, calcTypeInfo } from '../components/roof/calcTypes';
+import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter } from '../components/roof/templates';
+import { materialLabel } from '../components/roof/materials';
 
 interface Props { projectId: number; }
 
-type Kind = 'roof' | 'facade';
-type Node =
-  | { type: 'element'; id: number }
-  | { type: 'dobor' }
-  | { type: 'estimate' }
-  | { type: 'reports' };
-type Mode = 'form' | 'material' | 'layout' | 'dobor';
-
-const MODES: [Mode, string, string][] = [
-  ['form',     '1', 'Форма'],
-  ['material', '2', 'Матеріал'],
-  ['layout',   '3', 'Укладка'],
-  ['dobor',    '4', 'Доборні'],
+type Step = 'order' | 'material' | 'slope' | 'layout' | 'spec';
+const STEPS: [Step, string][] = [
+  ['order', 'Замовлення'],
+  ['material', 'Матеріал'],
+  ['slope', 'Скати'],
+  ['layout', 'Укладка'],
+  ['spec', 'Специфікація'],
 ];
 
-const kindOf = (s: Slope): Kind => (s.element_kind === 'facade' ? 'facade' : 'roof');
-const fmt = (n: number | undefined, d = 2) => (Number(n || 0)).toLocaleString('uk-UA', { minimumFractionDigits: d, maximumFractionDigits: d });
+const m3 = (mm: number | undefined) => ((Number(mm) || 0) / 1000).toFixed(3);
+const f2 = (n: number | undefined, d = 2) => (Number(n || 0)).toLocaleString('uk-UA', { minimumFractionDigits: d, maximumFractionDigits: d });
+const today = () => new Date().toISOString().slice(0, 10);
+const dateUa = (iso?: string) => (iso ? iso.split('-').reverse().join('.') : '');
 
-// Мініатюра контуру для провідника
-function Thumb({ pts, active }: { pts: Point[]; active: boolean }) {
-  if (!pts || pts.length < 3) {
-    return <svg width="34" height="24" viewBox="0 0 34 24" aria-hidden="true"><rect x="2" y="2" width="30" height="20" fill="none" stroke="var(--clr-text-3)" strokeDasharray="3 3" /></svg>;
-  }
+// Доборні у списку сторони — як у КП: «без доборних» і комплекти в кутових дужках
+const doborLabel = (t: EdgeType) => (t === 'none' ? 'без доборних' : `<${EDGE_TYPES.find(e => e.key === t)?.label || t}>`);
+
+function modeOf(s: ProjectSettings): CalcMode {
+  return s.supply === 'stock' ? (`stock${s.stock_variant || 1}` as CalcMode) : 'order';
+}
+
+// Нормалізація складських даних матеріалу: [[L, qty|null]]
+function stockOf(m?: MaterialProfile): [number, number | null][] {
+  const raw = (m?.stock_lengths || []) as any[];
+  return raw.map(r => Array.isArray(r) ? [Number(r[0]), r[1] == null ? null : Number(r[1])] as [number, number | null]
+    : typeof r === 'object' ? [Number(r.length), r.qty == null ? null : Number(r.qty)] as [number, number | null]
+    : [Number(r), null] as [number, number | null]).filter(r => r[0] > 0);
+}
+function rangesOf(m?: MaterialProfile): [number, number][] {
+  const raw = (m?.forbidden_lengths || []) as any[];
+  return raw.map(r => Array.isArray(r) ? [Number(r[0]), Number(r[1])] as [number, number] : [Number(r.min), Number(r.max)] as [number, number]);
+}
+
+// Мініатюра контуру
+function Thumb({ pts, w = 46, h = 30 }: { pts: Point[]; w?: number; h?: number }) {
+  if (!pts || pts.length < 3) return <svg width={w} height={h} aria-hidden="true"><rect x="3" y="3" width={w - 6} height={h - 6} fill="none" stroke="currentColor" strokeDasharray="3 3" opacity=".5" /></svg>;
   const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-  const k = Math.min(30 / Math.max(1, maxX - minX), 20 / Math.max(1, maxY - minY));
-  const path = pts.map(([x, y]) => `${2 + (x - minX) * k},${22 - (y - minY) * k}`).join(' ');
-  return (
-    <svg width="34" height="24" viewBox="0 0 34 24" aria-hidden="true">
-      <polygon points={path} fill={active ? 'var(--clr-brand)' : 'none'} stroke={active ? 'var(--clr-brand)' : 'var(--clr-text-3)'} strokeWidth="1.5" />
-    </svg>
-  );
+  const k = Math.min((w - 8) / Math.max(1, maxX - minX), (h - 8) / Math.max(1, maxY - minY));
+  const ox = (w - (maxX - minX) * k) / 2, oy = (h - (maxY - minY) * k) / 2;
+  const path = pts.map(([x, y]) => `${ox + (x - minX) * k},${h - oy - (y - minY) * k}`).join(' ');
+  return <svg width={w} height={h} aria-hidden="true"><polygon points={path} fill="none" stroke="var(--clr-brand)" strokeWidth="1.6" /></svg>;
 }
 
 export default function ProjectPage({ projectId }: Props) {
   const theme = useTheme();
-  const [project,   setProject]   = useState<Project | null>(null);
-  const [slopes,    setSlopes]    = useState<Slope[]>([]);
+  const [project, setProject] = useState<Project | null>(null);
+  const [slopes, setSlopes] = useState<Slope[]>([]);
   const [materials, setMaterials] = useState<MaterialProfile[]>([]);
+  const [accessories, setAccessories] = useState<AccessoryType[]>([]);
   const [specItems, setSpecItems] = useState<SpecItem[]>([]);
-  const [node,      setNode]      = useState<Node | null>(null);
-  const [mode,      setMode]      = useState<Mode>('form');
-  const [calcResult, setCalcResult] = useState<CalcResult | null>(null);
-  const [calculating, setCalculating] = useState(false);
-  const [saving,    setSaving]    = useState(false);
-  const [error,     setError]     = useState('');
-  const [params,    setParams]    = useState({
-    name: 'Скат 1', slope_angle: 30, eave_overhang: 50, ridge_gap: 50,
-    laying_direction: 'right_left' as Slope['laying_direction'],
-  });
-  const [projectMaterialId, setProjectMaterialId] = useState<number>(0);
-  const [manufacturer, setManufacturer] = useState<string>('');
-  const [applyingMaterial, setApplyingMaterial] = useState(false);
-  const [hole, setHole] = useState({ x: 1000, y: 1000, w: 600, h: 600 });
+  const [settings, setSettings] = useState<ProjectSettings>({});
+  const [info, setInfo] = useState({ name: '', client_name: '', client_phone: '', object_address: '' });
+  const [step, setStep] = useState<Step>('order');
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const [editorRev, setEditorRev] = useState(0);
+  const [cutouts, setCutouts] = useState(false);
+  const [hole, setHole] = useState({ x: '1.000', y: '1.000', w: '0.600', h: '0.600' });
+  const [tpl, setTpl] = useState<{ t: Template; v: Record<string, string> } | null>(null);
+  const [clip, setClip] = useState<Slope | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
+  const [showExplorer, setShowExplorer] = useState(true);
+  const [loaded, setLoaded] = useState(false);
 
-  const active = node?.type === 'element' ? slopes.find(s => s.id === node.id) || null : null;
+  const active = slopes.find(s => s.id === activeId) || null;
+  const activeIdx = active ? slopes.findIndex(s => s.id === active.id) : -1;
+  const ct = calcTypeInfo(settings.calc_type);
+  const material = materials.find(m => m.id === settings.material_id);
+  const typeMaterials = useMemo(() => materials.filter(m => ct?.materialTypes.includes(m.type)), [materials, ct]);
 
   // ---------- Завантаження ----------
-  const reload = useCallback(async (keepId?: number) => {
-    const res = await projectsApi.get(projectId);
-    setProject(res.project);
-    setSlopes(res.slopes);
-    const pick = (keepId && res.slopes.find(s => s.id === keepId)) || res.slopes[0];
-    if (pick) selectElement(pick); else setNode({ type: 'dobor' });
-    return res.slopes;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    (async () => {
+      try {
+        const [p, ms] = await Promise.all([projectsApi.get(projectId), materialsApi.list()]);
+        setMaterials(ms.profiles);
+        materialsApi.accessories().then(r => setAccessories(r.accessories)).catch(() => {});
+        const st: ProjectSettings = { ...(p.project.settings || {}) };
+        // Старі проєкти без реквізитів: тип розрахунку і матеріал беремо з першого ската
+        const withMat = p.slopes.find(s => s.material_profile_id);
+        if (!st.material_id && withMat) st.material_id = withMat.material_profile_id;
+        if (!st.calc_type && st.material_id) {
+          const m = ms.profiles.find(x => x.id === st.material_id);
+          const c = CALC_TYPES.find(c => c.materialTypes.includes(m?.type || ''));
+          if (c) st.calc_type = c.key;
+        }
+        st.order_no = st.order_no || String(p.project.id);
+        st.order_date = st.order_date || (p.project.created_at || '').slice(0, 10) || today();
+        st.currency = st.currency || 'грн';
+        st.k = st.k ?? (withMat?.eave_overhang ?? 50);
+        st.pk = st.pk ?? 0;
+        st.direction = st.direction || 'right_left';
+        st.supply = st.supply || 'order';
+        st.stock_variant = st.stock_variant || 1;
+        setProject(p.project);
+        setSettings(st);
+        setInfo({
+          name: p.project.name || '', client_name: p.project.client_name || '',
+          client_phone: p.project.client_phone || '', object_address: p.project.object_address || '',
+        });
+        setSlopes(p.slopes);
+        setActiveId(p.slopes[0]?.id ?? null);
+        setStep(!st.calc_type ? 'order' : !st.material_id ? 'material' : 'slope');
+        setLoaded(true);
+      } catch (e: any) { setError(e.message); }
+    })();
   }, [projectId]);
 
   useEffect(() => {
-    reload().then(sl => {
-      const withMat = sl.find(s => s.material_profile_id);
-      if (withMat?.material_profile_id) setProjectMaterialId(withMat.material_profile_id);
-    }).catch(e => setError(e.message));
-    materialsApi.list().then(res => {
-      setMaterials(res.profiles);
-    });
-  }, [reload]);
+    const close = () => setMenu(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, []);
 
-  useEffect(() => {
-    if (!projectMaterialId || manufacturer) return;
-    const m = materials.find(x => x.id === projectMaterialId);
-    if (m?.manufacturer) setManufacturer(m.manufacturer);
-  }, [materials, projectMaterialId, manufacturer]);
+  const run = async (label: string, fn: () => Promise<void>) => {
+    setBusy(label); setError('');
+    try { await fn(); } catch (e: any) { setError(e.message); }
+    setBusy('');
+  };
 
-  function selectElement(s: Slope) {
-    setNode({ type: 'element', id: s.id });
-    setCalcResult(s.calc_result || null);
-    setParams({
-      name: s.name, slope_angle: s.slope_angle, eave_overhang: s.eave_overhang,
-      ridge_gap: s.ridge_gap, laying_direction: s.laying_direction,
-    });
-  }
-
-  const loadSpec = async () => {
-    try { const r = await specApi.get(projectId); setSpecItems(r.items); } catch {}
+  const saveSettings = async (patch: Partial<ProjectSettings>, extra: Partial<Project> = {}) => {
+    const next = { ...settings, ...patch };
+    setSettings(next);
+    const r = await projectsApi.update(projectId, { ...extra, settings: next });
+    setProject(r.project);
+    return next;
   };
 
   const replaceSlope = (s: Slope) => setSlopes(prev => prev.map(x => x.id === s.id ? { ...x, ...s } : x));
 
-  // Оновити поля елемента; будь-яка зміна скидає розрахунок (так робить і бекенд)
-  const patch = async (body: Partial<Slope>) => {
-    if (!active) return;
-    try {
-      const res = await slopesApi.update(active.id, body);
-      replaceSlope({ ...res.slope, calc_result: undefined });
-      setCalcResult(null);
-    } catch (e: any) { setError(e.message); }
+  const patchSlope = async (id: number, body: Partial<Slope>, keepCalc = false) => {
+    const r = await slopesApi.update(id, body);
+    setSlopes(prev => prev.map(x => x.id === id ? { ...x, ...r.slope, calc_result: keepCalc ? x.calc_result : r.slope.calc_result } : x));
+    return r.slope;
   };
 
-  // ---------- Елементи: додати / копіювати / дзеркало / видалити ----------
-  const addElement = async (kind: Kind) => {
-    try {
-      const n = slopes.filter(s => kindOf(s) === kind).length + 1;
-      const res = await slopesApi.create(projectId, {
-        name: kind === 'roof' ? `Скат ${n}` : `Фасад ${n}`,
-        polygon_points: [], slope_angle: kind === 'roof' ? 30 : 90,
-        eave_overhang: 50, ridge_gap: 50, laying_direction: 'right_left',
-        material_profile_id: projectMaterialId || undefined,
-        element_kind: kind,
-      });
-      setSlopes(prev => [...prev, res.slope]);
-      selectElement(res.slope); setMode('form');
-    } catch (e: any) { setError(e.message); }
-  };
+  // ---------- 1. Реквізити замовлення ----------
+  const chooseType = (key: string) => run('type', async () => {
+    const c = calcTypeInfo(key)!;
+    const keepMat = material && c.materialTypes.includes(material.type) ? material.id : undefined;
+    await saveSettings({ calc_type: c.key, material_id: keepMat }, {
+      name: info.name.trim() || `Замовлення №${settings.order_no}`,
+      client_name: info.client_name, client_phone: info.client_phone, object_address: info.object_address,
+    });
+    if (!info.name.trim()) setInfo(v => ({ ...v, name: `Замовлення №${settings.order_no}` }));
+    setStep('material');
+  });
 
-  const copyElement = async () => {
-    if (!active) return;
-    try {
-      const res = await slopesApi.create(projectId, {
-        name: `${active.name} (копія)`,
-        polygon_points: active.polygon_points, holes: active.holes || [],
-        edge_types: active.edge_types || [], element_kind: kindOf(active),
-        slope_angle: active.slope_angle, eave_overhang: active.eave_overhang, ridge_gap: active.ridge_gap,
-        laying_direction: active.laying_direction, material_profile_id: active.material_profile_id,
-      });
-      setSlopes(prev => [...prev, res.slope]);
-      selectElement(res.slope);
-    } catch (e: any) { setError(e.message); }
-  };
+  // ---------- 2. Матеріал → «Далі»: застосувати до всіх скатів (експрес-розрахунок КП) ----------
+  const materialNext = () => run('apply', async () => {
+    if (!material) return;
+    const st = await saveSettings({});
+    const body: Partial<Slope> = {
+      material_profile_id: material.id, eave_overhang: st.k ?? 0, ridge_gap: st.pk ?? 0, calc_mode: modeOf(st),
+      element_kind: ct?.facade ? 'facade' : 'roof',
+    };
+    const updated: Slope[] = [];
+    for (const s of slopes) {
+      const same = s.material_profile_id === body.material_profile_id && s.eave_overhang === body.eave_overhang
+        && s.ridge_gap === body.ridge_gap && (s.calc_mode || 'order') === body.calc_mode;
+      updated.push(same ? s : { ...s, ...(await slopesApi.update(s.id, body)).slope });
+    }
+    if (!updated.length) {
+      const r = await slopesApi.create(projectId, newSlopeBody(1, st));
+      updated.push(r.slope);
+    }
+    setSlopes(updated);
+    setActiveId(cur => (cur && updated.some(s => s.id === cur) ? cur : updated[0].id));
+    setEditorRev(r => r + 1);
+    setStep('slope');
+  });
 
-  const mirrorActive = async () => {
-    if (!active || (active.polygon_points?.length || 0) < 3) return;
-    const m = mirrorElement(active.polygon_points, active.edge_types || [], active.holes || []);
-    await patch({ polygon_points: m.pts, edge_types: m.edgeTypes, holes: m.holes });
-  };
+  function newSlopeBody(n: number, st: ProjectSettings = settings): Partial<Slope> {
+    return {
+      name: `${ct?.facade ? 'Фасад' : 'Скат'} ${n}`, polygon_points: [], holes: [], slope_angle: ct?.facade ? 90 : 30,
+      eave_overhang: st.k ?? 0, ridge_gap: st.pk ?? 0, laying_direction: st.direction || 'right_left',
+      material_profile_id: st.material_id, calc_mode: modeOf(st), element_kind: ct?.facade ? 'facade' : 'roof',
+    };
+  }
 
-  const deleteActive = async () => {
-    if (!active || !window.confirm(`Видалити «${active.name}»?`)) return;
-    try {
-      await slopesApi.delete(active.id);
-      const next = slopes.filter(s => s.id !== active.id);
-      setSlopes(next);
-      if (next[0]) selectElement(next[0]); else { setNode({ type: 'dobor' }); setCalcResult(null); }
-    } catch (e: any) { setError(e.message); }
-  };
+  // ---------- 3. Скати ----------
+  const addSlope = () => run('add', async () => {
+    const r = await slopesApi.create(projectId, newSlopeBody(slopes.length + 1));
+    setSlopes(prev => [...prev, r.slope]);
+    setActiveId(r.slope.id); setCutouts(false); setEditorRev(x => x + 1); setStep('slope');
+  });
 
-  // ---------- Форма ----------
-  const onPolygonChange = useCallback(async (pts: Point[]) => {
-    if (!active || pts.length < 3) return;
-    try {
-      // Нова геометрія: типи ребер визначаємо заново автоматично
-      const res = await slopesApi.update(active.id, { polygon_points: pts, edge_types: autoEdgeTypes(pts) });
-      replaceSlope({ ...res.slope, calc_result: undefined });
-      setCalcResult(null);
-    } catch {}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active?.id]);
+  const goSlope = (id: number) => { setActiveId(id); setEditorRev(x => x + 1); setMenu(null); };
 
   const pts = active?.polygon_points || [];
-  const edgeTypes: EdgeType[] = active?.edge_types?.length === pts.length && pts.length >= 3
-    ? active.edge_types : autoEdgeTypes(pts);
+  const edgeTypes: EdgeType[] = active?.edge_types?.length === pts.length && pts.length >= 3 ? active.edge_types : autoEdgeTypes(pts);
   const holes = active?.holes || [];
 
-  const setEdge = (i: number, t: EdgeType) => {
+  const onPolygonChange = useCallback(async (p: Point[]) => {
+    if (!activeId) return;
+    try {
+      const r = await slopesApi.update(activeId, { polygon_points: p, edge_types: p.length >= 3 ? autoEdgeTypes(p) : [] });
+      replaceSlope({ ...r.slope, calc_result: undefined });
+    } catch (e: any) { setError(e.message); }
+  }, [activeId]);
+
+  const applyTemplate = () => run('tpl', async () => {
+    if (!tpl || !active) return;
+    const p = buildTemplate(tpl.t, tpl.v).map(([x, y]) => [Math.round(x * 1000), Math.round(y * 1000)] as Point);
+    await patchSlope(active.id, { polygon_points: p, edge_types: autoEdgeTypes(p), holes: [] });
+    setTpl(null); setEditorRev(x => x + 1);
+  });
+
+  const clearSlope = () => active && window.confirm('Очистити поле ската?') && run('clear', async () => {
+    await patchSlope(active.id, { polygon_points: [], edge_types: [], holes: [] });
+    setEditorRev(x => x + 1);
+  });
+
+  const setEdge = (i: number, t: EdgeType) => active && run('edge', async () => {
     const next = [...edgeTypes]; next[i] = t;
-    patch({ edge_types: next });
-  };
-  const addHole = () => {
-    if (hole.w <= 0 || hole.h <= 0) return;
-    patch({ holes: [...holes, rectHole(+hole.x, +hole.y, +hole.w, +hole.h)] });
-  };
-  const removeHole = (i: number) => patch({ holes: holes.filter((_, k) => k !== i) });
+    await patchSlope(active.id, { edge_types: next });
+  });
 
-  const saveParams = async () => {
-    if (!active) return;
-    setSaving(true);
-    await patch(params);
-    setSaving(false);
-  };
+  const addHole = () => active && run('hole', async () => {
+    const mm = (v: string) => Math.round(parseFloat(v.replace(',', '.')) * 1000) || 0;
+    const w = mm(hole.w), h = mm(hole.h);
+    if (w <= 0 || h <= 0) return;
+    await patchSlope(active.id, { holes: [...holes, rectHole(mm(hole.x), mm(hole.y), w, h)] });
+    setEditorRev(x => x + 1);
+  });
+  const removeHole = (i: number) => active && run('hole', async () => {
+    await patchSlope(active.id, { holes: holes.filter((_, k) => k !== i) });
+    setEditorRev(x => x + 1);
+  });
 
-  // ---------- Матеріал ----------
-  const manufacturers = Array.from(new Set(materials.map(m => (m.manufacturer || '').trim()).filter(Boolean))).sort();
-  const filteredMaterials = manufacturer ? materials.filter(m => (m.manufacturer || '').trim() === manufacturer) : materials;
-  const projectMaterial = materials.find(m => m.id === projectMaterialId);
-  const elementMaterial = materials.find(m => m.id === active?.material_profile_id);
+  // Провідник: копіювати в буфер / дзеркально / вирізати / вставити перед-після
+  const slopeCopyBody = (s: Slope, name: string): Partial<Slope> => ({
+    name, polygon_points: s.polygon_points, holes: s.holes || [], edge_types: s.edge_types || [],
+    element_kind: s.element_kind, slope_angle: s.slope_angle, eave_overhang: s.eave_overhang, ridge_gap: s.ridge_gap,
+    laying_direction: s.laying_direction, material_profile_id: s.material_profile_id, calc_mode: s.calc_mode,
+  });
 
-  const applyMaterialToAll = async (materialId: number) => {
-    setProjectMaterialId(materialId);
-    if (!materialId || !slopes.length) return;
-    setApplyingMaterial(true); setError('');
-    try {
-      const updated: Slope[] = [];
-      for (const s of slopes) {
-        const res = await slopesApi.update(s.id, { material_profile_id: materialId });
-        updated.push(res.slope);
-      }
-      setSlopes(updated);
-      setCalcResult(null);
-    } catch (e: any) { setError(e.message); }
-    setApplyingMaterial(false);
+  const renumber = async (list: Slope[]) => {
+    const out: Slope[] = [];
+    for (let i = 0; i < list.length; i++) {
+      const s = list[i];
+      out.push(s.sort_order !== i + 1 ? { ...s, ...(await patchSlope(s.id, { sort_order: i + 1 }, true)), calc_result: s.calc_result } : s);
+    }
+    setSlopes(out);
   };
 
-  const setElementMaterial = (materialId: number) => patch({ material_profile_id: materialId || undefined });
+  const mirrorSlope = (s: Slope) => run('mirror', async () => {
+    const m = mirrorElement(s.polygon_points, s.edge_types || [], s.holes || []);
+    const r = await slopesApi.create(projectId, { ...slopeCopyBody(s, `${s.name} (дзеркально)`), polygon_points: m.pts, edge_types: m.edgeTypes, holes: m.holes });
+    setSlopes(prev => [...prev, r.slope]);
+    goSlope(r.slope.id);
+  });
 
-  // ---------- Розрахунок ----------
-  const calculate = async () => {
-    if (!active) return;
-    setCalculating(true); setError('');
-    try {
-      const res = await slopesApi.calculate(active.id);
-      setCalcResult(res.result);
-      setSlopes(prev => prev.map(s => s.id === active.id ? { ...s, calc_result: res.result } : s));
-      setMode('layout');
-    } catch (e: any) { setError(e.message); }
-    setCalculating(false);
+  const cutSlope = (s: Slope) => window.confirm(`Вирізати «${s.name}» у буфер?`) && run('cut', async () => {
+    setClip(s);
+    await slopesApi.delete(s.id);
+    const next = slopes.filter(x => x.id !== s.id);
+    setSlopes(next);
+    if (activeId === s.id) { setActiveId(next[0]?.id ?? null); setEditorRev(x => x + 1); }
+  });
+
+  const pasteSlope = (targetId: number, where: 'before' | 'after') => clip && run('paste', async () => {
+    const r = await slopesApi.create(projectId, slopeCopyBody(clip, clip.name));
+    const list = slopes.filter(s => s.id !== r.slope.id);
+    const at = list.findIndex(s => s.id === targetId) + (where === 'after' ? 1 : 0);
+    list.splice(at, 0, r.slope);
+    await renumber(list);
+    goSlope(r.slope.id);
+  });
+
+  const deleteSlope = (s: Slope) => window.confirm(`Видалити «${s.name}»?`) && run('del', async () => {
+    await slopesApi.delete(s.id);
+    const next = slopes.filter(x => x.id !== s.id);
+    setSlopes(next);
+    if (activeId === s.id) { setActiveId(next[0]?.id ?? null); setEditorRev(x => x + 1); }
+  });
+
+  // ---------- 4. Укладка ----------
+  const calcSlope = async (id: number) => {
+    const r = await slopesApi.calculate(id);
+    setSlopes(prev => prev.map(s => s.id === id ? { ...s, calc_result: r.result } : s));
+    return r.result;
   };
 
-  const calculateAll = async () => {
-    setCalculating(true); setError('');
-    try {
-      const r = await projectsApi.calculateAll(projectId);
-      await reload(active?.id);
-      await loadSpec();
-      if (r.skipped?.length) setError('Не розраховано — ' + r.skipped.join(' · '));
-    } catch (e: any) { setError(e.message); }
-    setCalculating(false);
+  const showLayout = () => active && run('calc', async () => {
+    if (pts.length < 3) throw new Error('Спочатку задайте контур ската: шаблон зліва або малювання мишею');
+    await calcSlope(active.id);
+    setStep('layout');
+  });
+
+  const layoutGo = (dir: -1 | 1) => run('calc', async () => {
+    const s = slopes[activeIdx + dir];
+    if (!s) return;
+    setActiveId(s.id); setEditorRev(x => x + 1);
+    if (!s.calc_result && (s.polygon_points?.length || 0) >= 3) await calcSlope(s.id);
+  });
+
+  const setSlopeMode = (mode: CalcMode) => active && run('calc', async () => {
+    await patchSlope(active.id, { calc_mode: mode });
+    await calcSlope(active.id);
+  });
+
+  const setSlopeK = (k: number) => active && run('calc', async () => {
+    await patchSlope(active.id, { eave_overhang: k });
+    await calcSlope(active.id);
+  });
+
+  // ---------- 5. Специфікація ----------
+  const openSpec = () => run('spec', async () => {
+    const r = await projectsApi.calculateAll(projectId);
+    const p = await projectsApi.get(projectId);
+    setSlopes(p.slopes); setProject(p.project);
+    const sp = await specApi.get(projectId);
+    setSpecItems(sp.items);
+    if (r.skipped?.length) setError('Не розраховано — ' + r.skipped.join(' · '));
+    setStep('spec');
+  });
+
+  const goStep = (s: Step) => {
+    if (s === 'material' && !settings.calc_type) return;
+    if ((s === 'slope' || s === 'layout') && !settings.material_id) return;
+    if (s === 'layout') { showLayout(); return; }
+    if (s === 'spec') { openSpec(); return; }
+    if (s === 'slope') setEditorRev(x => x + 1);
+    setStep(s);
   };
 
-  // ---------- Зведення по проєкту ----------
-  const groupItems = (items: SpecItem[]) => {
-    const map: Record<string, SpecItem> = {};
-    items.forEach(i => {
-      const key = i.name + '|' + i.unit;
-      map[key] = map[key]
-        ? { ...map[key], quantity: Number(map[key].quantity) + Number(i.quantity), total: Number(map[key].total) + Number(i.total) }
-        : { ...i, quantity: Number(i.quantity), total: Number(i.total) };
-    });
-    return Object.values(map);
-  };
-  const sheetItems = specItems.filter(i => i.type === 'sheet');
-  const accItems   = groupItems(specItems.filter(i => i.type === 'accessory'));
-  const fastItems  = groupItems(specItems.filter(i => i.type === 'fastener'));
-  const totalPrice = specItems.reduce((s, i) => s + Number(i.total || 0), 0);
+  if (!loaded) {
+    return <div className="kp">{error ? <div className="alert alert-error">{error}</div> : <div className="text-muted">Завантаження…</div>}</div>;
+  }
 
-  const projectEdges = slopes.reduce((acc, s) => {
-    const a = s.calc_result?.accessories;
-    if (!a) return acc;
-    acc.eave += a.eave_length_m || 0; acc.ridge += a.ridge_length_m || 0; acc.hip += a.hip_length_m || 0;
-    acc.valley += a.valley_length_m || 0; acc.end += a.end_length_m || 0; acc.abutment += a.abutment_length_m || 0;
-    return acc;
-  }, { eave: 0, ridge: 0, hip: 0, valley: 0, end: 0, abutment: 0 } as Record<string, number>);
+  const totalSlopes = slopes.length;
+  const slopeNo = activeIdx >= 0 ? `${activeIdx + 1}/${totalSlopes}` : `0/${totalSlopes}`;
+  const res = active?.calc_result || null;
 
-  const roofEls   = slopes.filter(s => kindOf(s) === 'roof');
-  const facadeEls = slopes.filter(s => kindOf(s) === 'facade');
-  const totalArea = slopes.reduce((s, x) => s + Number(x.calc_result?.slope_area_m2 || 0), 0);
-  const totalSheets = slopes.reduce((s, x) => s + Number(x.calc_result?.total_sheets || 0), 0);
+  // ---------- Провідник проєкту ----------
+  const explorer = showExplorer && (
+    <aside className="kp-explorer" aria-label="Провідник проєкту">
+      <div className="kp-explorer-head">
+        <span>Провідник проєкту</span>
+        <button type="button" className="kp-x" onClick={() => setShowExplorer(false)} aria-label="Сховати провідник">×</button>
+      </div>
+      <div className="kp-explorer-grid">
+        {slopes.map((s, i) => (
+          <button key={s.id} type="button"
+            className={`kp-thumb${s.id === activeId ? ' on' : ''}${s.calc_result ? ' done' : ''}`}
+            title={`${s.name}${s.calc_result ? ' — укладку розраховано' : ''}`}
+            onClick={() => (step === 'layout' ? run('calc', async () => { goSlope(s.id); if (!s.calc_result && (s.polygon_points?.length || 0) >= 3) await calcSlope(s.id); }) : goSlope(s.id))}
+            onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY, id: s.id }); }}>
+            <span className="kp-thumb-n">{i + 1}</span>
+            <Thumb pts={s.polygon_points} />
+          </button>
+        ))}
+        <button type="button" className="kp-thumb kp-thumb-add" onClick={addSlope} title="Додати скат">+</button>
+      </div>
+      <div className="kp-explorer-hint">Права кнопка — меню ската</div>
+    </aside>
+  );
 
-  const openNode = (n: Node) => { setNode(n); if (n.type !== 'element') loadSpec(); };
-
-  // ---------- Рендер ----------
-  const explorerItem = (s: Slope) => {
-    const on = active?.id === s.id;
-    return (
-      <button key={s.id} type="button" className={`px-item${on ? ' active' : ''}`} onClick={() => selectElement(s)}>
-        <Thumb pts={s.polygon_points} active={on} />
-        <span className="px-item-name">{s.name}</span>
-        <span className="px-item-meta">
-          {s.calc_result ? `${s.calc_result.total_sheets} л.` : (s.polygon_points?.length >= 3 ? '—' : 'порожній')}
-        </span>
-      </button>
-    );
-  };
+  const menuSlope = menu ? slopes.find(s => s.id === menu.id) : null;
 
   return (
-    <div className="project-shell">
-      {/* Шапка проєкту */}
-      <div className="page-header" style={{ marginBottom: 0 }}>
-        <div>
-          <div className="page-title">{project?.name || 'Проєкт'}</div>
-          <div className="page-subtitle">
-            {project?.client_name && `Клієнт: ${project.client_name} · `}
-            {project?.object_address}
-            {totalArea > 0 && ` · ${fmt(totalArea, 1)} м² · ${totalSheets} листів`}
-          </div>
+    <div className="kp">
+      {/* Кроки роботи як у КП */}
+      <nav className="kp-steps" aria-label="Етапи розрахунку">
+        {STEPS.map(([s, label], i) => {
+          const enabled = s === 'order' || (s === 'material' ? !!settings.calc_type : !!settings.material_id);
+          return (
+            <button key={s} type="button" className={`kp-step${step === s ? ' on' : ''}`} disabled={!enabled || !!busy}
+              aria-current={step === s ? 'step' : undefined} onClick={() => goStep(s)}>
+              <span className="kp-step-n">{i + 1}</span>{label}
+            </button>
+          );
+        })}
+        <div className="kp-steps-meta">
+          {project?.name}{ct ? ` · ${ct.label}` : ''}{material ? ` · ${material.name}` : ''}
         </div>
-        <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
-          <button className="btn btn-primary" onClick={calculateAll} disabled={calculating || !slopes.length}>
-            {calculating ? 'Рахуємо…' : 'Розрахувати проєкт'}
-          </button>
-        </div>
-      </div>
+      </nav>
 
       {error && <div className="alert alert-error" role="alert">{error}<button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setError('')}>Закрити</button></div>}
 
-      <div className="project-grid">
-        {/* ===== Провідник проєкту ===== */}
-        <nav className="px" aria-label="Провідник проєкту">
-          <div className="px-section">
-            <div className="px-title">Покрівля <span>{roofEls.length}</span></div>
-            {roofEls.map(explorerItem)}
-            <button type="button" className="px-add" onClick={() => addElement('roof')}>+ Скат</button>
-          </div>
-          <div className="px-section">
-            <div className="px-title">Фасади <span>{facadeEls.length}</span></div>
-            {facadeEls.map(explorerItem)}
-            <button type="button" className="px-add" onClick={() => addElement('facade')}>+ Фасад</button>
-          </div>
-          <div className="px-section">
-            <div className="px-title">Проєкт</div>
-            {([
-              ['dobor', 'Доборні елементи'],
-              ['estimate', 'Кошторис'],
-              ['reports', 'Звіти і друк'],
-            ] as [Node['type'], string][]).map(([t, label]) => (
-              <button key={t} type="button" className={`px-item px-node${node?.type === t ? ' active' : ''}`} onClick={() => openNode({ type: t } as Node)}>
-                <span className="px-item-name">{label}</span>
-              </button>
-            ))}
-          </div>
-        </nav>
-
-        {/* ===== Робоча область ===== */}
-        <section className="workspace" aria-live="polite">
-          {active && (
-            <>
-              <div className="ws-head">
-                <div className="ws-title">
-                  <span className="ws-kind">{kindOf(active) === 'roof' ? 'Скат' : 'Фасад'}</span>
-                  {active.name}
-                </div>
-                <div className="ws-actions">
-                  <button className="btn btn-secondary btn-sm" onClick={copyElement}>Копіювати</button>
-                  <button className="btn btn-secondary btn-sm" onClick={mirrorActive} disabled={pts.length < 3}>Дзеркало</button>
-                  <button className="btn btn-danger btn-sm" onClick={deleteActive}>Видалити</button>
-                </div>
+      {/* ===================== 1. РЕКВІЗИТИ ЗАМОВЛЕННЯ ===================== */}
+      {step === 'order' && (
+        <div className="kp-window kp-order">
+          <section className="kp-pane">
+            <h2 className="kp-h">Ввести реквізити замовлення</h2>
+            <div className="kp-form">
+              <label>Замовлення №</label>
+              <div className="kp-inline">
+                <input className="form-control" value={settings.order_no || ''} onChange={e => setSettings(s => ({ ...s, order_no: e.target.value }))} style={{ maxWidth: 120 }} />
+                <span>від</span>
+                <input className="form-control" type="date" value={settings.order_date || ''} onChange={e => setSettings(s => ({ ...s, order_date: e.target.value }))} style={{ maxWidth: 170 }} />
               </div>
-
-              <div className="tabs" style={{ marginBottom: 0 }} role="tablist">
-                {MODES.map(([m, num, label]) => (
-                  <button key={m} role="tab" aria-selected={mode === m} className={`tab-btn${mode === m ? ' active' : ''}`} onClick={() => setMode(m)}>
-                    <span className="tab-num">{num}</span>{label}
-                  </button>
-                ))}
+              <label>Замовник</label>
+              <input className="form-control" value={info.client_name} onChange={e => setInfo(v => ({ ...v, client_name: e.target.value }))} placeholder="ПІБ або назва компанії" />
+              <label>Телефон замовника</label>
+              <input className="form-control" value={info.client_phone} onChange={e => setInfo(v => ({ ...v, client_phone: e.target.value }))} />
+              <label>Об'єкт</label>
+              <input className="form-control" value={info.object_address} onChange={e => setInfo(v => ({ ...v, object_address: e.target.value }))} placeholder="Адреса об'єкта" />
+              <label>Моя компанія</label>
+              <input className="form-control" value={settings.company ?? 'ТОВ «АртБудТрейдинг»'} onChange={e => setSettings(s => ({ ...s, company: e.target.value }))} />
+              <label>Відповідальний</label>
+              <input className="form-control" value={settings.responsible || ''} onChange={e => setSettings(s => ({ ...s, responsible: e.target.value }))} />
+              <label>Грошова одиниця</label>
+              <div className="kp-inline">
+                <input className="form-control" value={settings.currency || ''} onChange={e => setSettings(s => ({ ...s, currency: e.target.value }))} style={{ maxWidth: 90 }} />
+                <span>курс до у.о.</span>
+                <input className="form-control" type="number" min={0} step="0.01" value={settings.rate ?? ''} onChange={e => setSettings(s => ({ ...s, rate: e.target.value === '' ? undefined : +e.target.value }))} style={{ maxWidth: 110 }} placeholder="—" />
               </div>
+              <label>Назва проєкту</label>
+              <input className="form-control" value={info.name} onChange={e => setInfo(v => ({ ...v, name: e.target.value }))} placeholder={`Замовлення №${settings.order_no}`} />
+            </div>
+          </section>
+          <section className="kp-pane">
+            <h2 className="kp-h">Вибрати тип розрахунку</h2>
+            <div className="kp-types">
+              {CALC_TYPES.map(c => (
+                <button key={c.key} type="button" className={`kp-type${settings.calc_type === c.key ? ' on' : ''}`}
+                  onClick={() => chooseType(c.key)} disabled={!!busy}>
+                  <span className="kp-type-name">{c.label}</span>
+                  <span className="kp-type-hint">{c.hint}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
 
-              {/* --- 1. ФОРМА --- */}
-              {mode === 'form' && (
-                <div className="ws-body">
-                  <SlopeEditor slope={active} calcResult={calcResult} onPolygonChange={onPolygonChange}
-                    edgeTypes={edgeTypes} holes={holes} />
+      {/* ===================== 2. МАТЕРІАЛ ===================== */}
+      {step === 'material' && ct && (
+        <div className="kp-window">
+          <div className="kp-toolbar">
+            <button className="btn btn-secondary btn-sm" onClick={() => setStep('order')}>← Назад</button>
+            <div className="kp-title">{ct.label}</div>
+            <select className="form-control kp-matsel" aria-label="Матеріал" value={settings.material_id || 0}
+              onChange={e => { const id = +e.target.value || undefined; const m = materials.find(x => x.id === id); setSettings(s => ({ ...s, material_id: id, coating: m?.coating_options?.[0], color: m?.color_options?.[0] })); }}>
+              <option value={0}>— Оберіть матеріал з бази —</option>
+              {Array.from(new Set(typeMaterials.map(m => m.manufacturer || 'Інші'))).sort().map(mf => (
+                <optgroup key={mf} label={mf}>
+                  {typeMaterials.filter(m => (m.manufacturer || 'Інші') === mf).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </optgroup>
+              ))}
+            </select>
+            <button className="btn btn-primary" onClick={materialNext} disabled={!material || !!busy || !ct.ready}>
+              {busy === 'apply' ? 'Застосовую…' : 'Далі →'}
+            </button>
+          </div>
 
-                  <div className="form-cards">
-                    <div className="card">
-                      <div className="card-header"><span className="card-title">Ребра і сопряження</span>
-                        <span className="text-xs text-muted">впливають на доборні</span></div>
-                      {pts.length >= 3 ? (
-                        <div className="table-wrap">
-                          <table>
-                            <thead><tr><th>Ребро</th><th>Довжина, мм</th><th>Тип</th></tr></thead>
-                            <tbody>
-                              {pts.map((a, i) => (
-                                <tr key={i}>
-                                  <td><span className="edge-dot" style={{ background: edgeColor(edgeTypes[i], theme) }} />{i + 1}–{(i + 1) % pts.length + 1}</td>
-                                  <td>{Math.round(sideLengthMm(a, pts[(i + 1) % pts.length]))}</td>
-                                  <td>
-                                    <select className="form-control form-control-sm" value={edgeTypes[i]} aria-label={`Тип ребра ${i + 1}`}
-                                      onChange={e => setEdge(i, e.target.value as EdgeType)}>
-                                      {EDGE_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
-                                    </select>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : <div className="text-sm text-muted">Спочатку задайте контур: шаблон або малювання.</div>}
-                    </div>
+          {!ct.ready && <div className="alert alert-warning">Тип розрахунку «{ct.label}» ще в розробці — оберіть інший тип або поверніться пізніше.</div>}
+          {!typeMaterials.length && <div className="alert alert-info">У базі немає матеріалів типу «{ct.label}». Додайте їх у розділі «Товари» (довідник матеріалів).</div>}
 
-                    <div className="card">
-                      <div className="card-header"><span className="card-title">Вирізи</span>
-                        <span className="text-xs text-muted">труби, мансардні вікна</span></div>
-                      {holes.length > 0 && (
-                        <div className="table-wrap" style={{ marginBottom: 12 }}>
-                          <table>
-                            <thead><tr><th>№</th><th>Розмір, мм</th><th>Позиція X, Y</th><th></th></tr></thead>
-                            <tbody>
-                              {holes.map((h, i) => {
-                                const xs = h.map(p => p[0]), ys = h.map(p => p[1]);
-                                return (
-                                  <tr key={i}>
-                                    <td>{i + 1}</td>
-                                    <td>{Math.max(...xs) - Math.min(...xs)} × {Math.max(...ys) - Math.min(...ys)}</td>
-                                    <td>{Math.min(...xs)}, {Math.min(...ys)}</td>
-                                    <td><button className="btn btn-ghost btn-sm" onClick={() => removeHole(i)} aria-label={`Видалити виріз ${i + 1}`}>Видалити</button></td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                      <div className="hole-form">
-                        {([['x', 'X лівого краю'], ['y', 'Y низу'], ['w', 'Ширина'], ['h', 'Висота']] as [keyof typeof hole, string][]).map(([k, l]) => (
-                          <label key={k} className="form-label">{l}, мм
-                            <input className="form-control" type="number" min={0} value={hole[k]}
-                              onChange={e => setHole(v => ({ ...v, [k]: +e.target.value }))} />
-                          </label>
-                        ))}
-                        <button className="btn btn-secondary" onClick={addHole} disabled={pts.length < 3}>Додати виріз</button>
-                      </div>
-                    </div>
-
-                    <div className="card">
-                      <div className="card-header"><span className="card-title">Параметри</span></div>
-                      <div className="form-row form-row-2">
-                        <label className="form-label">Назва
-                          <input className="form-control" value={params.name} onChange={e => setParams(p => ({ ...p, name: e.target.value }))} /></label>
-                        <label className="form-label">Кут нахилу, °
-                          <input className="form-control" type="number" min={1} max={90} value={params.slope_angle}
-                            onChange={e => setParams(p => ({ ...p, slope_angle: +e.target.value }))} /></label>
-                        <label className="form-label">Карнизний звис, мм
-                          <input className="form-control" type="number" min={0} max={300} value={params.eave_overhang}
-                            onChange={e => setParams(p => ({ ...p, eave_overhang: +e.target.value }))} /></label>
-                        <label className="form-label">Припуск під конек, мм
-                          <input className="form-control" type="number" min={0} max={200} value={params.ridge_gap}
-                            onChange={e => setParams(p => ({ ...p, ridge_gap: +e.target.value }))} /></label>
-                        <label className="form-label">Напрямок укладки
-                          <select className="form-control" value={params.laying_direction}
-                            onChange={e => setParams(p => ({ ...p, laying_direction: e.target.value as any }))}>
-                            <option value="right_left">Справа наліво</option>
-                            <option value="left_right">Зліва направо</option>
-                            <option value="bottom_top">Знизу вгору</option>
-                            <option value="top_bottom">Згори вниз</option>
-                          </select></label>
-                      </div>
-                      <div className="flex gap-3" style={{ flexWrap: 'wrap', marginTop: 8 }}>
-                        <button className="btn btn-secondary" onClick={saveParams} disabled={saving}>{saving ? 'Збереження…' : 'Зберегти'}</button>
-                        <button className="btn btn-primary" onClick={() => setMode('material')}>Далі: матеріал →</button>
-                      </div>
-                    </div>
-                  </div>
+          {material && (
+            <div className="kp-material">
+              <MaterialPanel m={material} ct={ct.key} settings={settings} setSettings={setSettings} />
+              <section className="kp-pane kp-dobor">
+                <h3 className="kp-h3">Доборні елементи</h3>
+                <div className="table-wrap">
+                  <table className="kp-table">
+                    <thead><tr><th>Найменування</th><th title="Ділити навпіл — сопряження двох скатів">1/2</th><th>Довжина, м</th><th>Нахлест, м</th><th>Ціна</th></tr></thead>
+                    <tbody>
+                      {EDGE_TYPES.filter(e => e.key !== 'none').map(e => (
+                        <tr key={e.key} className="kp-kit"><td>&lt;{e.label}&gt;</td><td></td><td>-</td><td>-</td><td>-</td></tr>
+                      ))}
+                      {accessories.map(a => (
+                        <tr key={a.id}>
+                          <td>{a.name}</td>
+                          <td><input type="checkbox" readOnly checked={['ridge', 'hip', 'valley'].includes(a.calc_rule)} aria-label="1/2" /></td>
+                          <td>{m3(a.working_length)}</td><td>{m3(a.default_overlap)}</td><td>{f2(Number(a.price))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              )}
-
-              {/* --- 2. МАТЕРІАЛ --- */}
-              {mode === 'material' && (
-                <div className="ws-body">
-                  <div className="card">
-                    <div className="card-header"><span className="card-title">Матеріал проєкту</span>
-                      <span className="text-xs text-muted">застосовується до всіх елементів</span></div>
-                    <div className="form-row form-row-2">
-                      <label className="form-label">Завод-виробник
-                        <select className="form-control" value={manufacturer} onChange={e => setManufacturer(e.target.value)} disabled={applyingMaterial}>
-                          <option value="">— Усі виробники —</option>
-                          {manufacturers.map(mf => <option key={mf} value={mf}>{mf}</option>)}
-                        </select></label>
-                      <label className="form-label">Матеріал
-                        <MaterialSelect value={projectMaterialId} list={filteredMaterials} disabled={applyingMaterial}
-                          onChange={applyMaterialToAll} /></label>
-                    </div>
-                    {applyingMaterial && <div className="text-sm text-muted">Застосовую до всіх елементів…</div>}
-                  </div>
-
-                  <div className="card">
-                    <div className="card-header"><span className="card-title">Матеріал елемента «{active.name}»</span></div>
-                    <label className="form-label">Інший матеріал лише для цього елемента
-                      <MaterialSelect value={active.material_profile_id || 0} list={filteredMaterials} onChange={setElementMaterial} /></label>
-                    {(elementMaterial || projectMaterial) && (
-                      <MaterialFacts m={(elementMaterial || projectMaterial)!} />
-                    )}
-                    {(() => {
-                      const m = elementMaterial || projectMaterial;
-                      if (!m) return null;
-                      const t = MATERIAL_TYPES.find(x => x.key === m.type);
-                      const hasStock = !!m.stock_lengths?.length;
-                      const modeNow = active.calc_mode === 'stock' ? 'stock' : 'order';
-                      return (
-                        <div className="calc-mode">
-                          <div className="calc-mode-title">Режим розрахунку</div>
-                          {supportsStock(m.type) ? (
-                            <div className="seg" role="radiogroup" aria-label="Режим розрахунку">
-                              <button type="button" role="radio" aria-checked={modeNow === 'order'} className={modeNow === 'order' ? 'on' : ''}
-                                onClick={() => patch({ calc_mode: 'order' })}>На замовлення</button>
-                              <button type="button" role="radio" aria-checked={modeNow === 'stock'} className={modeNow === 'stock' ? 'on' : ''}
-                                disabled={!hasStock} onClick={() => patch({ calc_mode: 'stock' })}>Зі складу</button>
-                            </div>
-                          ) : <div className="text-sm">Фіксований елемент — розкладка цілими листами</div>}
-                          <div className="text-xs text-muted" style={{ marginTop: 6 }}>
-                            {modeNow === 'stock' && supportsStock(m.type)
-                              ? 'Довжини беруться лише зі складського типоряду матеріалу.'
-                              : t?.hint}
-                            {supportsStock(m.type) && !hasStock && ' Щоб увімкнути «Зі складу», задайте складські довжини в довіднику матеріалів.'}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    <div className="flex gap-3" style={{ flexWrap: 'wrap', marginTop: 12 }}>
-                      <button className="btn btn-primary" onClick={calculate}
-                        disabled={calculating || pts.length < 3 || !active.material_profile_id}>
-                        {calculating ? 'Розрахунок…' : 'Розкласти листи →'}
-                      </button>
-                      {!active.material_profile_id && <span className="text-sm text-muted" style={{ alignSelf: 'center' }}>Оберіть матеріал</span>}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* --- 3. УКЛАДКА --- */}
-              {mode === 'layout' && (
-                <div className="ws-body">
-                  {calcResult && !calcResult.errors?.length ? (
-                    <>
-                      <div className="metrics-grid" style={{ marginBottom: 0, gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))' }}>
-                        {[
-                          ['Листів', calcResult.total_sheets],
-                          ['Площа', `${fmt(calcResult.slope_area_m2)} м²`],
-                          ['Площа листів', `${fmt(calcResult.total_full_area_m2 ?? calcResult.order_area_m2)} м²`],
-                          ['По ширині', `${calcResult.cols_count} шт`],
-                          ['Рядів', calcResult.rows_count],
-                          ['Відходи', `${calcResult.waste_pct}%`],
-                        ].map(([l, v]) => (
-                          <div key={l as string} className="metric-card"><div className="metric-value">{v}</div><div className="metric-label">{l}</div></div>
-                        ))}
-                      </div>
-                      {calcResult.mode && <div className="text-sm text-muted">
-                        {calcResult.mode === 'stock' ? 'Розраховано «зі складу»' : calcResult.mode === 'fixed' ? 'Розраховано цілими елементами' : 'Розраховано «на замовлення»'}
-                        {calcResult.material_type ? ` · ${materialLabel(calcResult.material_type)}` : ''}
-                      </div>}
-                      {calcResult.holes_area_m2 ? <div className="alert alert-info">Вирізи: {fmt(calcResult.holes_area_m2)} м² віднято від площі елемента.</div> : null}
-                      {calcResult.warnings?.map((w, i) => <div key={i} className="alert alert-warning">{w}</div>)}
-                      <LayoutScheme calcResult={calcResult} polygonPoints={pts} slopeName={active.name} />
-                    </>
-                  ) : calcResult?.errors?.length ? (
-                    <div className="alert alert-error">{calcResult.errors.map((e, i) => <div key={i}>{e}</div>)}</div>
-                  ) : (
-                    <div className="empty-state">
-                      <div>Елемент ще не розкладено.</div>
-                      <button className="btn btn-primary" onClick={calculate} disabled={calculating || pts.length < 3 || !active.material_profile_id}>
-                        {calculating ? 'Розрахунок…' : 'Розкласти листи'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* --- 4. ДОБОРНІ ЕЛЕМЕНТА --- */}
-              {mode === 'dobor' && (
-                <div className="ws-body">
-                  {calcResult?.accessories ? (
-                    <>
-                      <EdgeSums sums={{
-                        eave: calcResult.accessories.eave_length_m, ridge: calcResult.accessories.ridge_length_m,
-                        hip: calcResult.accessories.hip_length_m || 0, valley: calcResult.accessories.valley_length_m,
-                        end: calcResult.accessories.end_length_m, abutment: calcResult.accessories.abutment_length_m || 0,
-                      }} theme={theme} />
-                      <div className="card">
-                        <div className="card-header"><span className="card-title">Доборні та кріплення · {active.name}</span></div>
-                        <div className="table-wrap">
-                          <table>
-                            <thead><tr><th>Найменування</th><th>К-сть</th><th>Ціна</th><th>Сума</th></tr></thead>
-                            <tbody>
-                              {calcResult.accessories.items.map((a, i) => (
-                                <tr key={i}><td>{a.name}</td><td><b>{a.quantity} {a.unit}</b></td><td>{fmt(a.price)} грн</td><td>{fmt(a.total)} грн</td></tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="empty-state">
-                      <div>Доборні з'являться після розрахунку елемента.</div>
-                      <button className="btn btn-primary" onClick={calculate} disabled={calculating || pts.length < 3 || !active.material_profile_id}>Розрахувати</button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
+                <div className="text-xs text-muted">Комплекти в кутових дужках &lt;…&gt; присвоюються сторонам ската. Перелік доборних редагується в довіднику.</div>
+              </section>
+            </div>
           )}
+        </div>
+      )}
 
-          {/* ===== Вузли проєкту ===== */}
-          {node?.type === 'dobor' && (
-            <div className="ws-body">
-              <div className="ws-head"><div className="ws-title"><span className="ws-kind">Проєкт</span>Доборні елементи</div></div>
-              <EdgeSums sums={projectEdges} theme={theme} />
-              {accItems.length || fastItems.length ? (
-                ([['Доборні елементи', accItems], ['Кріплення', fastItems]] as [string, SpecItem[]][]).map(([title, items]) => items.length ? (
-                  <div key={title} className="spec-section" style={{ marginBottom: 0 }}>
-                    <div className="spec-section-title">{title}</div>
-                    <div className="table-wrap">
-                      <table style={{ border: '1px solid var(--clr-border)', borderTop: 'none' }}>
-                        <thead><tr><th>Найменування</th><th>Од.</th><th>К-сть</th></tr></thead>
-                        <tbody>{items.map(it => <tr key={it.id}><td>{it.name}</td><td>{it.unit}</td><td><b>{Number(it.quantity).toFixed(it.unit === 'шт' ? 0 : 2)}</b></td></tr>)}</tbody>
+      {/* ===================== 3. СКАТ ===================== */}
+      {step === 'slope' && (
+        <div className="kp-window">
+          <div className="kp-toolbar">
+            <div className="kp-btnpair">
+              <button className="btn btn-secondary btn-sm" onClick={() => setStep('material')}>Назад</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setStep('material')} title="Вихідні дані матеріалу">Вих. дані</button>
+            </div>
+            <div className="kp-counter"><span>{ct?.facade ? 'ФАСАД' : 'СКАТ'}:</span><b>{slopeNo}</b></div>
+            {active && (
+              <>
+                <div className="kp-radio" role="radiogroup" aria-label="Напрямок укладки">
+                  {([['left_right', 'Зліва направо'], ['right_left', 'Справа наліво']] as const).map(([v, l]) => (
+                    <label key={v}><input type="radio" checked={active.laying_direction === v}
+                      onChange={() => run('dir', async () => { await patchSlope(active.id, { laying_direction: v }); })} /> {l}</label>
+                  ))}
+                </div>
+                <label className="kp-field">Уклон, °
+                  <input key={`a${active.id}`} className="form-control" type="number" min={0} max={90} defaultValue={active.slope_angle}
+                    onBlur={e => +e.target.value !== active.slope_angle && run('angle', async () => { await patchSlope(active.id, { slope_angle: +e.target.value }, true); })} />
+                </label>
+                <label className="kp-field kp-field-name">Назва
+                  <input key={`n${active.id}`} className="form-control" defaultValue={active.name}
+                    onBlur={e => e.target.value.trim() && e.target.value !== active.name && run('name', async () => { await patchSlope(active.id, { name: e.target.value.trim() }, true); })} />
+                </label>
+              </>
+            )}
+            <div className="kp-tools">
+              <button className={`btn btn-sm ${cutouts ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setCutouts(v => !v)} disabled={!active || pts.length < 3} title="Режим «Вирізи»">Вирізи</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => active && mirrorSlope(active)} disabled={!active || pts.length < 3} title="Зеркально відобразити і додати в кінець">Дзеркально</button>
+              <button className="btn btn-secondary btn-sm" onClick={clearSlope} disabled={!active} title="Очистити поле">Очистити</button>
+              <button className="btn btn-secondary btn-sm" onClick={addSlope} disabled={!!busy} title="Додати скат">+ Скат</button>
+              {!showExplorer && <button className="btn btn-secondary btn-sm" onClick={() => setShowExplorer(true)}>Провідник</button>}
+            </div>
+            <div className="kp-btnpair">
+              <button className="btn btn-primary btn-sm" onClick={showLayout} disabled={!active || pts.length < 3 || !!busy}>{busy === 'calc' ? 'Розрахунок…' : 'Розрахунок'}</button>
+              <button className="btn btn-secondary btn-sm" onClick={openSpec} disabled={!slopes.length || !!busy}>{busy === 'spec' ? 'Рахуємо…' : 'Специф.'}</button>
+            </div>
+          </div>
+
+          <div className={`kp-slope${showExplorer ? ' with-explorer' : ''}`}>
+            {/* Ліва панель: шаблони → після вводу — таблиця сторін і доборних */}
+            <aside className="kp-left">
+              {!active ? (
+                <div className="text-sm text-muted">Немає скатів. <button className="btn btn-primary btn-sm" onClick={addSlope}>Додати скат</button></div>
+              ) : pts.length < 3 ? (
+                <>
+                  <div className="kp-h3">Шаблони скатів</div>
+                  <div className="kp-tpls">
+                    {TEMPLATES.map(t => (
+                      <button key={t.id} type="button" className="kp-tpl" title={t.name}
+                        onClick={() => setTpl({ t, v: Object.fromEntries(t.params.map(p => [p.key, String(p.default)])) })}>
+                        <svg viewBox="0 0 40 28" width="40" height="28" aria-hidden="true"><polygon points={templateIconPoints(t)} fill="var(--clr-brand-pale)" stroke="currentColor" strokeWidth="1.4" /></svg>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-xs text-muted" style={{ marginTop: 8 }}>
+                    Або намалюйте контур мишею: клік — вершина, права кнопка / Enter — замкнути, Ctrl+Z — скасувати сторону.
+                  </div>
+                </>
+              ) : cutouts ? (
+                <>
+                  <div className="kp-h3">Вирізи</div>
+                  {holes.length ? (
+                    <table className="kp-table">
+                      <thead><tr><th>№</th><th>Ш × В, м</th><th>X, Y</th><th></th></tr></thead>
+                      <tbody>
+                        {holes.map((h, i) => {
+                          const xs = h.map(p => p[0]), ys = h.map(p => p[1]);
+                          return (
+                            <tr key={i}>
+                              <td>{i + 1}</td>
+                              <td>{m3(Math.max(...xs) - Math.min(...xs))}×{m3(Math.max(...ys) - Math.min(...ys))}</td>
+                              <td>{m3(Math.min(...xs))}; {m3(Math.min(...ys))}</td>
+                              <td><button className="kp-x" onClick={() => removeHole(i)} aria-label={`Видалити виріз ${i + 1}`}>×</button></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : <div className="text-xs text-muted">Вирізів немає.</div>}
+                  <div className="kp-holeform">
+                    {([['x', 'X лів. краю'], ['y', 'Y низу'], ['w', 'Ширина'], ['h', 'Висота']] as [keyof typeof hole, string][]).map(([k, l]) => (
+                      <label key={k}>{l}, м<input className="form-control" inputMode="decimal" value={hole[k]} onChange={e => setHole(v => ({ ...v, [k]: e.target.value }))} /></label>
+                    ))}
+                  </div>
+                  <button className="btn btn-secondary btn-sm" onClick={addHole} style={{ width: '100%' }}>Додати виріз</button>
+                  <div className="text-xs text-muted" style={{ marginTop: 6 }}>Вирізи не мають виходити за скат і перетинатися.</div>
+                </>
+              ) : (
+                <>
+                  <div className="kp-sides-head"><span>Розмір, м</span><span>Доборний елемент</span></div>
+                  {pts.map((a, i) => (
+                    <div key={i} className="kp-side">
+                      <b>{sideLetter(i)} =</b>
+                      <span className="kp-side-len">{m3(sideLengthMm(a, pts[(i + 1) % pts.length]))}</span>
+                      <select className="form-control form-control-sm" value={edgeTypes[i]} aria-label={`Доборний елемент сторони ${sideLetter(i)}`}
+                        style={{ boxShadow: edgeTypes[i] !== 'none' ? `inset 3px 0 0 ${edgeColor(edgeTypes[i], theme)}` : undefined }}
+                        onChange={e => setEdge(i, e.target.value as EdgeType)}>
+                        {(['none', ...EDGE_TYPES.filter(e => e.key !== 'none').map(e => e.key)] as EdgeType[]).map(k => <option key={k} value={k}>{doborLabel(k)}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                  <dl className="kp-mini">
+                    <dt>Площа ската</dt><dd>{f2(polyArea(pts) / 1e6, 3)} м²</dd>
+                    {holes.length > 0 && <><dt>Вирізи</dt><dd>{holes.length} шт</dd></>}
+                    <dt>Матеріал</dt><dd>{materials.find(m => m.id === active.material_profile_id)?.name || '—'}</dd>
+                  </dl>
+                </>
+              )}
+            </aside>
+
+            <div className="kp-canvas">
+              {active && (
+                <SlopeEditor key={`${active.id}:${editorRev}`} bare slope={active} calcResult={null}
+                  onPolygonChange={onPolygonChange} edgeTypes={edgeTypes} holes={holes} />
+              )}
+            </div>
+            {explorer}
+          </div>
+        </div>
+      )}
+
+      {/* ===================== 4. СХЕМА УКЛАДКИ ===================== */}
+      {step === 'layout' && active && (
+        <div className="kp-window">
+          <div className="kp-toolbar">
+            <div className="kp-btnpair">
+              <button className="btn btn-secondary btn-sm" onClick={() => goStep('slope')}>Назад</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setStep('material')}>Вих. дані</button>
+            </div>
+            <div className="kp-counter"><span>{ct?.facade ? 'ФАСАД' : 'СКАТ'}:</span><b>{slopeNo}</b></div>
+            <button className="btn btn-secondary btn-sm" onClick={() => layoutGo(-1)} disabled={activeIdx <= 0 || !!busy} aria-label="Попередній скат">◀</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => layoutGo(1)} disabled={activeIdx >= slopes.length - 1 || !!busy} aria-label="Наступний скат">▶</button>
+            <label className="kp-field">Карнизний звис К, мм
+              <input key={`k${active.id}`} className="form-control" type="number" min={0} max={500} defaultValue={active.eave_overhang}
+                onBlur={e => +e.target.value !== active.eave_overhang && setSlopeK(+e.target.value)} />
+            </label>
+            {ct?.stock && (
+              <div className="seg" role="radiogroup" aria-label="Тип розрахунку">
+                {([['order', 'На замовл.'], ['stock1', 'Склад 1'], ['stock2', 'Склад 2'], ['stock3', 'Склад 3']] as [CalcMode, string][]).map(([m, l]) => {
+                  const cur = active.calc_mode === 'stock' ? 'stock2' : (active.calc_mode || 'order');
+                  return <button key={m} type="button" role="radio" aria-checked={cur === m} className={cur === m ? 'on' : ''}
+                    disabled={!!busy || (m !== 'order' && !stockOf(materials.find(x => x.id === active.material_profile_id)).length)}
+                    onClick={() => setSlopeMode(m)}>{l}</button>;
+                })}
+              </div>
+            )}
+            <div className="kp-tools">
+              <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>Друк</button>
+              {!showExplorer && <button className="btn btn-secondary btn-sm" onClick={() => setShowExplorer(true)}>Провідник</button>}
+            </div>
+            <div className="kp-btnpair">
+              {activeIdx < slopes.length - 1
+                ? <button className="btn btn-primary btn-sm" onClick={() => layoutGo(1)} disabled={!!busy}>Далі</button>
+                : <button className="btn btn-primary btn-sm" onClick={addSlope} disabled={!!busy}>+ Скат</button>}
+              <button className="btn btn-secondary btn-sm" onClick={openSpec} disabled={!!busy}>{busy === 'spec' ? 'Рахуємо…' : 'Специф.'}</button>
+            </div>
+          </div>
+
+          <div className={`kp-slope${showExplorer ? ' with-explorer' : ''}`}>
+            <aside className="kp-left">
+              <div className="kp-h3">{active.name} · {slopeNo}</div>
+              {pts.map((a, i) => (
+                <div key={i} className="kp-side-ro"><b>{sideLetter(i)}</b> = {m3(sideLengthMm(a, pts[(i + 1) % pts.length]))} <span>{doborLabel(edgeTypes[i])}</span></div>
+              ))}
+              {holes.map((h, i) => {
+                const xs = h.map(p => p[0]), ys = h.map(p => p[1]);
+                return <div key={`h${i}`} className="kp-side-ro">Виріз №{i + 1}: {m3(Math.max(...xs) - Math.min(...xs))} × {m3(Math.max(...ys) - Math.min(...ys))}</div>;
+              })}
+              {res?.laid_by_length?.length ? (
+                <>
+                  <div className="kp-h3" style={{ marginTop: 12 }}>Довжини листів</div>
+                  <table className="kp-table">
+                    <thead><tr><th>L, м</th><th>шт</th></tr></thead>
+                    <tbody>{res.laid_by_length.map(g => <tr key={g.length_mm}><td>{m3(g.length_mm)}</td><td>{g.count}</td></tr>)}</tbody>
+                  </table>
+                </>
+              ) : null}
+            </aside>
+
+            <div className="kp-layout-main">
+              {!res ? (
+                <div className="empty-state"><div>Скат ще не розраховано.</div>
+                  <button className="btn btn-primary" onClick={showLayout} disabled={pts.length < 3 || !!busy}>Розрахувати</button></div>
+              ) : res.errors?.length ? (
+                <div className="alert alert-error">{res.errors.map((e, i) => <div key={i}>{e}</div>)}</div>
+              ) : (
+                <>
+                  {res.warnings?.map((w, i) => <div key={i} className="alert alert-warning">{w}</div>)}
+                  <LayoutScheme calcResult={res as any} polygonPoints={pts} slopeName={active.name} />
+                  <div className="kp-infobar">
+                    <dl>
+                      <dt>Замовлення</dt><dd>№{settings.order_no} від {dateUa(settings.order_date)}</dd>
+                      <dt>Lmax реальна / стандартна, м</dt><dd>{m3(res.max_real_length_mm)} / {m3(res.max_std_length_mm)}</dd>
+                      <dt>Площа ската, м²</dt><dd>{f2(res.slope_area_m2, 3)}</dd>
+                      <dt>Точність округлення, м</dt><dd>{m3(res.rounding_mm)}</dd>
+                      <dt>Карнизний звис (К), м</dt><dd>{m3(active.eave_overhang)}</dd>
+                    </dl>
+                    <dl>
+                      <dt>Скат №</dt><dd>{slopeNo} · {active.name}</dd>
+                      <dt>Погонні метри</dt><dd>{f2(res.running_m, 3)}</dd>
+                      <dt>Площа листів корисна / повна, м²</dt><dd>{f2(res.useful_area_m2, 3)} / {f2(res.total_full_area_m2, 3)}</dd>
+                      <dt>Укладка</dt><dd>{active.laying_direction === 'left_right' ? 'зліва направо' : 'справа наліво'}</dd>
+                      <dt>Тип розрахунку</dt><dd>{modeName(res.mode)}</dd>
+                      <dt>Відсоток відходів</dt><dd><b>{f2(res.waste_pct, 1)}%</b></dd>
+                    </dl>
+                  </div>
+                  {res.cutting?.length ? <CuttingTable rows={res.cutting} /> : null}
+                  {res.alternatives && res.alternatives.length > 1 && (
+                    <div className="kp-card">
+                      <div className="kp-h3">Варіанти рядності (склад 1): найкращий з {res.alternatives.length}</div>
+                      <table className="kp-table">
+                        <thead><tr><th>№</th><th>Нижні ряди, м</th><th>Погонні метри</th></tr></thead>
+                        <tbody>{res.alternatives.map((a, i) => <tr key={i} className={i === 0 ? 'kp-best' : ''}><td>{i + 1}</td><td>{a.rows.length ? a.rows.map(m3).join(' + ') : 'один ряд'}</td><td>{f2(a.running_m, 3)}</td></tr>)}</tbody>
                       </table>
                     </div>
-                  </div>
-                ) : null)
-              ) : <div className="alert alert-info">Натисніть «Розрахувати проєкт», щоб зібрати доборні з усіх елементів.</div>}
-            </div>
-          )}
-
-          {node?.type === 'estimate' && (
-            <div className="ws-body">
-              <div className="ws-head"><div className="ws-title"><span className="ws-kind">Проєкт</span>Кошторис</div></div>
-              {specItems.length ? (
-                <>
-                  <div className="metrics-grid" style={{ marginBottom: 0 }}>
-                    <div className="metric-card"><div className="metric-value" style={{ color: 'var(--clr-brand)' }}>{fmt(totalPrice, 0)} грн</div><div className="metric-label">Загальна сума</div></div>
-                    <div className="metric-card"><div className="metric-value">{sheetItems.reduce((s, i) => s + Number(i.quantity), 0)}</div><div className="metric-label">Листів</div></div>
-                    <div className="metric-card"><div className="metric-value">{slopes.filter(s => s.calc_result).length}/{slopes.length}</div><div className="metric-label">Розраховано елементів</div></div>
-                  </div>
-                  {([['Основне покриття', sheetItems], ['Доборні елементи', accItems], ['Кріплення', fastItems]] as [string, SpecItem[]][]).map(([title, items]) => items.length ? (
-                    <div key={title} className="spec-section" style={{ marginBottom: 0 }}>
-                      <div className="spec-section-title">{title}</div>
-                      <div className="table-wrap">
-                        <table style={{ border: '1px solid var(--clr-border)', borderTop: 'none' }}>
-                          <thead><tr><th>Найменування</th><th>Од.</th><th>К-сть</th><th>Ціна</th><th>Сума</th></tr></thead>
-                          <tbody>
-                            {items.map(it => (
-                              <tr key={it.id}><td>{it.name}</td><td>{it.unit}</td><td>{fmt(it.quantity)}</td><td>{fmt(it.price)} грн</td><td><b>{fmt(it.total)} грн</b></td></tr>
-                            ))}
-                            <tr className="tr-total"><td colSpan={4}>Підсумок розділу</td><td><b>{fmt(items.reduce((s, i) => s + Number(i.total), 0))} грн</b></td></tr>
-                          </tbody>
-                        </table>
-                      </div>
+                  )}
+                  {res.stock_usage?.length ? (
+                    <div className="kp-card">
+                      <div className="kp-h3">Склад</div>
+                      <table className="kp-table">
+                        <thead><tr><th>L, м</th><th>Потрібно</th><th>Наявність</th></tr></thead>
+                        <tbody>{res.stock_usage.map(u => <tr key={u.length} className={u.available != null && u.used > u.available ? 'kp-short' : ''}><td>{m3(u.length)}</td><td>{u.used}</td><td>{u.available ?? '∞'}</td></tr>)}</tbody>
+                      </table>
                     </div>
-                  ) : null)}
+                  ) : null}
                 </>
-              ) : <div className="alert alert-info">Кошторис з'явиться після «Розрахувати проєкт».</div>}
+              )}
             </div>
-          )}
+            {explorer}
+          </div>
+        </div>
+      )}
 
-          {node?.type === 'reports' && (
-            <div className="ws-body">
-              <div className="ws-head"><div className="ws-title"><span className="ws-kind">Проєкт</span>Звіти і друк</div></div>
-              <div className="report-grid">
-                {[
-                  ['Комерційна пропозиція', 'Для клієнта: матеріали, доборні, ціни. PDF з логотипом.', exportApi.pdf(projectId), 'PDF'],
-                  ['Специфікація для менеджера', 'Excel: специфікація, скати, розкрій по довжинах.', exportApi.excel(projectId), 'Excel'],
-                  ['Виробничий звіт', 'Довжини листів для різки, без цін.', exportApi.productionPdf(projectId), 'PDF'],
-                  ['Дані проєкту', 'JSON-файл для архіву або перенесення.', exportApi.json(projectId), 'JSON'],
-                ].map(([t, d, href, f]) => (
-                  <a key={t} className="report-card" href={href} target="_blank" rel="noopener noreferrer">
-                    <span className="report-fmt">{f}</span>
-                    <span className="report-title">{t}</span>
-                    <span className="report-desc">{d}</span>
-                  </a>
+      {/* ===================== 5. СПЕЦИФІКАЦІЯ ===================== */}
+      {step === 'spec' && (
+        <Specification project={project} settings={settings} slopes={slopes} material={material} items={specItems}
+          projectId={projectId} onBack={() => goStep('slope')} onMaterial={() => setStep('material')} />
+      )}
+
+      {/* Вікно шаблону: схема + розміри, м */}
+      {tpl && (
+        <div className="kp-modal" role="dialog" aria-modal="true" aria-label={tpl.t.name} onClick={() => setTpl(null)}>
+          <div className="kp-modal-box" onClick={e => e.stopPropagation()}>
+            <div className="kp-modal-head"><span className="kp-counter"><b>{slopeNo}</b></span><span>{tpl.t.name}</span>
+              <button className="kp-x" onClick={() => setTpl(null)} aria-label="Закрити">×</button></div>
+            <div className="kp-modal-body">
+              <svg viewBox="0 0 40 28" className="kp-modal-pic" aria-hidden="true">
+                <polygon points={templateIconPoints(tpl.t)} fill="var(--clr-brand-pale)" stroke="var(--clr-brand)" strokeWidth=".8" />
+              </svg>
+              <div className="kp-modal-fields">
+                <div className="kp-h3">Розмір, м:</div>
+                {tpl.t.params.map((p, i) => (
+                  <label key={p.key}><span>{p.label}</span>
+                    <input className="form-control" inputMode="decimal" autoFocus={i === 0} value={tpl.v[p.key] ?? ''}
+                      onChange={e => setTpl(v => v && ({ ...v, v: { ...v.v, [p.key]: e.target.value } }))}
+                      onKeyDown={e => e.key === 'Enter' && applyTemplate()} />
+                  </label>
                 ))}
               </div>
             </div>
-          )}
-        </section>
-      </div>
+            <div className="kp-modal-foot">
+              <button className="btn btn-secondary" onClick={() => setTpl(null)}>Скасувати</button>
+              <button className="btn btn-primary" onClick={applyTemplate}>OK</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Контекстне меню провідника */}
+      {menu && menuSlope && (
+        <div className="kp-menu" style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 260) }} role="menu" onClick={e => e.stopPropagation()}>
+          <button role="menuitem" onClick={() => { setClip(menuSlope); setMenu(null); }}>Копіювати в буфер</button>
+          <button role="menuitem" onClick={() => { setMenu(null); mirrorSlope(menuSlope); }} disabled={(menuSlope.polygon_points?.length || 0) < 3}>Зеркально відобразити</button>
+          <button role="menuitem" onClick={() => { setMenu(null); cutSlope(menuSlope); }}>Вирізати</button>
+          <button role="menuitem" onClick={() => { setMenu(null); pasteSlope(menuSlope.id, 'before'); }} disabled={!clip}>Вставити «перед»</button>
+          <button role="menuitem" onClick={() => { setMenu(null); pasteSlope(menuSlope.id, 'after'); }} disabled={!clip}>Вставити «після»</button>
+          <button role="menuitem" className="danger" onClick={() => { setMenu(null); deleteSlope(menuSlope); }}>Видалити</button>
+        </div>
+      )}
     </div>
   );
 }
 
-// ---------- Допоміжні компоненти ----------
+// ---------- Допоміжне ----------
 
-function MaterialSelect({ value, list, onChange, disabled }: { value: number; list: MaterialProfile[]; onChange: (id: number) => void; disabled?: boolean }) {
+function polyArea(p: Point[]): number {
+  let a = 0;
+  for (let i = 0; i < p.length; i++) { const q = p[(i + 1) % p.length]; a += p[i][0] * q[1] - q[0] * p[i][1]; }
+  return Math.abs(a) / 2;
+}
+
+function modeName(m?: string): string {
+  switch (m) {
+    case 'order': return 'на замовлення';
+    case 'stock': case 'stock2': return 'зі складу 2 — цілими листами, мінімум витрати';
+    case 'stock1': return 'зі складу 1 — цілими листами з дотриманням рядності';
+    case 'stock3': return 'зі складу 3 — розрахунковими листами з розкроєм';
+    case 'fixed': return 'цілими елементами';
+    case 'sheetcut': return 'з розкроєм листів';
+    default: return m || '—';
+  }
+}
+
+function CuttingTable({ rows }: { rows: NonNullable<Slope['calc_result']>['cutting'] }) {
+  if (!rows?.length) return null;
   return (
-    <select className="form-control" value={value} onChange={e => onChange(+e.target.value)} disabled={disabled}>
-      <option value={0}>— Оберіть матеріал —</option>
-      {MATERIAL_TYPES.map(({ key: t, label }) => {
-        const items = list.filter(m => m.type === t);
-        return items.length ? <optgroup key={t} label={label}>{items.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</optgroup> : null;
-      })}
-    </select>
+    <div className="kp-card">
+      <div className="kp-h3">Таблиця розкрою</div>
+      <table className="kp-table">
+        <thead><tr><th>№ листа</th><th>Довжина листа, м</th><th>Розкроїти на, м</th><th>Залишок, м</th></tr></thead>
+        <tbody>
+          {rows.map((c, i) => (
+            <tr key={i} className={c.missing ? 'kp-short' : ''}>
+              <td>{c.from === c.to ? c.from : `${c.from}–${c.to}`}</td>
+              <td>{m3(c.sheet_length)}{c.missing ? ' (немає на складі)' : ''}</td>
+              <td>{c.cuts.map(m3).join(' + ')}</td>
+              <td>{c.remainder ? m3(c.remainder) : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
-function MaterialFacts({ m }: { m: MaterialProfile }) {
-  const fixed = isFixedType(m.type);
-  const rows: [string, string][] = [
-    ['Тип', materialLabel(m.type)],
-    ['Ширина повна / корисна', `${m.full_width} / ${m.useful_width} мм`],
-    ['Нахлест боковий / поздовжній', `${m.side_overlap} / ${m.length_overlap} мм`],
-    fixed ? ['Розмір елемента (довжина)', `${m.max_length} мм, не ріжеться`] : ['Довжина листа', `${m.min_length}–${m.max_length} мм`],
-  ];
-  if (m.wave_step) rows.push(['Крок хвилі', `${m.wave_step} мм`]);
-  else if (!fixed && m.cut_step) rows.push(['Крок округлення', `${m.cut_step} мм`]);
-  if (m.forbidden_lengths?.length) rows.push(['Заборонені довжини', m.forbidden_lengths.map(f => `${f.min}–${f.max}`).join(', ')]);
-  if (m.stock_lengths?.length) rows.push(['Складський типоряд', m.stock_lengths.join(', ') + ' мм']);
-  rows.push(['Мін. кут покрівлі', `${m.min_slope_angle}°`]);
-  return (
-    <dl className="facts">
-      {rows.map(([k, v]) => <React.Fragment key={k}><dt>{k}</dt><dd>{v}</dd></React.Fragment>)}
-    </dl>
+// Вікно матеріалу: ліва частина — параметри (як «Металлочерепица» у КП)
+function MaterialPanel({ m, ct, settings, setSettings }: {
+  m: MaterialProfile; ct: string; settings: ProjectSettings;
+  setSettings: React.Dispatch<React.SetStateAction<ProjectSettings>>;
+}) {
+  const fixed = ct === 'piece' || ct === 'sheet';
+  const stock = stockOf(m);
+  const ranges = rangesOf(m);
+  const canStock = (ct === 'tile' || ct === 'profile');
+  const round = m.round_step || m.cut_step || 10;
+  const num = (k: 'k' | 'pk') => (
+    <input className="form-control" type="number" min={0} max={500} value={settings[k] ?? 0}
+      onChange={e => setSettings(s => ({ ...s, [k]: +e.target.value }))} />
   );
-}
-
-function EdgeSums({ sums, theme }: { sums: Record<string, number>; theme: 'dark' | 'light' }) {
-  const keys: EdgeType[] = ['eave', 'ridge', 'hip', 'valley', 'end', 'abutment'];
   return (
-    <div className="metrics-grid" style={{ marginBottom: 0, gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))' }}>
-      {keys.map(k => (
-        <div key={k} className="metric-card" style={{ boxShadow: `inset 0 3px 0 ${edgeColor(k, theme)}` }}>
-          <div className="metric-value">{fmt(sums[k] || 0)} м</div>
-          <div className="metric-label">{edgeLabel(k)}</div>
+    <section className="kp-pane kp-matpane">
+      <div className="kp-matgrid">
+        <MaterialSketch wave={ct === 'tile'} />
+        <div className="kp-params">
+          <label>Перекриття конькове ПК, мм{num('pk')}</label>
+          <label>Перекриття замкове ПЗ, м<input className="form-control" readOnly value={m3(m.length_overlap)} /></label>
+          {ct === 'tile' && <label>Довжина хвилі, м<input className="form-control" readOnly value={m3(m.wave_step)} /></label>}
+          <label>Карнизний звис К, мм{num('k')}</label>
+          <label>Повна ширина листа, м<input className="form-control" readOnly value={m3(m.full_width)} /></label>
+          <label>Корисна ширина листа, м<input className="form-control" readOnly value={m3(m.useful_width)} /></label>
+          {fixed && <label>Довжина листа, м<input className="form-control" readOnly value={m3(m.max_length)} /></label>}
         </div>
-      ))}
+      </div>
+
+      <div className="kp-matrow">
+        <fieldset className="kp-fieldset">
+          <legend>Напрямок укладки</legend>
+          {([['left_right', 'зліва направо'], ['right_left', 'справа наліво']] as const).map(([v, l]) => (
+            <label key={v}><input type="radio" checked={settings.direction === v} onChange={() => setSettings(s => ({ ...s, direction: v }))} /> {l}</label>
+          ))}
+        </fieldset>
+        <div className="kp-params">
+          <label>Покриття
+            <select className="form-control" value={settings.coating || ''} onChange={e => setSettings(s => ({ ...s, coating: e.target.value }))}>
+              <option value="">—</option>{(m.coating_options || []).map(o => <option key={o}>{o}</option>)}
+            </select></label>
+          <label>Колір
+            <select className="form-control" value={settings.color || ''} onChange={e => setSettings(s => ({ ...s, color: e.target.value }))}>
+              <option value="">—</option>{(m.color_options || []).map(o => <option key={o}>{o}</option>)}
+            </select></label>
+          <label>Ціна, {settings.currency || 'грн'} за 1 м²<input className="form-control" readOnly value={f2(m.price_per_m2)} /></label>
+          <label>Мін. уклон покрівлі, °<input className="form-control" readOnly value={m.min_slope_angle} /></label>
+        </div>
+      </div>
+
+      {!fixed && (
+        <div className="kp-supply">
+          <div className={`kp-supply-col${settings.supply !== 'stock' ? ' on' : ''}`}>
+            <label className="kp-supply-title"><input type="radio" checked={settings.supply !== 'stock'} onChange={() => setSettings(s => ({ ...s, supply: 'order' }))} /> НА ЗАМОВЛЕННЯ</label>
+            <div className="kp-params kp-params-2">
+              <label>Lmax, м<input className="form-control" readOnly value={m3(m.max_length)} /></label>
+              <label>Lmin, м<input className="form-control" readOnly value={m3(m.min_length)} /></label>
+              <label>Величина округлення, м<input className="form-control" readOnly value={m3(round)} /></label>
+              {m.max_std_length ? <label>Lmax стандартна, м<input className="form-control" readOnly value={m3(m.max_std_length)} /></label> : null}
+            </div>
+            <div className="kp-check"><input type="checkbox" readOnly checked={ranges.length > 0} /> Враховувати діапазони невиконуваних розмірів листів</div>
+            {ranges.length > 0 && (
+              <table className="kp-table kp-ranges">
+                <thead><tr><th></th><th>«від»</th><th>«до»</th></tr></thead>
+                <tbody>{ranges.map((r, i) => <tr key={i}><td>{i + 1}</td><td>{m3(r[0])}</td><td>{m3(r[1])}</td></tr>)}</tbody>
+              </table>
+            )}
+          </div>
+          <div className={`kp-supply-col${settings.supply === 'stock' ? ' on' : ''}`}>
+            <label className="kp-supply-title"><input type="radio" disabled={!canStock || !stock.length} checked={settings.supply === 'stock'} onChange={() => setSettings(s => ({ ...s, supply: 'stock' }))} /> ЗІ СКЛАДУ</label>
+            <table className="kp-table">
+              <thead><tr><th></th><th>Довжина, м</th><th>Наявність, шт</th></tr></thead>
+              <tbody>
+                {Array.from({ length: 10 }, (_, i) => stock[i]).map((r, i) => (
+                  <tr key={i}><td>L({i + 1})</td><td>{r ? m3(r[0]) : ''}</td><td>{r ? (r[1] ?? '∞') : ''}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            <fieldset className="kp-fieldset" disabled={settings.supply !== 'stock'}>
+              <legend>Тип розрахунку за замовчуванням</legend>
+              {([1, 2, 3] as const).map(v => (
+                <label key={v}><input type="radio" checked={(settings.stock_variant || 1) === v} onChange={() => setSettings(s => ({ ...s, stock_variant: v }))} />
+                  {v === 1 ? ' Цілими листами 1 (рядність)' : v === 2 ? ' Цілими листами 2 (мінімум витрати)' : ' Складськими з розкроєм 3'}</label>
+              ))}
+            </fieldset>
+            {!stock.length && <div className="text-xs text-muted">Складські довжини не задано в довіднику.</div>}
+          </div>
+        </div>
+      )}
+      <div className="text-xs text-muted">Параметри матеріалу (ширини, довжини, склад) редагуються в довіднику «Товари». ПК, К, напрямок, покриття і колір — параметри цього проєкту.</div>
+    </section>
+  );
+}
+
+// Схема профілю з позначеннями ПК, ПЗ, хвиля, К (як у вікні матеріалу КП)
+function MaterialSketch({ wave }: { wave: boolean }) {
+  const steps = wave ? 7 : 4;
+  const d: string[] = [];
+  for (let i = 0; i < steps; i++) {
+    const x0 = 30 + i * 28, y0 = 150 - i * 16;
+    d.push(wave ? `M${x0},${y0} q10,-14 20,-10 l8,-6` : `M${x0},${y0} l28,-16`);
+  }
+  return (
+    <svg className="kp-sketch" viewBox="0 0 260 180" role="img" aria-label="Схема параметрів листа">
+      <path d="M20,165 L235,40" stroke="var(--clr-text-3)" strokeWidth="1" strokeDasharray="4 3" fill="none" />
+      <path d={d.join(' ')} stroke="var(--clr-brand)" strokeWidth="3" fill="none" />
+      <path d="M150,96 l60,-35" stroke="var(--clr-brand)" strokeWidth="3" fill="none" opacity=".55" />
+      <line x1="215" y1="58" x2="240" y2="40" stroke="var(--clr-text)" strokeWidth="2" />
+      <text x="196" y="30" className="kp-sk-t">ПК</text>
+      <text x="140" y="80" className="kp-sk-t">ПЗ</text>
+      {wave && <text x="70" y="105" className="kp-sk-t">хвиля</text>}
+      <text x="8" y="172" className="kp-sk-t">К</text>
+      <line x1="20" y1="165" x2="34" y2="157" stroke="var(--clr-text)" strokeWidth="2" />
+    </svg>
+  );
+}
+
+// ---------- Специфікація (структура КП 8.15, розділ 13.10 ТЗ) ----------
+function Specification({ project, settings, slopes, material, items, projectId, onBack, onMaterial }: {
+  project: Project | null; settings: ProjectSettings; slopes: Slope[]; material?: MaterialProfile;
+  items: SpecItem[]; projectId: number; onBack: () => void; onMaterial: () => void;
+}) {
+  const cur = settings.currency || 'грн';
+  const calc = slopes.filter(s => s.calc_result && !s.calc_result.errors?.length);
+  const sum = (f: (s: Slope) => number) => calc.reduce((a, s) => a + (f(s) || 0), 0);
+  const tot = {
+    area: sum(s => Number(s.calc_result!.slope_area_m2)),
+    useful: sum(s => Number(s.calc_result!.useful_area_m2)),
+    full: sum(s => Number(s.calc_result!.total_full_area_m2 ?? s.calc_result!.order_area_m2)),
+    pm: sum(s => Number(s.calc_result!.running_m)),
+    sheets: sum(s => Number(s.calc_result!.total_sheets)),
+  };
+  const waste = tot.useful > 0 ? Math.max(0, (tot.useful - tot.area) * 100 / tot.useful) : 0;
+  const lengths: Record<number, number> = {};
+  calc.forEach(s => s.calc_result!.sheets_by_length.forEach(g => { lengths[g.length_mm] = (lengths[g.length_mm] || 0) + g.count; }));
+  const lenRows = Object.entries(lengths).map(([l, c]) => [+l, c]).sort((a, b) => b[0] - a[0]);
+
+  const group = (list: SpecItem[]) => {
+    const map: Record<string, SpecItem> = {};
+    list.forEach(i => {
+      const k = i.name + '|' + i.unit + '|' + i.price;
+      map[k] = map[k] ? { ...map[k], quantity: Number(map[k].quantity) + Number(i.quantity), total: Number(map[k].total) + Number(i.total) }
+        : { ...i, quantity: Number(i.quantity), total: Number(i.total) };
+    });
+    return Object.values(map);
+  };
+  const sheetItems = items.filter(i => i.type === 'sheet');
+  const accItems = group(items.filter(i => i.type !== 'sheet'));
+  const sheetTotal = sheetItems.reduce((a, i) => a + Number(i.total), 0);
+  const grand = items.reduce((a, i) => a + Number(i.total), 0);
+  const ct = calcTypeInfo(settings.calc_type);
+
+  return (
+    <div className="kp-window">
+      <div className="kp-toolbar">
+        <div className="kp-btnpair">
+          <button className="btn btn-secondary btn-sm" onClick={onBack}>Назад</button>
+          <button className="btn btn-secondary btn-sm" onClick={onMaterial}>Вих. дані</button>
+        </div>
+        <div className="kp-tools">
+          <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>Друк</button>
+          <a className="btn btn-secondary btn-sm" href={exportApi.pdf(projectId)} target="_blank" rel="noopener noreferrer">PDF</a>
+          <a className="btn btn-secondary btn-sm" href={exportApi.excel(projectId)} target="_blank" rel="noopener noreferrer">Експорт XLS</a>
+          <a className="btn btn-secondary btn-sm" href={exportApi.productionPdf(projectId)} target="_blank" rel="noopener noreferrer">Розкрій (виробництво)</a>
+          <a className="btn btn-secondary btn-sm" href={exportApi.json(projectId)} target="_blank" rel="noopener noreferrer">JSON</a>
+        </div>
+      </div>
+
+      <article className="kp-paper">
+        <div className="kp-paper-head">
+          <div><span>Постачальник:</span> {settings.company ?? 'ТОВ «АртБудТрейдинг»'}</div>
+          <div><span>Замовник:</span> {project?.client_name || '—'}{project?.client_phone ? `, ${project.client_phone}` : ''}</div>
+          {project?.object_address && <div><span>Об'єкт:</span> {project.object_address}</div>}
+        </div>
+        <h2 className="kp-paper-title">СПЕЦИФІКАЦІЯ</h2>
+        <div className="kp-paper-sub">
+          <div>Замовлення №{settings.order_no} від {dateUa(settings.order_date)}</div>
+          <div>Тип розрахунку: «{ct?.label?.toUpperCase()} {settings.supply === 'stock' ? 'ЗІ СКЛАДУ' : 'НА ЗАМОВЛЕННЯ'}»</div>
+        </div>
+        <div className="kp-paper-mat"><span>{(ct?.facade ? 'ФАСАДНИЙ' : 'ПОКРІВЕЛЬНИЙ')} МАТЕРІАЛ:</span> <b>{material?.name || '—'}</b>{material ? ` (${materialLabel(material.type)})` : ''}</div>
+        {material && (
+          <dl className="kp-paper-params">
+            <dt>Повна ширина листа, м</dt><dd>{m3(material.full_width)}</dd>
+            <dt>ПК, м</dt><dd>{m3(settings.pk)}</dd>
+            <dt>Покриття</dt><dd>{settings.coating || '—'}</dd>
+            <dt>Корисна ширина листа, м</dt><dd>{m3(material.useful_width)}</dd>
+            <dt>ПЗ, м</dt><dd>{m3(material.length_overlap)}</dd>
+            <dt>Колір</dt><dd>{settings.color || '—'}</dd>
+            {material.wave_step ? <><dt>Довжина хвилі, м</dt><dd>{m3(material.wave_step)}</dd></> : <><dt>&nbsp;</dt><dd></dd></>}
+            <dt>К, м</dt><dd>{m3(settings.k)}</dd>
+            <dt>&nbsp;</dt><dd></dd>
+            <dt>Макс. реальна довжина листа, м</dt><dd>{m3(material.max_length)}</dd>
+            <dt>Макс. стандартна довжина, м</dt><dd>{m3(calc[0]?.calc_result?.max_std_length_mm || material.max_length)}</dd>
+          </dl>
+        )}
+
+        <table className="kp-table kp-paper-table">
+          <thead>
+            <tr><th>№ ската</th><th>Уклон, град.</th><th>S ската, м²</th><th>S корисна, м²</th><th>S повна, м²</th><th>Листів, шт</th><th>Відходи, %</th></tr>
+          </thead>
+          <tbody>
+            {slopes.map((s, i) => {
+              const r = s.calc_result;
+              return (
+                <tr key={s.id}>
+                  <td>{i + 1}. {s.name}</td><td>{s.slope_angle}</td>
+                  <td>{r ? f2(r.slope_area_m2, 3) : '—'}</td><td>{r ? f2(r.useful_area_m2, 3) : '—'}</td>
+                  <td>{r ? f2(r.total_full_area_m2 ?? r.order_area_m2, 3) : '—'}</td>
+                  <td>{r ? r.total_sheets : '—'}</td><td>{r ? f2(r.waste_pct, 2) : '—'}</td>
+                </tr>
+              );
+            })}
+            <tr className="tr-total"><td>Всього:</td><td></td><td>{f2(tot.area, 3)}</td><td>{f2(tot.useful, 3)}</td><td>{f2(tot.full, 3)}</td><td>{tot.sheets}</td><td>{f2(waste, 2)}</td></tr>
+          </tbody>
+        </table>
+        {sheetTotal > 0 && <div className="kp-paper-line">Сума за покрівельний матеріал, {cur}: <b>{f2(sheetTotal)}</b></div>}
+
+        {lenRows.length > 0 && (
+          <div className="kp-lens">
+            <table className="kp-table">
+              <tbody>
+                <tr><th>Довжина, м</th>{lenRows.map(([l]) => <td key={l}>{m3(l)}</td>)}</tr>
+                <tr><th>К-сть, шт</th>{lenRows.map(([l, c]) => <td key={l}>{c}</td>)}</tr>
+              </tbody>
+            </table>
+            <div className="kp-paper-line">Погонних метрів: <b>{f2(tot.pm, 3)}</b></div>
+          </div>
+        )}
+
+        <h3 className="kp-paper-h">ДОБОРНІ ЕЛЕМЕНТИ ПОСКАТНО</h3>
+        {slopes.map((s, i) => {
+          const a = s.calc_result?.accessories;
+          if (!a) return null;
+          const parts = a.items.map(it => `${it.name} = ${it.quantity} ${it.unit}`);
+          return <div key={s.id} className="kp-paper-line">Скат №{i + 1}: {parts.length ? parts.join('; ') : 'без доборних'}</div>;
+        })}
+
+        {calc.some(s => s.calc_result?.cutting?.length) && (
+          <>
+            <h3 className="kp-paper-h">ТАБЛИЦЯ РОЗКРОЮ</h3>
+            {calc.filter(s => s.calc_result?.cutting?.length).map(s => (
+              <div key={s.id}><div className="kp-paper-line">{s.name}</div><CuttingTable rows={s.calc_result!.cutting} /></div>
+            ))}
+          </>
+        )}
+
+        <h3 className="kp-paper-h">ДОБОРНІ ЕЛЕМЕНТИ, КОМПЛЕКТУЮЧІ — ЗАГАЛЬНА КІЛЬКІСТЬ</h3>
+        <table className="kp-table kp-paper-table">
+          <thead><tr><th>Найменування</th><th>Од.</th><th>Кількість</th><th>Ціна, {cur}</th><th>Сума, {cur}</th></tr></thead>
+          <tbody>
+            {sheetItems.length > 0 && <tr><td>{material?.name || 'Покрівельний матеріал'} — {sheetItems.reduce((a, i) => a + Number(i.quantity), 0)} листів</td><td>м²</td><td>{f2(tot.full, 3)}</td><td>{f2(material?.price_per_m2)}</td><td>{f2(sheetTotal)}</td></tr>}
+            {accItems.map(i => (
+              <tr key={i.name + i.price}><td>{i.name}</td><td>{i.unit}</td><td>{Number(i.quantity).toFixed(i.unit === 'шт' ? 0 : 2)}</td><td>{f2(i.price)}</td><td>{f2(i.total)}</td></tr>
+            ))}
+            <tr className="tr-total"><td colSpan={4}>ПІДСУМОК:</td><td>{f2(grand)}</td></tr>
+          </tbody>
+        </table>
+        {settings.rate ? <div className="kp-paper-line">У у.о. за курсом {settings.rate}: <b>{f2(grand / settings.rate)}</b></div> : null}
+        <div className="kp-paper-sign"><span>Менеджер:</span> {settings.responsible || project?.manager_name || '________________'}</div>
+        {!items.length && <div className="alert alert-info">Специфікація порожня: розрахуйте хоча б один скат.</div>}
+      </article>
     </div>
   );
 }

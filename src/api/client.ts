@@ -71,7 +71,24 @@ export interface Project {
   discount_pct: number; vat_pct: number;
   total_area?: number; total_price?: number;
   share_token?: string; manager_name?: string;
+  settings?: ProjectSettings;
   created_at: string; updated_at: string;
+}
+
+// Реквізити замовлення і параметри проєкту як у «Кровля Профи»
+export type CalcType = 'tile' | 'piece' | 'profile' | 'falts' | 'sheet' | 'siding';
+export type CalcMode = 'order' | 'stock1' | 'stock2' | 'stock3';
+export interface ProjectSettings {
+  calc_type?: CalcType;
+  material_id?: number;
+  order_no?: string; order_date?: string;
+  company?: string; responsible?: string;
+  currency?: string; rate?: number;
+  supply?: 'order' | 'stock'; stock_variant?: 1 | 2 | 3;
+  k?: number; pk?: number;
+  direction?: 'left_right' | 'right_left';
+  coating?: string; color?: string;
+  step?: string;
 }
 
 export interface ProjectsResponse {
@@ -105,7 +122,7 @@ export interface Slope {
   calc_result?: CalcResult; calc_at?: string;
   edge_types?: EdgeType[];            // тип кожного ребра (сторона i → i+1)
   element_kind?: 'roof' | 'facade';   // скат покрівлі або фасад
-  calc_mode?: 'order' | 'stock';      // «на замовлення» / «зі складу»
+  calc_mode?: CalcMode | 'stock';     // «на замовлення» / «зі складу» 1-2-3
   created_at: string; updated_at: string;
 }
 
@@ -125,8 +142,25 @@ export interface CalcResult {
   sheet_full_width?: number;
   sheet_useful_width?: number;
   holes_area_m2?: number;
-  mode?: 'order' | 'stock' | 'fixed';
+  mode?: 'order' | 'stock' | 'stock1' | 'stock2' | 'stock3' | 'fixed' | 'sheetcut';
   material_type?: string;
+  laid_sheets?: number;
+  laid_by_length?: SheetGroup[];
+  cutting?: CuttingGroup[];
+  stock_usage?: { length: number; used: number; available: number | null }[];
+  alternatives?: { rows: number[]; running_m: number }[];
+  running_m?: number;
+  max_real_length_mm?: number; max_std_length_mm?: number; rounding_mm?: number;
+}
+
+export interface CuttingGroup {
+  from: number; to: number; count: number; sheet_length: number;
+  cuts: number[]; remainder: number; missing?: boolean;
+}
+
+export interface AccessoryType {
+  id: number; code: string; name: string; unit: string;
+  working_length: number; default_overlap: number; price: number | string; calc_rule: string;
 }
 
 export interface SheetGroup {
@@ -173,8 +207,9 @@ export interface MaterialProfile {
   full_width: number; useful_width: number;
   side_overlap: number; length_overlap: number;
   wave_step?: number; cut_step?: number; min_length: number; max_length: number;
-  forbidden_lengths?: Array<{min:number;max:number}>;
-  stock_lengths?: number[];
+  forbidden_lengths?: Array<{min:number;max:number} | [number, number]>;
+  stock_lengths?: Array<number | [number, number | null] | {length:number; qty?:number|null}>;
+  round_step?: number; max_std_length?: number;
   lock_type?: string; min_joint_distance?: number; join_overlap?: number;
   min_slope_angle: number; price_per_m2: number;
   color_options?: string[]; coating_options?: string[]; thickness_options?: number[];
@@ -185,6 +220,7 @@ export const materialsApi = {
   list:   ()                   => get<{ profiles: MaterialProfile[] }>('/materials'),
   byType: (type: string)       => get<{ profiles: MaterialProfile[] }>(`/materials/${type}`),
   get:    (id: number)         => get<{ profile: MaterialProfile }>(`/materials/${id}`),
+  accessories: ()              => get<{ accessories: AccessoryType[] }>('/accessories'),
 };
 
 // ============================================

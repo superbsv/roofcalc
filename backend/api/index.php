@@ -73,6 +73,7 @@ try {
         case $method==='GET' &&preg_match('#^/projects/(\d+)/specification$#',$uri,$m): (new SpecController)->index((int)$m[1]); break;
         case $method==='GET' &&$uri==='/materials':            (new MaterialsController)->index(); break;
         case $method==='GET' &&preg_match('#^/materials/(tile|profile|falts|tile_module|sheet|natural_tile)$#',$uri,$m): (new MaterialsController)->byType($m[1]); break;
+        case $method==='GET' && $uri==='/accessories': (new MaterialsController)->accessories(); break;
         case $method==='GET' &&preg_match('#^/materials/(\d+)$#',$uri,$m): (new MaterialsController)->show((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/projects/(\d+)/export/pdf$#',$uri,$m): (new ExportController)->pdf((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/projects/(\d+)/export/excel$#',$uri,$m): (new ExportController)->excel((int)$m[1]); break;
