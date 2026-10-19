@@ -14,6 +14,7 @@ class ProjectsController
     public function __construct()
     {
         Database::ensureProjectSchema();
+        Database::ensureTenantSchema();
     }
 
     // settings: реквізити замовлення і параметри проєкту як у КП
@@ -42,13 +43,12 @@ class ProjectsController
     {
         $user = $this->requireAuth();
 
-        $where  = 'p.user_id = ?';
-        $params = [$user['sub']];
-
-        // Адмін бачить всі проекти
+        // Лише проєкти свого кабінету; адмін і менеджер бачать усі проєкти кабінету, решта — свої
+        $where  = 'p.tenant_id = ? AND p.user_id = ?';
+        $params = [$user['tid'], $user['sub']];
         if (in_array($user['role'], ['admin', 'manager'])) {
-            $where  = '1=1';
-            $params = [];
+            $where  = 'p.tenant_id = ?';
+            $params = [$user['tid']];
         }
 
         // Пошук
@@ -106,8 +106,8 @@ class ProjectsController
 
         $id = Database::insert(
             'INSERT INTO projects (user_id, name, client_name, client_phone, client_email,
-             object_address, roof_type, notes, discount_pct, vat_pct, status, settings)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+             object_address, roof_type, notes, discount_pct, vat_pct, status, settings, tenant_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
                 $user['sub'],
                 trim($body['name']),
@@ -121,6 +121,7 @@ class ProjectsController
                 $body['vat_pct']        ?? 20,
                 'draft',
                 self::cleanSettings($body['settings'] ?? []),
+                $user['tid'],
             ]
         );
 
@@ -276,10 +277,9 @@ class ProjectsController
         $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$id]);
         if (!$project) $this->error('Проект не знайдено', 404);
 
-        // Доступ: свій проект або адмін/менеджер
-        if (!in_array($user['role'], ['admin', 'manager'])
-            && (int)$project['user_id'] !== (int)$user['sub']) {
-            $this->error('Доступ заборонено', 403);
+        // Доступ: проєкт свого кабінету — свій або (для адміна/менеджера) будь-який
+        if (!Auth::projectAllowed($user, $project)) {
+            $this->error('Проект не знайдено', 404);
         }
 
         return $project;
@@ -300,9 +300,9 @@ class ProjectsController
     private function log(int $userId, string $action, string $type, int $entityId): void
     {
         Database::query(
-            'INSERT INTO activity_log (user_id, action, entity_type, entity_id, ip_address)
-             VALUES (?, ?, ?, ?, ?)',
-            [$userId, $action, $type, $entityId, $_SERVER['REMOTE_ADDR'] ?? null]
+            'INSERT INTO activity_log (user_id, tenant_id, action, entity_type, entity_id, ip_address)
+             VALUES (?, (SELECT tenant_id FROM users WHERE id = ?), ?, ?, ?, ?)',
+            [$userId, $userId, $action, $type, $entityId, $_SERVER['REMOTE_ADDR'] ?? null]
         );
     }
 

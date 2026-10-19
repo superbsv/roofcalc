@@ -100,6 +100,13 @@ class AuthController
             $this->error('Користувача не знайдено', 404);
         }
 
+        // Кабінет і права платформи
+        $t = Database::fetchOne('SELECT id, name, plan, status, is_internal, trial_until, paid_until FROM tenants WHERE id = ?', [$payload['tid']]);
+        $user['role']          = $payload['role'];
+        $user['is_superadmin'] = !empty($payload['sa']);
+        $user['impersonating'] = !empty($payload['imp']);
+        $user['tenant']        = $t ? $t + ['active' => $payload['tenant_active']] : null;
+
         $this->json(['user' => $user]);
     }
 

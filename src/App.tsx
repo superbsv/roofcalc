@@ -6,6 +6,7 @@ import ProjectsPage from './pages/ProjectsPage';
 import ProjectPage  from './pages/ProjectPage';
 import AdminPage    from './pages/AdminPage';
 import ProductsPage from './pages/ProductsPage';
+import SuperPage    from './pages/SuperPage';
 import BrandMark, { BrandWordmark } from './components/brand/BrandMark';
 import { ThemeToggle } from './components/theme/theme';
 import { MATERIAL_TYPES } from './components/roof/materials';
@@ -17,10 +18,11 @@ type Page =
   | { type: 'products'; category?: MaterialProfile['type'] }
   | { type: 'clients' }
   | { type: 'users' }
-  | { type: 'settings' };
+  | { type: 'settings' }
+  | { type: 'super' };
 
 function Shell() {
-  const { user, logout, loading } = useAuth();
+  const { user, logout, loading, leaveImpersonation } = useAuth();
   const [page, setPage] = useState<Page>({ type: 'projects' });
   const [productsOpen, setProductsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -93,7 +95,7 @@ function Shell() {
             <div className="header-avatar">{initials}</div>
             <div>
               <div style={{fontWeight:500,fontSize:'.8rem'}}>{user.name}</div>
-              <div style={{fontSize:'.7rem',opacity:.7}}>{roleLabel[user.role]}</div>
+              <div style={{fontSize:'.7rem',opacity:.7}}>{user.tenant?.name ? `${user.tenant.name} · ` : ''}{user.is_superadmin && !user.impersonating ? 'Супер-адмін' : roleLabel[user.role]}</div>
             </div>
           </div>
           <button className="btn btn-ghost btn-sm" onClick={logout}>
@@ -134,9 +136,22 @@ function Shell() {
           </div>
         )}
 
+        {user.is_superadmin && !user.impersonating && (
+          <div className="sidebar-section">
+            <div className="sidebar-title">Платформа</div>
+            {navItem('Кабінети клієнтів',
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/>
+              </svg>,
+              page.type==='super',
+              () => navigate({type:'super'})
+            )}
+          </div>
+        )}
+
         {user.role === 'admin' && (
           <div className="sidebar-section">
-            <div className="sidebar-title">Адмін</div>
+            <div className="sidebar-title">{user.is_superadmin && !user.impersonating ? 'Мій кабінет ABT' : 'Адмін кабінету'}</div>
 
             <div
               className={`sidebar-item${page.type==='products'?' active':''}`}
@@ -202,7 +217,19 @@ function Shell() {
       </aside>
 
       {/* Main */}
-      <main className="main-content">
+      <main className="main-content" key={user.tenant?.id || 0}>
+        {user.impersonating && (
+          <div className="imp-banner" role="status">
+            <span>Ви в кабінеті <b>«{user.tenant?.name}»</b> як супер-адмін. Усі дії записуються в журнал кабінету.</span>
+            <button className="btn btn-sm" onClick={async () => { await leaveImpersonation(); navigate({type:'super'}); }}>← Повернутися в панель</button>
+          </div>
+        )}
+        {user.tenant && !user.tenant.active && (
+          <div className="alert alert-warning" role="status" style={{ marginBottom: 16 }}>
+            Кабінет у режимі перегляду: {user.tenant.status === 'blocked' ? 'доступ заблоковано' : 'підписка закінчилась'}. Розрахунки збережені — для продовження зверніться до ABT.
+          </div>
+        )}
+        {page.type==='super' && user.is_superadmin && <SuperPage onOpenCabinet={() => navigate({type:'projects'})} />}
         {page.type==='projects' && <ProjectsPage onOpenProject={id => navigate({type:'project', id})} />}
         {page.type==='project' && <ProjectPage projectId={page.id} />}
         {page.type==='products' && <ProductsPage category={(page as any).category} />}

@@ -4,7 +4,7 @@
 // ============================================
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, authApi } from '../../api/client';
+import { User, authApi, superApi } from '../../api/client';
 import BrandMark from '../brand/BrandMark';
 import { ThemeToggle } from '../theme/theme';
 
@@ -13,6 +13,9 @@ interface AuthCtx {
   loading: boolean;
   login: (login: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refresh: () => Promise<void>;
+  impersonate: (tenantId: number) => Promise<void>;   // супер-адмін: «Увійти як»
+  leaveImpersonation: () => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx>({} as AuthCtx);
@@ -21,29 +24,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]       = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Профіль, кабінет і права — завжди свіжі з сервера
+  const refresh = async () => {
+    try {
+      const res = await authApi.me();
+      localStorage.setItem('rc_user', JSON.stringify(res.user));
+      setUser(res.user);
+    } catch {}
+  };
+
   useEffect(() => {
     const stored = localStorage.getItem('rc_user');
     if (stored) {
       try { setUser(JSON.parse(stored)); } catch {}
     }
     setLoading(false);
+    if (localStorage.getItem('rc_token')) refresh();
   }, []);
 
   const login = async (loginVal: string, password: string) => {
     const res = await authApi.login(loginVal, password);
     localStorage.setItem('rc_token', res.token);
     localStorage.setItem('rc_user', JSON.stringify(res.user));
+    localStorage.removeItem('rc_token_super');
     setUser(res.user);
+    await refresh();
   };
 
   const logout = async () => {
     try { await authApi.logout(); } catch {}
+    const sup = localStorage.getItem('rc_token_super');
+    if (sup) {   // вихід із чужого кабінету — завершуємо і власну сесію супер-адміна
+      localStorage.setItem('rc_token', sup);
+      try { await authApi.logout(); } catch {}
+    }
     localStorage.removeItem('rc_token');
+    localStorage.removeItem('rc_token_super');
     localStorage.removeItem('rc_user');
     setUser(null);
   };
 
-  return <Ctx.Provider value={{ user, loading, login, logout }}>{children}</Ctx.Provider>;
+  const impersonate = async (tenantId: number) => {
+    const res = await superApi.impersonate(tenantId);
+    if (!localStorage.getItem('rc_token_super')) localStorage.setItem('rc_token_super', localStorage.getItem('rc_token') || '');
+    localStorage.setItem('rc_token', res.token);
+    await refresh();
+  };
+
+  const leaveImpersonation = async () => {
+    try { await superApi.leave(); } catch {}
+    const sup = localStorage.getItem('rc_token_super');
+    if (sup) localStorage.setItem('rc_token', sup);
+    localStorage.removeItem('rc_token_super');
+    await refresh();
+  };
+
+  return <Ctx.Provider value={{ user, loading, login, logout, refresh, impersonate, leaveImpersonation }}>{children}</Ctx.Provider>;
 }
 
 export const useAuth = () => useContext(Ctx);

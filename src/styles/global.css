@@ -1167,3 +1167,19 @@ tr:hover td { background: var(--clr-surface-2); }
 .kp-joint { display: flex; align-items: center; gap: 4px; font-size: .72rem; color: var(--clr-text-3); font-weight: 600; }
 .kp-joint .form-control { width: 76px; padding: 4px 6px; text-align: right; font-family: var(--font-mono); }
 .kp-joint > span { margin-right: 2px; }
+
+/* ---------- Платформа: супер-адмін ---------- */
+.super { display: flex; flex-direction: column; gap: var(--sp-4); }
+.super-grid { display: flex; flex-wrap: wrap; gap: var(--sp-4); align-items: flex-start; }
+.super-grid > .card:first-child { flex: 999 1 640px; }
+.super-card { flex: 1 1 420px; max-width: 560px; display: flex; flex-direction: column; gap: var(--sp-4); position: sticky; top: 8px; }
+.super-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.super-form { display: flex; flex-direction: column; gap: 8px; }
+.super-link { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--clr-text); cursor: pointer; text-align: left; }
+.super-link:hover { color: var(--clr-brand); text-decoration: underline; }
+.super-row-on td { background: var(--clr-brand-pale); }
+.super-adduser { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.super-log { font-size: .78rem; display: flex; flex-direction: column; gap: 3px; max-height: 220px; overflow: auto; }
+.imp-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; background: var(--clr-brand); color: var(--clr-on-brand); padding: 10px 16px; border-radius: var(--r-lg); margin-bottom: 16px; font-size: .9rem; }
+.imp-banner .btn { background: var(--clr-on-brand); color: var(--clr-brand); border: 0; font-weight: 700; }
+@media (max-width: 860px) { .super-card { position: static; max-width: none; } }

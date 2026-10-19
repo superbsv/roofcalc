@@ -84,6 +84,9 @@ export default function ProjectPage({ projectId }: Props) {
   const [matEdit, setMatEdit] = useState<{ mode: 'new' | 'edit' | 'copy'; draft: MaterialProfile } | null>(null);
   const { user } = useAuth();
   const canEditMaterials = user?.role === 'admin' || user?.role === 'manager';
+  // Загальний каталог ABT змінює лише супер-адмін; кабінети працюють з власними копіями
+  const isGlobal = (m?: MaterialProfile) => !!m && (m.tenant_id === null || m.tenant_id === undefined);
+  const canEditThis = (m?: MaterialProfile) => !!m && canEditMaterials && (!isGlobal(m) || (!!user?.is_superadmin && !user?.impersonating));
   const [clip, setClip] = useState<Slope | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
   const [showExplorer, setShowExplorer] = useState(true);
@@ -549,9 +552,10 @@ export default function ProjectPage({ projectId }: Props) {
                 ) : (
                   <>
                     <button className="btn btn-secondary btn-sm" onClick={startNewMaterial} title="Створити новий запис у базі матеріалів">Новий</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => material && setMatEdit({ mode: 'edit', draft: { ...material } })} disabled={!material} title="Перейти в режим редагування поточного матеріалу">Дозволити редагування</button>
+                    {material && <span className={`badge ${isGlobal(material) ? 'badge-blue' : 'badge-green'}`} title={isGlobal(material) ? 'Загальний каталог ABT: щоб змінити, створіть копію' : 'Матеріал вашого кабінету'}>{isGlobal(material) ? 'Каталог ABT' : 'Власний'}</span>}
+                    {canEditThis(material) && <button className="btn btn-secondary btn-sm" onClick={() => material && setMatEdit({ mode: 'edit', draft: { ...material } })} title="Перейти в режим редагування поточного матеріалу">Дозволити редагування</button>}
                     <button className="btn btn-secondary btn-sm" onClick={() => material && setMatEdit({ mode: 'copy', draft: { ...material, id: 0, name: `${material.name} (копія)` } })} disabled={!material} title="Створити новий матеріал копіюванням поточного">Копіювати</button>
-                    <button className="btn btn-danger btn-sm" onClick={deleteMaterial} disabled={!material || !!busy} title="Прибрати матеріал з бази">Видалити</button>
+                    {canEditThis(material) && <button className="btn btn-danger btn-sm" onClick={deleteMaterial} disabled={!!busy} title="Прибрати матеріал з бази">Видалити</button>}
                   </>
                 )}
               </div>

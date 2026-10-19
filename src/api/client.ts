@@ -50,6 +50,14 @@ export interface User {
   id: number; name: string; email: string; login: string;
   role: 'admin'|'manager'|'dealer'|'production'|'viewer';
   company?: string; phone?: string; last_login_at?: string;
+  is_superadmin?: boolean;      // супер-адмін платформи
+  impersonating?: boolean;      // супер-адмін зараз у чужому кабінеті («Увійти як»)
+  tenant?: TenantBrief | null;  // кабінет, у якому працює користувач
+}
+
+export interface TenantBrief {
+  id: number; name: string; plan: string; status: string; is_internal: number | string;
+  trial_until?: string | null; paid_until?: string | null; active: boolean;
 }
 
 export const authApi = {
@@ -205,6 +213,7 @@ export const slopesApi = {
 // ============================================
 export interface MaterialProfile {
   id: number; type: 'tile'|'tile_module'|'profile'|'sheet'|'natural_tile'|'falts'; name: string;
+  tenant_id?: number | null;   // null — загальний каталог ABT
   manufacturer?: string;
   full_width: number; useful_width: number;
   side_overlap: number; length_overlap: number;
@@ -252,4 +261,43 @@ export const exportApi = {
   excel:         (projectId: number) => `${BASE}/projects/${projectId}/export/excel?token=${getToken()}`,
   productionPdf: (projectId: number) => `${BASE}/projects/${projectId}/export/production-pdf?token=${getToken()}`,
   json:          (projectId: number) => `${BASE}/projects/${projectId}/export/json?token=${getToken()}`,
+};
+
+// ============================================
+// SUPER-ADMIN: кабінети платформи
+// ============================================
+export type TenantState = 'internal' | 'active' | 'trial' | 'expired' | 'blocked';
+export interface Tenant {
+  id: number; name: string; plan: string; status: 'active' | 'trial' | 'blocked';
+  is_internal: number | string; trial_until?: string | null; paid_until?: string | null;
+  max_users?: number | null; max_projects_month?: number | null;
+  contact_name?: string | null; contact_email?: string | null; contact_phone?: string | null;
+  city?: string | null; notes?: string | null; created_at: string;
+  state: TenantState;
+  users_count?: number; projects_count?: number; projects_30d?: number; last_login_at?: string | null;
+}
+export interface TenantUser {
+  id: number; name: string; email?: string; login: string; role: User['role'];
+  is_active: number | string; last_login_at?: string | null; created_at: string;
+}
+export interface TenantDetail {
+  tenant: Tenant; users: TenantUser[]; plans: Record<string, string>;
+  stats: { projects: number; projects_30d: number; materials: number };
+  log: { action: string; created_at: string; user_name?: string }[];
+}
+export interface SuperStats {
+  tenants: number; active: number; trial: number; expired: number; blocked: number;
+  by_plan: Record<string, number>; users: number; projects_30d: number;
+}
+
+export const superApi = {
+  stats:      () => get<{ stats: SuperStats; plans: Record<string, string> }>('/super/stats'),
+  tenants:    (search = '') => get<{ tenants: Tenant[]; plans: Record<string, string> }>('/super/tenants' + (search ? '?search=' + encodeURIComponent(search) : '')),
+  tenant:     (id: number) => get<TenantDetail>(`/super/tenants/${id}`),
+  create:     (body: Record<string, unknown>) => post<TenantDetail>('/super/tenants', body),
+  update:     (id: number, body: Partial<Tenant>) => put<TenantDetail>(`/super/tenants/${id}`, body),
+  extend:     (id: number, months: number, plan?: string) => post<TenantDetail>(`/super/tenants/${id}/extend`, { months, plan }),
+  addUser:    (id: number, body: Record<string, unknown>) => post<TenantDetail>(`/super/tenants/${id}/users`, body),
+  impersonate:(id: number) => post<{ token: string; tenant: { id: number; name: string } }>(`/super/tenants/${id}/impersonate`, {}),
+  leave:      () => post<{}>('/super/leave', {}),
 };

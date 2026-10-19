@@ -20,9 +20,8 @@ class SpecController
         $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$projectId]);
         if (!$project) $this->error('Проект не знайдено', 404);
 
-        if (!in_array($user['role'], ['admin','manager'])
-            && (int)$project['user_id'] !== (int)$user['sub']) {
-            $this->error('Доступ заборонено', 403);
+        if (!Auth::projectAllowed($user, $project)) {
+            $this->error('Проект не знайдено', 404);
         }
 
         $items = Database::fetchAll(

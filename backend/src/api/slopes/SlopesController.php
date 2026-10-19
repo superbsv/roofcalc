@@ -157,6 +157,12 @@ class SlopesController
         $fields = [];
         $params = [];
 
+        // матеріал — лише з загального каталогу або свого кабінету
+        if (!empty($body['material_profile_id'])) {
+            $m = Database::fetchOne('SELECT tenant_id FROM material_profiles WHERE id = ?', [(int)$body['material_profile_id']]);
+            if (!$m || ($m['tenant_id'] !== null && (int)$m['tenant_id'] !== (int)$user['tid'])) $this->error('Матеріал не знайдено', 404);
+        }
+
         $allowed = ['name','polygon_points','holes','edge_types','element_kind','calc_mode','slope_angle','eave_side','ridge_side',
                     'laying_direction','eave_overhang','ridge_gap','sort_order','joint_y',
                     'material_profile_id','material_color','material_coating','material_thickness'];
@@ -417,22 +423,17 @@ class SlopesController
         $slope = Database::fetchOne('SELECT * FROM slopes WHERE id = ?', [$id]);
         if (!$slope) $this->error('Скат не знайдено', 404);
 
-        $project = Database::fetchOne('SELECT user_id FROM projects WHERE id = ?', [$slope['project_id']]);
-        if (!in_array($user['role'], ['admin','manager'])
-            && (int)$project['user_id'] !== (int)$user['sub']) {
-            $this->error('Доступ заборонено', 403);
+        $project = Database::fetchOne('SELECT user_id, tenant_id FROM projects WHERE id = ?', [$slope['project_id']]);
+        if (!Auth::projectAllowed($user, $project)) {
+            $this->error('Скат не знайдено', 404);
         }
         return $slope;
     }
 
     private function checkProjectAccess(int $projectId, array $user): void
     {
-        $p = Database::fetchOne('SELECT user_id FROM projects WHERE id = ?', [$projectId]);
-        if (!$p) $this->error('Проект не знайдено', 404);
-        if (!in_array($user['role'], ['admin','manager'])
-            && (int)$p['user_id'] !== (int)$user['sub']) {
-            $this->error('Доступ заборонено', 403);
-        }
+        $p = Database::fetchOne('SELECT user_id, tenant_id FROM projects WHERE id = ?', [$projectId]);
+        if (!Auth::projectAllowed($user, $p)) $this->error('Проект не знайдено', 404);
     }
 
     private function requireAuth(): array

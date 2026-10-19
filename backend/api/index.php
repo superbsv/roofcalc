@@ -16,10 +16,12 @@ require_once $autoload;
 
 spl_autoload_register(function (string $class) {
     $prefix = 'RoofCalc\\';
-    if (!str_starts_with($class, $prefix)) return;
+    if (strncmp($class, $prefix, strlen($prefix)) !== 0) return;   // PHP 7.4: без str_starts_with
     $file = SRC_PATH . '/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
     if (file_exists($file)) require_once $file;
 });
+
+require_once SRC_PATH . '/api/super/SuperController.php';   // нового класу немає в classmap composer на сервері
 
 use RoofCalc\Core\Auth;
 use RoofCalc\Api\Auth\AuthController;
@@ -29,6 +31,7 @@ use RoofCalc\Api\Materials\MaterialsController;
 use RoofCalc\Api\Specification\SpecController;
 use RoofCalc\Api\Export\ExportController;
 use RoofCalc\Api\Admin\AdminController;
+use RoofCalc\Api\Super\SuperController;
 
 date_default_timezone_set('Europe/Kiev');
 
@@ -51,6 +54,17 @@ $uri    = preg_replace('#^/[^/]+/api#', '', $uri) ?: '/';
 
 try {
     if (mt_rand(1,100)===1) Auth::cleanExpiredSessions();
+
+    // Кабінет заблоковано або підписка закінчилась — лише перегляд (дані не видаляються).
+    // Вхід/вихід і панель супер-адміна працюють завжди.
+    if ($method !== 'GET' && strncmp($uri, '/auth/', 6) !== 0 && strncmp($uri, '/super/', 7) !== 0) {
+        $cu = Auth::currentUser();
+        if ($cu && !$cu['tenant_active']) {
+            http_response_code(402);
+            echo json_encode(['error' => 'Кабінет заблоковано або підписка закінчилась — доступний лише перегляд. Зверніться до ABT для продовження.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+    }
 
     switch (true) {
         case $method==='POST'&&$uri==='/auth/login':           (new AuthController)->login(); break;
@@ -79,6 +93,16 @@ try {
         case $method==='GET' &&preg_match('#^/projects/(\d+)/export/excel$#',$uri,$m): (new ExportController)->excel((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/projects/(\d+)/export/production-pdf$#',$uri,$m): (new ExportController)->productionPdf((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/projects/(\d+)/export/json$#',$uri,$m): (new ExportController)->projectJson((int)$m[1]); break;
+        // ---- Супер-адмін платформи: кабінети ----
+        case $method==='GET' &&$uri==='/super/stats':          (new SuperController)->stats(); break;
+        case $method==='GET' &&$uri==='/super/tenants':        (new SuperController)->tenants(); break;
+        case $method==='POST'&&$uri==='/super/tenants':        (new SuperController)->createTenant(); break;
+        case $method==='GET' &&preg_match('#^/super/tenants/(\d+)$#',$uri,$m): (new SuperController)->tenant((int)$m[1]); break;
+        case $method==='PUT' &&preg_match('#^/super/tenants/(\d+)$#',$uri,$m): (new SuperController)->updateTenant((int)$m[1]); break;
+        case $method==='POST'&&preg_match('#^/super/tenants/(\d+)/extend$#',$uri,$m): (new SuperController)->extend((int)$m[1]); break;
+        case $method==='POST'&&preg_match('#^/super/tenants/(\d+)/users$#',$uri,$m): (new SuperController)->addUser((int)$m[1]); break;
+        case $method==='POST'&&preg_match('#^/super/tenants/(\d+)/impersonate$#',$uri,$m): (new SuperController)->impersonate((int)$m[1]); break;
+        case $method==='POST'&&$uri==='/super/leave':          (new SuperController)->leave(); break;
         case $method==='GET' &&$uri==='/admin/users':          (new AdminController)->users(); break;
         case $method==='POST'&&$uri==='/admin/users':          (new AdminController)->createUser(); break;
         case $method==='PUT' &&preg_match('#^/admin/users/(\d+)$#',$uri,$m): (new AdminController)->updateUser((int)$m[1]); break;

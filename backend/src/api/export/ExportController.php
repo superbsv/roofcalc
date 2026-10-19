@@ -59,15 +59,14 @@ class ExportController
         // Посилання відкривається в новій вкладці — токен приходить у ?token=, як для КП/Excel
         $user = Auth::currentUser();
         if (!$user && !empty($_GET['token'])) {
-            $user = Auth::validateToken($_GET['token']);
+            $user = Auth::currentUser((string)$_GET['token']);
         }
         if (!$user) { $this->authError(); return; }
 
-        // Виробництво бачить тільки свій PDF без цін
-        $project = Database::fetchOne('SELECT user_id FROM projects WHERE id = ?', [$id]);
-        if (!$project) { http_response_code(404); exit; }
-        if (!in_array($user['role'], ['admin','manager','production'])) {
-            http_response_code(403); exit;
+        // Розкрій: проєкт свого кабінету; виробництво бачить усі проєкти кабінету
+        $project = Database::fetchOne('SELECT user_id, tenant_id FROM projects WHERE id = ?', [$id]);
+        if (!Auth::projectAllowed($user, $project, ['admin', 'manager', 'production'])) {
+            http_response_code(404); exit;
         }
 
         $gen  = new PdfGenerator($id);
@@ -118,23 +117,13 @@ class ExportController
 
     private function checkAccess(int $projectId): void
     {
-        // Підтримка токену в query string для прямих посилань
-        $token = $_GET['token'] ?? null;
-        if ($token) {
-            $payload = \RoofCalc\Core\Auth::validateToken($token);
-            if (!$payload) { http_response_code(401); exit; }
-            return;
-        }
-
+        // Токен у заголовку або в query string (посилання на файл відкривається в новій вкладці)
         $user = Auth::currentUser();
+        if (!$user && !empty($_GET['token'])) $user = Auth::currentUser((string)$_GET['token']);
         if (!$user) { $this->authError(); exit; }
 
-        $project = Database::fetchOne('SELECT user_id FROM projects WHERE id = ?', [$projectId]);
-        if (!$project) { http_response_code(404); exit; }
-        if (!in_array($user['role'], ['admin','manager'])
-            && (int)$project['user_id'] !== (int)$user['sub']) {
-            http_response_code(403); exit;
-        }
+        $project = Database::fetchOne('SELECT user_id, tenant_id FROM projects WHERE id = ?', [$projectId]);
+        if (!Auth::projectAllowed($user, $project)) { http_response_code(404); exit; }
     }
 
     private function filename(int $id, string $type): string
@@ -150,8 +139,8 @@ class ExportController
         $user = Auth::currentUser();
         if (!$user) return;
         Database::query(
-            'INSERT INTO activity_log (user_id, action, entity_type, entity_id, ip_address) VALUES (?,?,?,?,?)',
-            [$user['sub'], $action, 'project', $projectId, $_SERVER['REMOTE_ADDR'] ?? null]
+            'INSERT INTO activity_log (user_id, tenant_id, action, entity_type, entity_id, ip_address) VALUES (?,?,?,?,?,?)',
+            [$user['sub'], $user['tid'] ?? null, $action, 'project', $projectId, $_SERVER['REMOTE_ADDR'] ?? null]
         );
     }
 

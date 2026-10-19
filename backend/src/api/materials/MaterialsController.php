@@ -12,10 +12,19 @@ use RoofCalc\Core\Database;
 class MaterialsController
 {
     // GET /api/materials
+    // Видимі матеріали: загальний каталог ABT (tenant_id IS NULL) + матеріали кабінету користувача
+    private function scope(): array
+    {
+        Database::ensureTenantSchema();
+        $u = Auth::currentUser();
+        return $u ? ['(tenant_id IS NULL OR tenant_id = ?)', [(int)$u['tid']]] : ['tenant_id IS NULL', []];
+    }
+
     public function index(): void
     {
+        [$w, $p] = $this->scope();
         $profiles = Database::fetchAll(
-            'SELECT * FROM material_profiles WHERE is_active = 1 ORDER BY type, sort_order, name'
+            "SELECT * FROM material_profiles WHERE is_active = 1 AND $w ORDER BY type, sort_order, name", $p
         );
         $this->json(['profiles' => $this->decode($profiles)]);
     }
@@ -26,9 +35,10 @@ class MaterialsController
         if (!in_array($type, ['tile','profile','falts','tile_module','sheet','natural_tile'])) {
             $this->error('Невідомий тип матеріалу', 400);
         }
+        [$w, $p] = $this->scope();
         $profiles = Database::fetchAll(
-            'SELECT * FROM material_profiles WHERE type = ? AND is_active = 1 ORDER BY sort_order, name',
-            [$type]
+            "SELECT * FROM material_profiles WHERE type = ? AND is_active = 1 AND $w ORDER BY sort_order, name",
+            array_merge([$type], $p)
         );
         $this->json(['profiles' => $this->decode($profiles)]);
     }
@@ -46,7 +56,8 @@ class MaterialsController
     // GET /api/materials/{id}
     public function show(int $id): void
     {
-        $p = Database::fetchOne('SELECT * FROM material_profiles WHERE id = ?', [$id]);
+        [$w, $pp] = $this->scope();
+        $p = Database::fetchOne("SELECT * FROM material_profiles WHERE id = ? AND $w", array_merge([$id], $pp));
         if (!$p) $this->error('Профіль не знайдено', 404);
         $this->json(['profile' => $this->decodeOne($p)]);
     }

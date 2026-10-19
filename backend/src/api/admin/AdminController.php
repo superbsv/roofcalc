@@ -11,6 +11,11 @@ use RoofCalc\Core\Database;
 
 class AdminController
 {
+    public function __construct()
+    {
+        Database::ensureTenantSchema();
+    }
+
     // ============================================
     // USERS
     // ============================================
@@ -18,11 +23,13 @@ class AdminController
     // GET /api/admin/users
     public function users(): void
     {
-        $this->requireAdmin();
+        $me = $this->requireAdmin();
+        // лише користувачі свого кабінету
         $users = Database::fetchAll(
             'SELECT id, name, email, login, role, company, phone, is_active,
                     last_login_at, created_at
-             FROM users ORDER BY created_at DESC'
+             FROM users WHERE tenant_id = ? ORDER BY created_at DESC',
+            [$me['tid']]
         );
         $this->json(['users' => $users]);
     }
@@ -30,8 +37,14 @@ class AdminController
     // POST /api/admin/users
     public function createUser(): void
     {
-        $this->requireAdmin();
+        $me = $this->requireAdmin();
         $body = $this->body();
+        // ліміт користувачів тарифу
+        $t = Database::fetchOne('SELECT max_users FROM tenants WHERE id = ?', [$me['tid']]);
+        if (!empty($t['max_users'])) {
+            $cnt = (int)Database::fetchOne('SELECT COUNT(*) c FROM users WHERE tenant_id = ? AND is_active = 1', [$me['tid']])['c'];
+            if ($cnt >= (int)$t['max_users']) $this->error('Досягнуто ліміту користувачів вашого тарифу (' . $t['max_users'] . ')', 402);
+        }
 
         $required = ['name','email','login','password','role'];
         foreach ($required as $f) {
@@ -49,8 +62,8 @@ class AdminController
         if ($exists) $this->error('Логін або email вже зайняті', 409);
 
         $id = Database::insert(
-            'INSERT INTO users (name, email, login, password_hash, role, company, phone, is_active)
-             VALUES (?,?,?,?,?,?,?,?)',
+            'INSERT INTO users (name, email, login, password_hash, role, company, phone, is_active, tenant_id)
+             VALUES (?,?,?,?,?,?,?,?,?)',
             [
                 $body['name'],
                 $body['email'],
@@ -60,6 +73,7 @@ class AdminController
                 $body['company'] ?? null,
                 $body['phone']   ?? null,
                 $body['is_active'] ?? 1,
+                $me['tid'],
             ]
         );
 
@@ -71,7 +85,9 @@ class AdminController
     // PUT /api/admin/users/{id}
     public function updateUser(int $id): void
     {
-        $this->requireAdmin();
+        $me = $this->requireAdmin();
+        $target = Database::fetchOne('SELECT tenant_id FROM users WHERE id = ?', [$id]);
+        if (!$target || (int)$target['tenant_id'] !== (int)$me['tid']) $this->error('Користувача не знайдено', 404);
         $body   = $this->body();
         $fields = []; $params = [];
 
@@ -105,9 +121,11 @@ class AdminController
     // GET /api/admin/materials
     public function materials(): void
     {
-        $this->requireAdmin();
+        $me = $this->requireAdmin();
+        // загальний каталог + матеріали свого кабінету
         $profiles = Database::fetchAll(
-            'SELECT * FROM material_profiles ORDER BY type, sort_order, name'
+            'SELECT * FROM material_profiles WHERE tenant_id IS NULL OR tenant_id = ? ORDER BY type, sort_order, name',
+            [$me['tid']]
         );
         foreach ($profiles as &$p) {
             foreach (['forbidden_lengths','stock_lengths','color_options','coating_options','thickness_options'] as $f) {
@@ -120,7 +138,7 @@ class AdminController
     // POST /api/admin/materials
     public function createMaterial(): void
     {
-        $this->requireMaterialEditor();
+        $me = $this->requireMaterialEditor();
         Database::ensureMaterialSchema();
         $body = $this->body();
 
@@ -169,7 +187,9 @@ class AdminController
         foreach (['round_step', 'max_std_length'] as $f) {
             if (array_key_exists($f, $body)) { $extra[] = "$f = ?"; $vals[] = $body[$f] === '' ? null : $body[$f]; }
         }
-        if ($extra) { $vals[] = $id; Database::query('UPDATE material_profiles SET ' . implode(', ', $extra) . ' WHERE id = ?', $vals); }
+        // Супер-адмін у своєму кабінеті поповнює загальний каталог; решта — каталог свого кабінету
+        $extra[] = 'tenant_id = ?'; $vals[] = (!empty($me['sa']) && empty($me['imp'])) ? null : $me['tid'];
+        $vals[] = $id; Database::query('UPDATE material_profiles SET ' . implode(', ', $extra) . ' WHERE id = ?', $vals);
 
         $this->log('admin.material.create', 'material', $id);
         $this->json(['id' => $id, 'message' => 'Профіль створено'], 201);
@@ -178,7 +198,14 @@ class AdminController
     // PUT /api/admin/materials/{id}
     public function updateMaterial(int $id): void
     {
-        $this->requireMaterialEditor();
+        $me = $this->requireMaterialEditor();
+        $mat = Database::fetchOne('SELECT tenant_id FROM material_profiles WHERE id = ?', [$id]);
+        if (!$mat) $this->error('Матеріал не знайдено', 404);
+        if ($mat['tenant_id'] === null) {
+            if (empty($me['sa']) || !empty($me['imp'])) $this->error('Це матеріал загального каталогу ABT — створіть копію для свого кабінету', 403);
+        } elseif ((int)$mat['tenant_id'] !== (int)$me['tid']) {
+            $this->error('Матеріал не знайдено', 404);
+        }
         Database::ensureMaterialSchema();
         $body = $this->body();
 
@@ -219,7 +246,8 @@ class AdminController
     // PUT /api/admin/settings
     public function updateSettings(): void
     {
-        $this->requireAdmin();
+        $me = $this->requireAdmin();
+        if (empty($me['sa']) || !empty($me['imp'])) $this->error('Загальні налаштування змінює лише супер-адмін платформи', 403);
         $body = $this->body(); // ['key'=>'val',...]
 
         foreach ($body as $key => $value) {
@@ -240,14 +268,14 @@ class AdminController
     // GET /api/admin/logs
     public function logs(): void
     {
-        $this->requireAdmin();
+        $me = $this->requireAdmin();
 
         $page   = max(1, (int)($_GET['page'] ?? 1));
         $limit  = min(100, (int)($_GET['limit'] ?? 50));
         $offset = ($page - 1) * $limit;
 
-        $where  = '1=1';
-        $params = [];
+        $where  = 'l.tenant_id = ?';
+        $params = [$me['tid']];
 
         if (!empty($_GET['user_id'])) {
             $where .= ' AND l.user_id = ?';
@@ -300,10 +328,10 @@ class AdminController
     {
         $user = Auth::currentUser();
         Database::query(
-            'INSERT INTO activity_log (user_id, action, entity_type, entity_id, details, ip_address)
-             VALUES (?,?,?,?,?,?)',
+            'INSERT INTO activity_log (user_id, tenant_id, action, entity_type, entity_id, details, ip_address)
+             VALUES (?,?,?,?,?,?,?)',
             [
-                $user['sub'] ?? null, $action, $type, $entityId,
+                $user['sub'] ?? null, $user['tid'] ?? null, $action, $type, $entityId,
                 $details ? json_encode($details) : null,
                 $_SERVER['REMOTE_ADDR'] ?? null,
             ]

@@ -43,24 +43,68 @@ class Auth
         return $payload;
     }
 
-    // ---- Поточний користувач з заголовка ----
-    public static function currentUser(): ?array
+    // ---- Поточний користувач з заголовка (або з ?token= для посилань на файли) ----
+    // До даних JWT додаються свіжі дані з БД:
+    //   tid — кабінет, у якому працює користувач (для супер-адміна під час «Увійти як» — чужий кабінет)
+    //   sa  — супер-адмін платформи; imp — зараз у чужому кабінеті; tenant_active — кабінет оплачено/активний
+    public static function currentUser(?string $token = null): ?array
     {
-        $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-        if (!preg_match('/Bearer\s+(.+)/i', $header, $m)) return null;
+        if ($token === null) {
+            $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+            if (!preg_match('/Bearer\s+(.+)/i', $header, $m)) return null;
+            $token = trim($m[1]);
+        }
 
-        $payload = self::validateToken(trim($m[1]));
+        $payload = self::validateToken($token);
         if (!$payload) return null;
 
         // Перевіряємо що сесія не відкликана
-        $hash = hash('sha256', trim($m[1]));
+        $hash = hash('sha256', $token);
         $session = Database::fetchOne(
             'SELECT id FROM auth_sessions WHERE token_hash = ? AND expires_at > NOW()',
             [$hash]
         );
         if (!$session) return null;
 
+        Database::ensureTenantSchema();
+        $u = Database::fetchOne(
+            'SELECT id, role, is_active, tenant_id, is_superadmin FROM users WHERE id = ?',
+            [$payload['sub']]
+        );
+        if (!$u || !(int)$u['is_active']) return null;
+
+        $sa  = (int)$u['is_superadmin'] === 1;
+        $tid = (int)$u['tenant_id'];
+        $imp = false;
+        if ($sa && !empty($payload['imp_tid'])) { $tid = (int)$payload['imp_tid']; $imp = true; }
+
+        $t = Database::fetchOne('SELECT * FROM tenants WHERE id = ?', [$tid]);
+        $payload['role']          = $imp ? 'admin' : $u['role'];
+        $payload['tid']           = $tid;
+        $payload['sa']            = $sa;
+        $payload['imp']           = $imp;
+        $payload['tenant_name']   = $t['name'] ?? '';
+        $payload['tenant_active'] = self::tenantActive($t);
         return $payload;
+    }
+
+    // Кабінет активний: не заблоковано і оплачено (або пробний період не закінчився); внутрішній — завжди
+    public static function tenantActive(?array $t): bool
+    {
+        if (!$t) return false;
+        if ((int)($t['is_internal'] ?? 0) === 1) return true;
+        if (($t['status'] ?? '') === 'blocked') return false;
+        $today = date('Y-m-d');
+        if (($t['status'] ?? '') === 'trial') return empty($t['trial_until']) || $t['trial_until'] >= $today;
+        return empty($t['paid_until']) || $t['paid_until'] >= $today;
+    }
+
+    // Доступ до проєкту: той самий кабінет і (своя робота або роль з доступом до всіх проєктів кабінету)
+    public static function projectAllowed(array $user, ?array $project, array $roles = ['admin', 'manager']): bool
+    {
+        if (!$project) return false;
+        if ((int)($project['tenant_id'] ?? 0) !== (int)($user['tid'] ?? -1)) return false;
+        return in_array($user['role'] ?? '', $roles, true) || (int)$project['user_id'] === (int)$user['sub'];
     }
 
     // ---- Хешування пароля ----
