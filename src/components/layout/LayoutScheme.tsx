@@ -300,16 +300,9 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
     setSelected(new Set());
   }, [calcResult]);
 
-  // Межі видимої області: скат + усі листи повнорозмірно (листи не обрізаються контуром ската)
-  // Межі з запасом (повна ширина листа з боків, ~0.7 м знизу і зверху), щоб при зсувах ←/→ ↑/↓
-  // масштаб схеми не «стрибав»; якщо листи виходять ще далі — межі розширюються
-  let vx0 = -fullWidth, vx1 = W + fullWidth, vy0 = -700, vy1 = H + 700;
-  for (const p of placements) {
-    if (p.deleted) continue;
-    const px = fullX(p), py = p.y + (p.offset_y ?? 0), len = p.manual_length ?? p.length;
-    vx0 = Math.min(vx0, px); vx1 = Math.max(vx1, px + p.full_width);
-    vy0 = Math.min(vy0, py); vy1 = Math.max(vy1, py + len);
-  }
+  // Рамка схеми залежить лише від контуру ската (з постійним запасом під листи) — при зсувах ←/→ ↑/↓
+  // рамка і масштаб стоять на місці, рухаються тільки листи
+  const vx0 = -Math.round(fullWidth * 1.2), vx1 = W + Math.round(fullWidth * 1.2), vy0 = -800, vy1 = H + 800;
   const VW = Math.max(1, vx1 - vx0), VH = Math.max(1, vy1 - vy0);
   const scale = Math.min((SVG_W - PADDING*2) / VW, (SVG_H - PADDING*2) / VH); // масштаб — через ширину SVG (zoom)
   const tx = (x: number) => PADDING + (x - vx0) * scale;
@@ -713,7 +706,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
 
       {/* SVG */}
       <div ref={boxRef} style={{ overflowX:'auto', overflowY:'auto', maxHeight:'75vh', border:'1px solid var(--clr-border)', borderRadius:'8px', background:COLORS.bg }}>
-        <svg ref={svgRef} viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+        <svg ref={svgRef} viewBox={`0 0 ${SVG_W} ${SVG_H}`} overflow="hidden"
           style={{ display:'block', width:`${zoom*100}%`, height:'auto' }}
           onMouseDown={onSvgMouseDown} onMouseMove={onSvgMouseMove} onMouseUp={onSvgMouseUp} onClick={onSvgClick}>
           <rect width={SVG_W} height={SVG_H} fill={COLORS.bg}/>
