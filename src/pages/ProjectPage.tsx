@@ -388,7 +388,7 @@ export default function ProjectPage({ projectId }: Props) {
   });
 
   // Лінія стику рядів (одна на весь скат): null — посередині
-  const jointStep = (materials.find(x => x.id === active?.material_profile_id)?.wave_step || 1); // мінімальний крок лінії стику
+  const jointStep = 1; // як у КП: лінія стику рухається точно на крок кнопки
   const setJoint = (mm: number | null) => active && run('calc', async () => {
     await patchSlope(active.id, { joint_y: mm });
     await calcSlope(active.id);
@@ -404,13 +404,13 @@ export default function ProjectPage({ projectId }: Props) {
     await calcSlope(active.id);
   });
 
-  const setForced = (on: boolean) => active && run('calc', async () => {
-    await patchSlope(active.id, { split_forced: on, joint_y: null, v_shift: 0 });
+  const setRowsDiv = (d: number) => active && run('calc', async () => {
+    await patchSlope(active.id, { rows_count: d, split_forced: false, joint_y: null, v_shift: 0 });
     await calcSlope(active.id);
   });
 
   const resetLayout = () => active && run('calc', async () => {
-    await patchSlope(active.id, { layout_shift: 0, joint_y: null, split_forced: false, v_shift: 0 });
+    await patchSlope(active.id, { layout_shift: 0, joint_y: null, split_forced: false, v_shift: 0, rows_count: 0 });
     await calcSlope(active.id);
   });
 
@@ -804,7 +804,7 @@ export default function ProjectPage({ projectId }: Props) {
                   <LayoutScheme calcResult={res as any} polygonPoints={pts} holes={holes} slopeName={active.name}
                     jointY={res.joint_y_mm ?? null} jointRange={res.joint_range_mm ?? null} onJointChange={mm => setJoint(mm)}
                     jointStep={jointStep} shiftX={res.layout_shift_mm ?? 0} onShiftX={mm => setShift(mm)} onReset={resetLayout}
-                    splitForced={!!res.split_forced} onForceSplit={on => setForced(on)}
+                    rowsDiv={res.rows_user ?? 0} rowLen={res.row_len_mm ?? 0} onRowsDiv={d => setRowsDiv(d)}
                     vShift={res.v_shift_mm ?? 0} onVShift={mm => setVShift(mm)} waveStep={res.wave_step_mm ?? 0} />
                   <div className="kp-infobar">
                     <dl>

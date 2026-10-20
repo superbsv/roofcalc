@@ -59,7 +59,10 @@ interface Props {
   shiftX?: number;                              // поточний зсув сітки колонок, мм
   onShiftX?: (mm: number) => void;             // новий зсув сітки колонок (перерахунок на сервері)
   onReset?: () => void;                         // скинути зсув і лінію стику
-  splitForced?: boolean;                        // стик додано на вимогу (скат вміщається одним листом)
+  splitForced?: boolean;                        // (застаріле) стик на вимогу
+  rowsDiv?: number;                             // ⇕ висота ряду: Lmax станд. ÷ rowsDiv (0/1 — авто)
+  rowLen?: number;                              // фактична висота ряду, мм
+  onRowsDiv?: (d: number) => void;              // ⇕ коротший / довший ряд
   vShift?: number;                              // зсув листів по вертикалі (один ряд), мм
   onVShift?: (mm: number) => void;              // ↑/↓ без стику: рухають усі листи вгору/вниз (як у КП)
   waveStep?: number;                            // крок хвилі — для ліній хвиль на листах
@@ -245,7 +248,7 @@ function sheetState(x: number, y: number, len: number, usefulWidth: number, poly
   return 'full';
 }
 
-export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset, splitForced = false, onForceSplit, vShift = 0, onVShift, waveStep = 0 }: Props) {
+export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset, splitForced = false, onForceSplit, rowsDiv = 0, rowLen = 0, onRowsDiv, vShift = 0, onVShift, waveStep = 0 }: Props) {
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
 
@@ -640,7 +643,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           <h3 style={{ margin:0, fontSize:'1rem' }}>Схема розкладки — {slopeName}</h3>
           <div style={{ fontSize:'.8rem', color:'var(--clr-text-3)', marginTop:'2px' }}>
             {calcResult.profile_name} · {visiblePlacements.length} листів · {calcResult.slope_area_m2.toFixed(2)} м²
-            {jointY != null && <span> · Лінія стику: <b style={{ color:'var(--clr-text)' }}>{(jointY/1000).toFixed(3)} м</b>{jointRange ? ` (можна ${(jointRange[0]/1000).toFixed(3)}–${(jointRange[1]/1000).toFixed(3)})` : ''}</span>}
+            {jointY != null && <span> · Перша лінія стику: <b style={{ color:'var(--clr-text)' }}>{(jointY/1000).toFixed(3)} м</b>{rowLen ? ` · висота ряду ${(rowLen/1000).toFixed(3)} м` : ''}{jointRange ? ` (лінія ${(jointRange[0]/1000).toFixed(3)}–${(jointRange[1]/1000).toFixed(3)})` : ''}</span>}
             {jointY == null && vShift !== 0 && <span style={{ color:'var(--clr-brand)' }}> · По вертикалі: ↓{vShift} мм</span>}
             {(onShiftX ? shiftX : layoutOffset) !== 0 && <span style={{ color:'var(--clr-brand)' }}> · Зсув: {(onShiftX ? shiftX : layoutOffset)>0?'+':''}{onShiftX ? shiftX : layoutOffset} мм</span>}
             {hasSelection && <span style={{ color:COLORS.selected, fontWeight:600 }}> · Виділено: {selected.size} шт</span>}
@@ -679,10 +682,11 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
             title={onJointChange ? 'Рухає лінію стику рядів — усі листи ската діляться по ній' : undefined}>
             {onJointChange && jointY != null ? 'Лінія стику:' : 'По вертикалі:'}</span>
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-            {onJointChange && jointY == null && !onVShift && <span style={{ fontSize:'.78rem', color:'var(--clr-text-3)', alignSelf:'center' }}>скат в один ряд</span>}
-            {onJointChange && jointY == null && <>
-              {onForceSplit && <button onClick={() => onForceSplit(true)} style={{ ...shiftBtn, borderColor:'var(--clr-brand)', color:'var(--clr-brand)', fontWeight:700 }}
-                title="Розділити всі листи ската однією лінією (коротші листи)">＋ Додати стик</button>}
+            {onRowsDiv && <>
+              <button onClick={() => onRowsDiv(Math.max(2, rowsDiv + 1))} style={{ ...shiftBtn, fontWeight:700 }}
+                title="⇕ Коротший ряд: листи коротшають, з'являється розріз (як у Кровля Профи)">⇕ коротший ряд</button>
+              {rowsDiv >= 2 && <button onClick={() => onRowsDiv(rowsDiv - 1 < 2 ? 0 : rowsDiv - 1)} style={{ ...shiftBtn, fontWeight:700 }}
+                title="⇕ Довший ряд">⇕ довший ряд</button>}
             </>}
             {!(onJointChange && jointY == null && !onVShift) && STEPS.map(s => (
               <React.Fragment key={s.mm}>
@@ -690,10 +694,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
                 <button onClick={()=>shiftVerticalLayout(+s.mm)} style={shiftBtn}>↑ {s.label}</button>
               </React.Fragment>
             ))}
-            {splitForced && onForceSplit && jointY != null && (
-              <button onClick={() => onForceSplit(false)} style={{ ...shiftBtn, color:'var(--clr-error)', borderColor:'var(--clr-error)' }}
-                title="Повернути укладку одним листом на всю довжину">✕ Прибрати стик</button>
-            )}
           </div>
         </div>
       </div>
