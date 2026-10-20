@@ -301,7 +301,9 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   }, [calcResult]);
 
   // Межі видимої області: скат + усі листи повнорозмірно (листи не обрізаються контуром ската)
-  let vx0 = 0, vx1 = W, vy0 = 0, vy1 = H;
+  // Межі з запасом (повна ширина листа з боків, ~0.7 м знизу і зверху), щоб при зсувах ←/→ ↑/↓
+  // масштаб схеми не «стрибав»; якщо листи виходять ще далі — межі розширюються
+  let vx0 = -fullWidth, vx1 = W + fullWidth, vy0 = -700, vy1 = H + 700;
   for (const p of placements) {
     if (p.deleted) continue;
     const px = fullX(p), py = p.y + (p.offset_y ?? 0), len = p.manual_length ?? p.length;

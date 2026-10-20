@@ -160,6 +160,12 @@ export default function ProductsPage({ category }: { category?: Category }) {
   const [error, setError]       = useState('');
   const [success, setSuccess]   = useState('');
 
+  const [closedMf, setClosedMf] = useState<Set<string>>(new Set());
+  const mfName = (m: Material) => (m.manufacturer || '').trim() || (m.owner_mf && String(m.owner_mf) === '1' ? (m.owner_name || '') : '') || 'Без виробника';
+  const mfGroups: [string, Material[]][] = Array.from(new Set(materials.map(mfName)))
+    .sort((a, b) => (a === 'Без виробника' ? 1 : b === 'Без виробника' ? -1 : a.localeCompare(b, 'uk')))
+    .map(mf => [mf, materials.filter(m => mfName(m) === mf).sort((a, b) => a.name.localeCompare(b.name, 'uk'))]);
+
   const [forbiddenInput, setForbiddenInput] = useState('');
   const [stockInput, setStockInput]         = useState('');
 
@@ -252,14 +258,22 @@ export default function ProductsPage({ category }: { category?: Category }) {
           {materials.length === 0 && (
             <div style={{ padding:'16px', color:'var(--clr-text-3)', fontSize:'.85rem', textAlign:'center' }}>Матеріалів немає</div>
           )}
-          {materials.map(m => (
+          {/* Каталог: вид матеріалу → виробник → назва форми */}
+          {mfGroups.map(([mf, list]) => (
+            <div key={mf} className="prod-mf">
+              <button type="button" className="prod-mf-head" onClick={() => setClosedMf(c => { const n = new Set(c); n.has(mf) ? n.delete(mf) : n.add(mf); return n; })}
+                aria-expanded={!closedMf.has(mf)}>
+                <span>{closedMf.has(mf) ? '▸' : '▾'} {mf}</span><em>{list.length}</em>
+              </button>
+              {!closedMf.has(mf) && <div className="prod-mf-list">
+              {list.map(m => (
             <div key={m.id} onClick={() => selectMaterial(m)}
               style={{ padding:'10px 12px', cursor:'pointer', borderBottom:'1px solid var(--clr-border)',
                 background: selected?.id===m.id ? 'var(--clr-brand-pale)' : 'transparent',
                 borderLeft: selected?.id===m.id ? '3px solid var(--clr-brand)' : '3px solid transparent' }}>
               <div style={{ fontWeight:500, fontSize:'.85rem' }}>{m.name}</div>
               <div style={{ fontSize:'.75rem', color:'var(--clr-text-3)' }}>
-                {m.manufacturer && `${m.manufacturer} · `}{m.useful_width} мм
+                {m.useful_width} / {m.full_width} мм
               </div>
               <div style={{ fontSize:'.7rem', marginTop:'2px', display:'flex', gap:'4px', flexWrap:'wrap' }}>
                 {(() => { const src = materialSource(m, myTid); return src.kind !== 'own' && (
@@ -269,6 +283,9 @@ export default function ProductsPage({ category }: { category?: Category }) {
                   {m.is_active ? 'Активний' : 'Неактивний'}
                 </span>
               </div>
+            </div>
+              ))}
+              </div>}
             </div>
           ))}
         </div>
@@ -311,7 +328,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
                 <Field label="Назва матеріалу *">
                   <input className="form-control" value={form.name} onChange={e => f('name', e.target.value)} placeholder="Н-р: MaxiTile Classic" />
                 </Field>
-                <Field label="Виробник">
+                <Field label="Виробник *">
                   <input className="form-control" value={form.manufacturer || ''} onChange={e => f('manufacturer', e.target.value)} placeholder="Н-р: Ruukki" />
                 </Field>
                 <Field label="Тип">

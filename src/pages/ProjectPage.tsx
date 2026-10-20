@@ -87,7 +87,7 @@ export default function ProjectPage({ projectId }: Props) {
   // Загальний каталог ABT змінює лише супер-адмін; кабінети працюють з власними копіями
   const isGlobal = (m?: MaterialProfile) => !!m && (m.tenant_id === null || m.tenant_id === undefined);
   const isOwn = (m?: MaterialProfile) => !!m && !isGlobal(m) && Number(m.tenant_id) === Number(user?.tenant?.id);
-  const srcOf = (m: MaterialProfile) => isGlobal(m) ? 'Каталог ABT' : isOwn(m) ? 'Мої матеріали' : `Виробник: ${m.owner_name || '—'}`;
+  const mfOf = (m: MaterialProfile) => (m.manufacturer || '').trim() || (!isGlobal(m) && !isOwn(m) ? (m.owner_name || '') : '') || 'Без виробника';
   const canEditThis = (m?: MaterialProfile) => !!m && canEditMaterials && (isOwn(m) || (isGlobal(m) && !!user?.is_superadmin && !user?.impersonating));
   const [clip, setClip] = useState<Slope | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
@@ -558,10 +558,10 @@ export default function ProjectPage({ projectId }: Props) {
               <select className="form-control kp-matsel" aria-label="Матеріал" value={settings.material_id || 0}
                 onChange={e => { const id = +e.target.value || undefined; const m = materials.find(x => x.id === id); setSettings(s => ({ ...s, material_id: id, coating: m?.coating_options?.[0], color: m?.color_options?.[0] })); }}>
                 <option value={0}>— Оберіть матеріал з бази —</option>
-                {/* Групи: мої матеріали, каталог ABT, каталоги виробників */}
-                {Array.from(new Set(typeMaterials.map(srcOf))).sort((a, b) => (a === 'Мої матеріали' ? -1 : b === 'Мої матеріали' ? 1 : a === 'Каталог ABT' ? -1 : b === 'Каталог ABT' ? 1 : a.localeCompare(b))).map(g => (
+                {/* Каталог: виробник → назва форми (власні матеріали позначені) */}
+                {Array.from(new Set(typeMaterials.map(mfOf))).sort((a, b) => (a === 'Без виробника' ? 1 : b === 'Без виробника' ? -1 : a.localeCompare(b, 'uk'))).map(g => (
                   <optgroup key={g} label={g}>
-                    {typeMaterials.filter(m => srcOf(m) === g).map(m => <option key={m.id} value={m.id}>{m.manufacturer && !g.startsWith('Виробник') ? `${m.manufacturer} · ` : ''}{m.name}</option>)}
+                    {typeMaterials.filter(m => mfOf(m) === g).sort((a, b) => a.name.localeCompare(b.name, 'uk')).map(m => <option key={m.id} value={m.id}>{m.name}{isOwn(m) ? ' — власний' : ''}</option>)}
                   </optgroup>
                 ))}
               </select>

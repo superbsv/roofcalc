@@ -1353,3 +1353,7 @@ tr:hover td { background: var(--clr-surface-2); }
   .prod-back { display: inline-flex; }
   .prod-form > div:first-of-type { flex-wrap: wrap; gap: 8px; }
 }
+.prod-mf { border-bottom: 1px solid var(--clr-border); }
+.prod-mf-head { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 12px; background: var(--clr-surface-2); border: 0; color: var(--clr-text); font: inherit; font-family: var(--font-display); font-weight: 700; font-size: .82rem; cursor: pointer; text-align: left; }
+.prod-mf-head em { font-style: normal; font-size: .72rem; color: var(--clr-text-3); background: var(--clr-surface); border-radius: 10px; padding: 1px 8px; }
+.prod-mf-list > div { padding-left: 22px !important; }
