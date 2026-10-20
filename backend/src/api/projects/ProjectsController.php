@@ -44,10 +44,10 @@ class ProjectsController
     {
         $user = $this->requireAuth();
 
-        // Лише проєкти свого кабінету; адмін і менеджер бачать усі проєкти кабінету, решта — свої
+        // Лише проєкти свого кабінету; адміністратор бачить усі проєкти кабінету, менеджер і решта — лише свої
         $where  = 'p.tenant_id = ? AND p.user_id = ?';
         $params = [$user['tid'], $user['sub']];
-        if (in_array($user['role'], ['admin', 'manager'])) {
+        if ($user['role'] === 'admin') {
             $where  = 'p.tenant_id = ?';
             $params = [$user['tid']];
         }
@@ -311,6 +311,9 @@ class ProjectsController
     {
         $user = Auth::currentUser();
         if (!$user) $this->error('Не авторизовано', 401);
+        if (!empty($user['sa']) && empty($user['imp'])) {
+            $this->error('Панель платформи не працює з розрахунками — увійдіть під користувачем кабінету або відкрийте кабінет клієнта', 403);
+        }
         return $user;
     }
 

@@ -65,7 +65,7 @@ class ExportController
 
         // Розкрій: проєкт свого кабінету; виробництво бачить усі проєкти кабінету
         $project = Database::fetchOne('SELECT user_id, tenant_id FROM projects WHERE id = ?', [$id]);
-        if (!Auth::projectAllowed($user, $project, ['admin', 'manager', 'production'])) {
+        if (!Auth::projectAllowed($user, $project, ['admin', 'production'])) {
             http_response_code(404); exit;
         }
 

@@ -57,6 +57,13 @@ function Shell() {
 
   if (!user) return <LoginPage />;
 
+  // Панель платформи (супер-адмін поза кабінетом): лише кабінети клієнтів, каталог, тарифи, журнал.
+  // Розрахунки, заявки й налаштування компанії — тільки всередині кабінету (свій користувач або «Увійти як клієнт»)
+  const isPlatform = !!user.is_superadmin && !user.impersonating;
+  const TENANT_ONLY = ['projects', 'project', 'leads', 'tenant', 'clients', 'users', 'settings'];
+  const view: Page = isPlatform && TENANT_ONLY.includes(page.type) ? { type: 'super' } : page;
+  const home: Page = isPlatform ? { type: 'super' } : { type: 'projects' };
+
   const initials = user.name.split(' ').map((w: string) => w[0]).join('').slice(0,2).toUpperCase();
   const roleLabel: Record<string,string> = {
     admin:'Адміністратор', manager:'Менеджер', dealer:'Дилер',
@@ -84,19 +91,25 @@ function Shell() {
           </svg>
         </button>
 
-        <a href="/" className="header-logo" onClick={e => { e.preventDefault(); navigate({type:'projects'}); }}>
+        <a href="/" className="header-logo" onClick={e => { e.preventDefault(); navigate(home); }}>
           <div className="header-logo-icon"><BrandMark size={52} /></div>
           <span><BrandWordmark /></span>
         </a>
 
         <nav className="header-nav">
-          <a href="/" className={page.type==='projects'?'active':''} onClick={e=>{e.preventDefault();navigate({type:'projects'});}}>
+          {isPlatform ? <>
+          <a href="/" className={view.type==='super'?'active':''} onClick={e=>{e.preventDefault();navigate({type:'super'});}}>Кабінети клієнтів</a>
+          <a href="/" className={view.type==='products'?'active':''} onClick={e=>{e.preventDefault();navigate({type:'products'});}}>Каталог</a>
+          <a href="/" className={view.type==='plans'?'active':''} onClick={e=>{e.preventDefault();navigate({type:'plans'});}}>Тарифи</a>
+          </> : <>
+          <a href="/" className={view.type==='projects'?'active':''} onClick={e=>{e.preventDefault();navigate({type:'projects'});}}>
             Проекти
           </a>
           <a href="/" onClick={e=>{e.preventDefault();setTrigOpen(true);}} title="Калькулятор тригонометричний: сторони, кути і площа трикутника">
             Калькулятор
           </a>
-          {page.type==='project' && (
+          </>}
+          {view.type==='project' && (
             <a href="/" className="active" onClick={e=>e.preventDefault()}>← Поточний проект</a>
           )}
         </nav>
@@ -108,7 +121,7 @@ function Shell() {
             <div className="header-avatar">{initials}</div>
             <div>
               <div style={{fontWeight:500,fontSize:'.8rem'}}>{user.name}</div>
-              <div style={{fontSize:'.7rem',opacity:.7}}>{user.tenant?.name ? `${user.tenant.name} · ` : ''}{user.is_superadmin && !user.impersonating ? 'Супер-адмін' : roleLabel[user.role]}</div>
+              <div style={{fontSize:'.7rem',opacity:.7}}>{isPlatform ? 'Панель платформи ROOFKIT' : <>{user.tenant?.name ? `${user.tenant.name} · ` : ''}{roleLabel[user.role]}</>}</div>
             </div>
           </div>
           <button className="btn btn-ghost btn-sm" onClick={logout}>
@@ -126,13 +139,13 @@ function Shell() {
       {/* Sidebar */}
       <aside className={`sidebar${sidebarOpen?' open':''}`}>
 
-        <div className="sidebar-section">
+        {!isPlatform && <div className="sidebar-section">
           <div className="sidebar-title">Навігація</div>
           {navItem('Мої проекти',
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"/>
             </svg>,
-            page.type==='projects',
+            view.type==='projects',
             () => navigate({type:'projects'})
           )}
           {navItem('Калькулятор тригонометричний',
@@ -146,10 +159,10 @@ function Shell() {
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/>
             </svg>,
-            page.type==='leads',
+            view.type==='leads',
             () => navigate({type:'leads'})
           )}
-        </div>
+        </div>}
 
         {user.role !== 'admin' && (
           <div className="sidebar-section">
@@ -158,13 +171,13 @@ function Shell() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
               </svg>,
-              page.type==='tenant',
+              view.type==='tenant',
               () => navigate({type:'tenant'})
             )}
           </div>
         )}
 
-        {page.type==='project' && (
+        {view.type==='project' && (
           <div className="sidebar-section">
             <div className="sidebar-title">Проект</div>
             <div className="sidebar-item active">
@@ -183,14 +196,14 @@ function Shell() {
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/>
               </svg>,
-              page.type==='super',
+              view.type==='super',
               () => navigate({type:'super'})
             )}
             {navItem('Тарифи',
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"/>
               </svg>,
-              page.type==='plans',
+              view.type==='plans',
               () => navigate({type:'plans'})
             )}
             {navItem('Журнал і загальні налаштування',
@@ -198,18 +211,18 @@ function Shell() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
               </svg>,
-              page.type==='platform-settings',
+              view.type==='platform-settings',
               () => navigate({type:'platform-settings'})
             )}
           </div>
         )}
 
-        {user.role === 'admin' && (
+        {(user.role === 'admin' || isPlatform) && (
           <div className="sidebar-section">
-            <div className="sidebar-title">{user.is_superadmin && !user.impersonating ? 'Мій кабінет ABT' : 'Адмін кабінету'}</div>
+            <div className="sidebar-title">{isPlatform ? 'Каталог ROOFKIT' : 'Адмін кабінету'}</div>
 
             <div
-              className={`sidebar-item${page.type==='products'?' active':''}`}
+              className={`sidebar-item${view.type==='products'?' active':''}`}
               onClick={() => { setProductsOpen(!productsOpen); navigate({type:'products'}); }}
             >
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -224,7 +237,7 @@ function Shell() {
                 {MATERIAL_TYPES.map(t => ({ cat: t.key, label: t.label })).map(({cat, label}) => (
                   <div
                     key={cat}
-                    className={`sidebar-item${page.type==='products'&&(page as any).category===cat?' active':''}`}
+                    className={`sidebar-item${view.type==='products'&&(view as any).category===cat?' active':''}`}
                     onClick={() => navigate({type:'products', category:cat})}
                     style={{fontSize:'.85rem'}}
                   >
@@ -234,20 +247,20 @@ function Shell() {
               </div>
             )}
 
-            {navItem('Клієнти',
+            {!isPlatform && navItem('Клієнти',
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
               </svg>,
-              page.type==='clients',
+              view.type==='clients',
               () => navigate({type:'clients'})
             )}
 
-            {navItem('Налаштування кабінету',
+            {!isPlatform && navItem('Налаштування кабінету',
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
               </svg>,
-              page.type==='tenant',
+              view.type==='tenant',
               () => navigate({type:'tenant'})
             )}
           </div>
@@ -276,22 +289,22 @@ function Shell() {
             Кабінет у режимі перегляду: {user.tenant.status === 'blocked' ? 'доступ заблоковано' : 'підписка закінчилась'}. Розрахунки збережені — для продовження зверніться до ABT.
           </div>
         )}
-        {page.type==='super' && user.is_superadmin && <SuperPage onOpenCabinet={() => navigate({type:'projects'})} />}
-        {page.type==='projects' && <ProjectsPage onOpenProject={id => navigate({type:'project', id})} />}
-        {page.type==='project' && <ProjectPage projectId={page.id} />}
-        {page.type==='products' && <ProductsPage category={(page as any).category} />}
-        {page.type==='users' && <AdminPage />}
-        {page.type==='clients' && (
+        {view.type==='super' && user.is_superadmin && <SuperPage onOpenCabinet={() => navigate({type:'projects'})} />}
+        {view.type==='projects' && <ProjectsPage onOpenProject={id => navigate({type:'project', id})} />}
+        {view.type==='project' && <ProjectPage projectId={(view as any).id} />}
+        {view.type==='products' && <ProductsPage category={(view as any).category} />}
+        {view.type==='users' && <AdminPage />}
+        {view.type==='clients' && (
           <div style={{padding:'32px'}}>
             <h2>Клієнти</h2>
             <p style={{color:'var(--clr-text-3)'}}>Розділ в розробці</p>
           </div>
         )}
-        {page.type==='settings' && <AdminPage />}
-        {page.type==='platform-settings' && user.is_superadmin && <AdminPage />}
-        {page.type==='plans' && user.is_superadmin && <PlansPage />}
-        {page.type==='tenant' && <TenantSettingsPage />}
-        {page.type==='leads' && <LeadsPage />}
+        {view.type==='settings' && <AdminPage />}
+        {view.type==='platform-settings' && user.is_superadmin && <AdminPage />}
+        {view.type==='plans' && user.is_superadmin && <PlansPage />}
+        {view.type==='tenant' && <TenantSettingsPage />}
+        {view.type==='leads' && <LeadsPage />}
       </main>
     </div>
   );

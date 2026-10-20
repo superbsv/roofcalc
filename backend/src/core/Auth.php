@@ -100,9 +100,12 @@ class Auth
     }
 
     // Доступ до проєкту: той самий кабінет і (своя робота або роль з доступом до всіх проєктів кабінету)
-    public static function projectAllowed(array $user, ?array $project, array $roles = ['admin', 'manager']): bool
+    // Доступ до розрахунку: лише свій кабінет; адміністратор кабінету бачить усі розрахунки кабінету,
+    // менеджер та інші ролі — тільки власні. Панель платформи (супер-адмін поза кабінетом) розрахунків не має.
+    public static function projectAllowed(array $user, ?array $project, array $roles = ['admin']): bool
     {
         if (!$project) return false;
+        if (!empty($user['sa']) && empty($user['imp'])) return false;
         if ((int)($project['tenant_id'] ?? 0) !== (int)($user['tid'] ?? -1)) return false;
         return in_array($user['role'] ?? '', $roles, true) || (int)$project['user_id'] === (int)$user['sub'];
     }
