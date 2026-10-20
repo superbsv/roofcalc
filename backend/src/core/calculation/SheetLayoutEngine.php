@@ -365,26 +365,42 @@ class SheetLayoutEngine
         }
         $rows = 1 + (int)ceil(max(0, $maxTop - $joint) / max(1, $rowLen - $this->pz));
 
+        // Сітка ліній стику на весь скат: J0 = $joint, далі через (висота ряду − нахлест).
+        // Кожна колонка ділиться саме цими лініями — і та, що починається вище першої лінії (над вирізом/уступом).
+        $step = max(1, $rowLen - $this->pz);
+        $lines = [];
+        for ($y = $joint; $y < $maxTop && count($lines) < 60; $y += $step) $lines[] = $y;
+
         foreach ($columns as $i => $col) {
             $need = $col['need'];
-            $top = $col['bottom'] + $need;
-            // Ділимо ВСІ колонки, які перетинає лінія стику — стик іде однією лінією по всьому скату
-            $crosses = $col['bottom'] < $joint && $top > $joint;
-            if (!in_array($i, $split, true) && !$crosses) { $out[] = [$this->fit($need, $max)]; continue; }
-            if ($col['bottom'] >= $joint) { $out[] = [$this->fit($need, $max)]; continue; }
-            // нижній лист — до лінії стику: від найнижчого карниза стандартна довжина (хвиля × n + ПЗ),
+            $bot = $col['bottom'];
+            $top = $bot + $need;
+            // перша лінія, вище низу колонки щонайменше на Lmin
+            $first = null;
+            foreach ($lines as $ly) { if ($ly > $bot + $this->lmin - 1 && $ly < $top) { $first = $ly; break; } }
+            if ($first === null) {   // жодна лінія стику не перетинає колонку — одним листом
+                if ($first === null && $need > $max) {
+                    // лінії не перетинають колонку, але лист не вміщається — ряди знизу
+                    $lens = []; $left = $need;
+                    for ($k = 0; $k < 50 && $left > $max; $k++) { $lens[] = $rowLen; $left -= ($rowLen - $this->pz); }
+                    if ($left > 0) $lens[] = $this->fit($left + $this->pz, $max);
+                    $out[] = $lens; continue;
+                }
+                $out[] = [$this->fit($need, $max)]; continue;
+            }
+            // нижній лист — до першої лінії: від найнижчого карниза стандартна довжина (хвиля × n + ПЗ),
             // у колонках з вищим низом — рівно до лінії
-            $first = $col['bottom'] <= $minBottom
-                ? max($this->lmin, min($maxLower, $this->stdLen($joint - $col['bottom'], $maxLower)))
-                : max($this->lmin, min($maxLower, $this->fit($joint - $col['bottom'], $maxLower)));
-            $this->colStart[$i] = $joint - $first;   // низ першого листа (може бути нижче карниза)
-            $lens = [$first];
-            $cur = $joint;                           // верх укладених листів
+            $len0 = ($bot <= $minBottom && $first === $joint)
+                ? max($this->lmin, min($maxLower, $this->stdLen($first - $bot, $maxLower)))
+                : max($this->lmin, min($maxLower, $this->fit($first - $bot, $maxLower)));
+            $this->colStart[$i] = $first - $len0;   // низ першого листа (може бути нижче карниза)
+            $lens = [$len0];
+            $cur = $first;
             for ($k = 0; $k < 50; $k++) {
                 $remain = $top - $cur + $this->pz;   // скільки ще вкрити (з нахлестом)
                 if ($remain <= $this->pz) break;
                 if ($remain <= $rowLen || ($div < 2 && $remain <= $max)) { $lens[] = $this->fit($remain, $max); break; }
-                $lens[] = $rowLen; $cur += $rowLen - $this->pz;
+                $lens[] = $rowLen; $cur += $step;
             }
             $out[] = $lens;
         }
