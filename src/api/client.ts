@@ -94,6 +94,26 @@ export const teamApi = {
   create: (body: Record<string, unknown>) => post<{ user: TeamUser }>('/admin/users', body),
   update: (id: number, body: Record<string, unknown>) => put<{ user: TeamUser }>(`/admin/users/${id}`, body),
 };
+// Віджет калькулятора для сайту компанії і заявки з нього
+export interface WidgetSettings {
+  key: string; enabled: boolean; materials: number[]; eave_overhang: number;
+  available: { id: number; name: string; manufacturer?: string | null; type: string; tenant_id?: number | null }[];
+}
+export interface Lead {
+  id: number; name?: string | null; phone: string; email?: string | null; comment?: string | null;
+  source_url?: string | null; status: 'new' | 'work' | 'done' | 'spam'; created_at: string;
+  payload?: { roof?: { type: string; values: Record<string, number> } | null;
+              calc?: { material: string; area_m2: number; sheets: number; full_area_m2: number; lengths: { length_mm: number; count: number }[] } | null } | null;
+}
+export const widgetApi = {
+  get:  () => get<WidgetSettings>('/tenant/widget'),
+  save: (body: Partial<WidgetSettings> & { regenerate?: boolean }) => put<WidgetSettings>('/tenant/widget', body),
+};
+export const leadsApi = {
+  list:   (status?: string) => get<{ leads: Lead[]; new_count: number }>('/leads' + (status ? `?status=${status}` : '')),
+  update: (id: number, status: Lead['status']) => put<{ ok: boolean }>(`/leads/${id}`, { status }),
+};
+
 export const tenantApi = {
   get:    () => get<TenantInfo>('/tenant'),
   update: (body: Partial<TenantSettings>) => put<TenantInfo>('/tenant', body),

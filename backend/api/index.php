@@ -30,6 +30,7 @@ require_once SRC_PATH . '/core/Plans.php';
 require_once SRC_PATH . '/core/Catalog.php';
 require_once SRC_PATH . '/api/super/SuperController.php';
 require_once SRC_PATH . '/api/tenant/TenantController.php';
+require_once SRC_PATH . '/api/widget/WidgetController.php';
 
 use RoofCalc\Core\Auth;
 use RoofCalc\Api\Auth\AuthController;
@@ -41,6 +42,7 @@ use RoofCalc\Api\Export\ExportController;
 use RoofCalc\Api\Admin\AdminController;
 use RoofCalc\Api\Super\SuperController;
 use RoofCalc\Api\Tenant\TenantController;
+use RoofCalc\Api\Widget\WidgetController;
 
 date_default_timezone_set(in_array('Europe/Kyiv', timezone_identifiers_list(), true) ? 'Europe/Kyiv' : 'Europe/Kiev');
 
@@ -66,7 +68,7 @@ try {
 
     // Кабінет заблоковано або підписка закінчилась — лише перегляд (дані не видаляються).
     // Вхід/вихід і панель супер-адміна працюють завжди.
-    if ($method !== 'GET' && strncmp($uri, '/auth/', 6) !== 0 && strncmp($uri, '/super/', 7) !== 0) {
+    if ($method !== 'GET' && strncmp($uri, '/auth/', 6) !== 0 && strncmp($uri, '/super/', 7) !== 0 && strncmp($uri, '/widget/', 8) !== 0) {
         $cu = Auth::currentUser();
         if ($cu && !$cu['tenant_active']) {
             http_response_code(402);
@@ -81,6 +83,14 @@ try {
         case $method==='POST'&&$uri==='/auth/register':        (new AuthController)->register(); break;
         case $method==='GET' &&$uri==='/plans':                (new AuthController)->plans(); break;
         case $method==='GET' &&$uri==='/tenant':               (new TenantController)->show(); break;
+        // ---- Віджет калькулятора (публічно, за ключем кабінету) і заявки ----
+        case $method==='GET' &&preg_match('#^/widget/([a-f0-9]{16,40})/config$#',$uri,$m): (new WidgetController)->config($m[1]); break;
+        case $method==='POST'&&preg_match('#^/widget/([a-f0-9]{16,40})/calc$#',$uri,$m):   (new WidgetController)->calc($m[1]); break;
+        case $method==='POST'&&preg_match('#^/widget/([a-f0-9]{16,40})/lead$#',$uri,$m):   (new WidgetController)->lead($m[1]); break;
+        case $method==='GET' &&$uri==='/tenant/widget':        (new WidgetController)->settings(); break;
+        case $method==='PUT' &&$uri==='/tenant/widget':        (new WidgetController)->saveSettings(); break;
+        case $method==='GET' &&$uri==='/leads':                (new WidgetController)->leads(); break;
+        case $method==='PUT' &&preg_match('#^/leads/(\d+)$#',$uri,$m): (new WidgetController)->updateLead((int)$m[1]); break;
         case $method==='PUT' &&$uri==='/tenant':               (new TenantController)->update(); break;
         case $method==='PUT' &&$uri==='/super/plans':          (new SuperController)->savePlans(); break;
         case $method==='GET' &&$uri==='/auth/me':              (new AuthController)->me(); break;

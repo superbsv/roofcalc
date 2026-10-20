@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Калькулятор покрівлі</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+  :root { --brand: #FF7A1A; --ink: #0B1119; --ink2: #334155; --ink3: #64748B; --line: #DDE3EA; --bg: #FFFFFF; --soft: #F5F7FA; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; }
+  body { font-family: Inter, system-ui, sans-serif; color: var(--ink); font-size: 15px; }
+  .w { background: var(--bg); border: 1px solid var(--line); border-radius: 16px; padding: 20px; max-width: 760px; margin: 0 auto; }
+  .head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .head img { max-height: 40px; max-width: 140px; object-fit: contain; }
+  .head h1 { font-family: Manrope, Inter, sans-serif; font-size: 1.25rem; margin: 0; line-height: 1.2; }
+  .head p { margin: 2px 0 0; color: var(--ink3); font-size: .85rem; }
+  h2 { font-family: Manrope, Inter, sans-serif; font-size: 1rem; margin: 18px 0 10px; display: flex; gap: 8px; align-items: center; }
+  h2 b { width: 24px; height: 24px; border-radius: 50%; background: var(--brand); color: #fff; font-size: .8rem; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .types { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+  .type { border: 1.5px solid var(--line); border-radius: 12px; background: var(--bg); padding: 10px 8px; cursor: pointer; text-align: center; font: inherit; font-size: .82rem; font-weight: 600; color: var(--ink2); }
+  .type svg { display: block; margin: 0 auto 6px; }
+  .type[aria-pressed="true"] { border-color: var(--brand); color: var(--ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: .82rem; font-weight: 600; color: var(--ink2); }
+  label small { font-weight: 400; color: var(--ink3); }
+  input, select, textarea { font: inherit; font-size: 1rem; padding: 10px 12px; border: 1px solid #C5CED9; border-radius: 10px; background: #fff; color: var(--ink); width: 100%; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); outline-offset: 0; border-color: var(--brand); }
+  .hint { font-size: .8rem; color: var(--ink3); margin-top: 8px; }
+  .btn { font: inherit; font-weight: 700; border: 0; border-radius: 10px; padding: 12px 18px; background: var(--brand); color: #fff; cursor: pointer; font-size: 1rem; }
+  .btn:disabled { opacity: .6; cursor: default; }
+  .btn.sec { background: var(--soft); color: var(--ink); border: 1px solid var(--line); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+  .err { background: #FDECEA; color: #7A1A12; border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: .9rem; }
+  .ok { background: #E7F6EC; color: #0F4A2A; border-radius: 10px; padding: 14px; margin-top: 12px; font-weight: 600; }
+  .res { margin-top: 16px; border-radius: 12px; background: var(--soft); padding: 14px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+  .tile { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; border-left: 4px solid var(--brand); }
+  .tile span { display: block; font-size: .76rem; color: var(--ink3); }
+  .tile b { font-family: Manrope, Inter, sans-serif; font-size: 1.25rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: .88rem; background: #fff; border-radius: 8px; overflow: hidden; }
+  th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+  th { background: var(--ink); color: #fff; font-weight: 600; font-size: .78rem; }
+  td.n { font-variant-numeric: tabular-nums; }
+  .note { font-size: .78rem; color: var(--ink3); margin-top: 8px; }
+  .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+  .foot { text-align: center; font-size: .72rem; color: var(--ink3); margin-top: 14px; }
+  .foot a { color: var(--ink3); }
+  .sketch { display: block; margin: 10px auto 0; max-width: 100%; }
+</style>
+</head>
+<body>
+<div class="w" id="app">
+  <div class="head" id="head"><div><h1>Калькулятор покрівлі</h1><p>Завантаження…</p></div></div>
+</div>
+<script>
+(function () {
+  var qs = new URLSearchParams(location.search);
+  var KEY = qs.get('k') || '', SRC = qs.get('u') || document.referrer || '';
+  var API = '/api/widget/' + encodeURIComponent(KEY);
+  var app = document.getElementById('app');
+  var cfg = null, state = { type: 'gable', vals: {}, material: 0, calc: null, sent: false };
+
+  // Типи даху: поля (м) і побудова скатів (мм, у площині ската)
+  var TYPES = {
+    shed:  { name: 'Односхилий', icon: 'M6 30 L42 14 L42 30 Z',
+             fields: [['L', 'Довжина по карнизу', 'м'], ['S', 'Довжина ската', 'від карниза до верху, м']],
+             build: function (v) { return [{ points: rect(v.L, v.S), count: 1 }]; } },
+    gable: { name: 'Двосхилий', icon: 'M4 30 L24 10 L44 30 Z',
+             fields: [['L', 'Довжина по карнизу', 'м'], ['S', 'Довжина ската', 'від карниза до конька, м']],
+             build: function (v) { return [{ points: rect(v.L, v.S), count: 2 }]; } },
+    hip:   { name: 'Вальмовий', icon: 'M4 30 L14 12 L34 12 L44 30 Z',
+             fields: [['L', 'Довжина будинку', 'по карнизу, м'], ['W', 'Ширина будинку', 'по карнизу, м'], ['S', 'Довжина ската', 'від карниза до конька, м']],
+             check: function (v) { return v.L >= v.W ? '' : 'Довжина будинку має бути не меншою за ширину'; },
+             build: function (v) { return [{ points: trap(v.L, v.L - v.W, v.S), count: 2 }, { points: tri(v.W, v.S), count: 2 }]; } },
+    tent:  { name: 'Шатровий', icon: 'M4 30 L24 8 L44 30 Z M24 8 L24 30',
+             fields: [['W', 'Сторона будинку', 'по карнизу, м'], ['S', 'Довжина ската', 'від карниза до вершини, м']],
+             build: function (v) { return [{ points: tri(v.W, v.S), count: 4 }]; } },
+    custom:{ name: 'Свій скат', icon: 'M6 30 L14 12 L34 12 L42 30 Z',
+             fields: [['A', 'Низ (карниз)', 'м'], ['C', 'Верх (конек)', '0 — трикутник, м'], ['H', 'Висота ската', 'м'], ['N', 'Кількість таких скатів', 'шт']],
+             build: function (v) { return [{ points: v.C > 0 ? trap(v.A, v.C, v.H) : tri(v.A, v.H), count: Math.max(1, Math.round(v.N || 1)) }]; } }
+  };
+  function mm(x) { return Math.round(x * 1000); }
+  function rect(l, s) { return [[0, 0], [mm(l), 0], [mm(l), mm(s)], [0, mm(s)]]; }
+  function trap(a, c, h) { var o = (a - c) / 2; return [[0, 0], [mm(a), 0], [mm(o + c), mm(h)], [mm(o), mm(h)]]; }
+  function tri(a, h) { return [[0, 0], [mm(a), 0], [mm(a / 2), mm(h)]]; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function num(s) { var v = parseFloat(String(s || '').replace(',', '.')); return isFinite(v) ? v : NaN; }
+  function fmt(v, d) { return Number(v).toLocaleString('uk-UA', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  function post(path, body) {
+    return fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return { error: 'Помилка сервера' }; }).then(function (d) { if (!r.ok) throw new Error(d.error || 'Помилка'); return d; }); });
+  }
+  function resize() { try { parent.postMessage({ roofkitHeight: document.documentElement.scrollHeight + 2 }, '*'); } catch (e) {} }
+  new ResizeObserver(resize).observe(document.body);
+
+  function render() {
+    var t = TYPES[state.type];
+    var h = '<div class="head">' + (cfg.logo ? '<img src="' + esc(cfg.logo) + '" alt="">' : '') +
+      '<div><h1>Розрахунок покрівлі онлайн</h1><p>' + esc(cfg.company) + (cfg.phone ? ' · ' + esc(cfg.phone) : '') + '</p></div></div>';
+    h += '<h2><b>1</b>Тип даху</h2><div class="types" role="group" aria-label="Тип даху">';
+    Object.keys(TYPES).forEach(function (k) {
+      h += '<button type="button" class="type" data-type="' + k + '" aria-pressed="' + (k === state.type) + '">' +
+        '<svg width="48" height="34" viewBox="0 0 48 34" aria-hidden="true"><path d="' + TYPES[k].icon + '" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg>' + TYPES[k].name + '</button>';
+    });
+    h += '</div><h2><b>2</b>Розміри</h2><div class="grid">';
+    t.fields.forEach(function (f) {
+      h += '<label>' + f[1] + ' <small>' + f[2] + '</small><input inputmode="decimal" data-f="' + f[0] + '" value="' + esc(state.vals[f[0]] || '') + '" placeholder="' + (f[0] === 'N' ? '1' : '0,00') + '"></label>';
+    });
+    h += '</div><div class="hint">Довжину ската вимірюйте по самому скату (від краю карниза до конька), а не по горизонталі.</div>';
+    h += '<h2><b>3</b>Покрівельний матеріал</h2><label>Матеріал<select id="mat"><option value="0">— оберіть —</option>';
+    cfg.materials.forEach(function (m) { h += '<option value="' + m.id + '"' + (m.id === state.material ? ' selected' : '') + '>' + esc((m.manufacturer ? m.manufacturer + ' · ' : '') + m.name) + '</option>'; });
+    h += '</select></label><div class="row"><button class="btn" id="go" type="button">Розрахувати</button></div><div id="msg"></div>';
+    if (state.calc) {
+      var c = state.calc;
+      h += '<div class="res"><div class="tiles">' +
+        '<div class="tile"><span>Площа покрівлі</span><b>' + fmt(c.area_m2, 2) + ' м²</b></div>' +
+        '<div class="tile"><span>Листів</span><b>' + c.sheets + ' шт</b></div>' +
+        '<div class="tile"><span>Площа листів</span><b>' + fmt(c.full_area_m2, 2) + ' м²</b></div></div>';
+      if (c.lengths && c.lengths.length) {
+        h += '<table><thead><tr><th>Довжина листа, м</th><th>Кількість, шт</th></tr></thead><tbody>';
+        c.lengths.slice(0, 12).forEach(function (g) { h += '<tr><td class="n">' + fmt(g.length_mm / 1000, 3) + '</td><td class="n">' + g.count + '</td></tr>'; });
+        h += '</tbody></table>';
+      }
+      h += '<div class="note">Попередній розрахунок за спрощеною формою даху (' + esc(c.material) + '). Точну кількість, доборні елементи і вартість підготує менеджер.</div></div>';
+      if (state.sent) {
+        h += '<div class="ok">' + esc(state.sent) + '</div>';
+      } else {
+        h += '<h2><b>4</b>Отримати точний розрахунок і ціну</h2><form id="lead"><div class="grid">' +
+          '<label>Ваше ім\'я<input name="name" autocomplete="name"></label>' +
+          '<label>Телефон *<input name="phone" type="tel" required autocomplete="tel" placeholder="+380"></label></div>' +
+          '<label style="margin-top:10px">Коментар <small>адреса, побажання</small><textarea name="comment" rows="2"></textarea></label>' +
+          '<input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">' +
+          '<div class="row"><button class="btn" type="submit" id="send">Надіслати заявку</button></div><div id="lmsg"></div></form>';
+      }
+    }
+    h += '<div class="foot">Калькулятор <a href="https://roofkit.com.ua" target="_blank" rel="noopener">ROOFKIT</a></div>';
+    app.innerHTML = h;
+    bind();
+    resize();
+  }
+
+  function bind() {
+    app.querySelectorAll('.type').forEach(function (b) { b.onclick = function () { state.type = b.getAttribute('data-type'); state.calc = null; render(); }; });
+    app.querySelectorAll('input[data-f]').forEach(function (i) { i.oninput = function () { state.vals[i.getAttribute('data-f')] = i.value; }; });
+    var sel = document.getElementById('mat'); if (sel) sel.onchange = function () { state.material = +sel.value; };
+    document.getElementById('go').onclick = calc;
+    var f = document.getElementById('lead'); if (f) f.onsubmit = lead;
+  }
+
+  function show(id, text, cls) { var el = document.getElementById(id); if (el) el.innerHTML = text ? '<div class="' + (cls || 'err') + '">' + esc(text) + '</div>' : ''; resize(); }
+
+  function calc() {
+    var t = TYPES[state.type], v = {}, bad = '';
+    t.fields.forEach(function (f) {
+      var x = num(state.vals[f[0]]);
+      if (f[0] === 'N' && !isFinite(x)) x = 1;
+      if (f[0] === 'C' && !isFinite(x)) x = 0;
+      if (!isFinite(x) || x < 0 || (x === 0 && f[0] !== 'C')) bad = bad || 'Вкажіть: ' + f[1].toLowerCase();
+      v[f[0]] = x;
+    });
+    if (!bad && t.check) bad = t.check(v);
+    if (!bad && !state.material) bad = 'Оберіть матеріал';
+    if (bad) return show('msg', bad);
+    var btn = document.getElementById('go'); btn.disabled = true; btn.textContent = 'Рахуємо…';
+    post('/calc', { material_id: state.material, slopes: t.build(v) })
+      .then(function (d) { state.calc = d; state.roof = { type: t.name, values: v }; state.sent = false; render(); })
+      .catch(function (e) { btn.disabled = false; btn.textContent = 'Розрахувати'; show('msg', e.message); });
+  }
+
+  function lead(e) {
+    e.preventDefault();
+    var f = e.target, btn = document.getElementById('send');
+    btn.disabled = true; btn.textContent = 'Надсилаємо…';
+    post('/lead', { name: f.name.value, phone: f.phone.value, comment: f.comment.value, website: f.website.value,
+      source_url: SRC, roof: state.roof, calc: state.calc })
+      .then(function (d) { state.sent = d.message || 'Заявку надіслано'; render(); })
+      .catch(function (er) { btn.disabled = false; btn.textContent = 'Надіслати заявку'; show('lmsg', er.message); });
+  }
+
+  fetch(API + '/config').then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || 'Калькулятор недоступний'); return d; }); })
+    .then(function (d) {
+      cfg = d;
+      if (/^#[0-9A-Fa-f]{6}$/.test(d.color || '')) document.documentElement.style.setProperty('--brand', d.color);
+      if (cfg.materials.length === 1) state.material = cfg.materials[0].id;
+      render();
+    })
+    .catch(function (e) { app.innerHTML = '<div class="err">' + esc(e.message) + '</div>'; resize(); });
+})();
+</script>
+</body>
+</html>

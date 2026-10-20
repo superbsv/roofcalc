@@ -1357,3 +1357,21 @@ tr:hover td { background: var(--clr-surface-2); }
 .prod-mf-head { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 12px; background: var(--clr-surface-2); border: 0; color: var(--clr-text); font: inherit; font-family: var(--font-display); font-weight: 700; font-size: .82rem; cursor: pointer; text-align: left; }
 .prod-mf-head em { font-style: normal; font-size: .72rem; color: var(--clr-text-3); background: var(--clr-surface); border-radius: 10px; padding: 1px 8px; }
 .prod-mf-list > div { padding-left: 22px !important; }
+
+/* ---------- Заявки і віджет ---------- */
+.leads { display: flex; flex-direction: column; gap: 14px; }
+.leads-tabs { display: flex; gap: 4px; background: var(--clr-surface-2); padding: 4px; border-radius: var(--r-lg); }
+.leads-tabs button { border: 0; background: none; color: var(--clr-text-2); font: inherit; font-weight: 600; padding: 8px 14px; border-radius: var(--r-md); cursor: pointer; }
+.leads-tabs button.on { background: var(--clr-surface); color: var(--clr-text); box-shadow: var(--shadow-sm); }
+.leads-table td { vertical-align: top; }
+.lead-new td:first-child { box-shadow: inset 3px 0 0 var(--clr-brand); }
+.lead-detail td { background: var(--clr-surface-2); }
+.lead-box { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.lead-box p { margin: 0 0 6px; }
+.widget-setup { display: flex; flex-direction: column; gap: 14px; }
+.widget-code { background: var(--clr-bg); border: 1px solid var(--clr-border); border-radius: var(--r-md); padding: 12px; font-family: var(--font-mono); font-size: .82rem; white-space: pre-wrap; word-break: break-all; margin: 0 0 10px; }
+.widget-mats { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.widget-mats fieldset { border: 1px solid var(--clr-border); border-radius: var(--r-md); padding: 8px 12px; margin: 0; min-width: 0; }
+.widget-mats legend { font-weight: 700; font-size: .82rem; padding: 0 4px; }
+.widget-mats label { display: flex; gap: 8px; align-items: center; font-size: .88rem; padding: 3px 0; }
+.badge-gray { background: var(--clr-surface-2); color: var(--clr-text-3); }
