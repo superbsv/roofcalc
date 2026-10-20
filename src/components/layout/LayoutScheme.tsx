@@ -60,6 +60,9 @@ interface Props {
   onShiftX?: (mm: number) => void;             // новий зсув сітки колонок (перерахунок на сервері)
   onReset?: () => void;                         // скинути зсув і лінію стику
   splitForced?: boolean;                        // стик додано на вимогу (скат вміщається одним листом)
+  vShift?: number;                              // зсув листів по вертикалі (один ряд), мм
+  onVShift?: (mm: number) => void;              // ↑/↓ без стику: рухають усі листи вгору/вниз (як у КП)
+  waveStep?: number;                            // крок хвилі — для ліній хвиль на листах
   onForceSplit?: (on: boolean) => void;         // додати / прибрати стик на вимогу
   onUpdate?: (placements: SheetPlacement[]) => void;
 }
@@ -242,7 +245,7 @@ function sheetState(x: number, y: number, len: number, usefulWidth: number, poly
   return 'full';
 }
 
-export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset, splitForced = false, onForceSplit }: Props) {
+export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset, splitForced = false, onForceSplit, vShift = 0, onVShift, waveStep = 0 }: Props) {
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
 
@@ -334,10 +337,12 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   // Вертикальний зсув розкладки — перегенерація з обрізкою/додаванням листів
   const shiftVerticalLayout = useCallback((deltaMm: number) => {
     // Одна лінія стику на весь скат: ↑/↓ рухають її (для металочерепиці — щонайменше на крок хвилі)
-    if (onJointChange) {
-      if (jointY != null) onJointChange(jointY + Math.sign(deltaMm) * Math.max(Math.abs(deltaMm), jointStep));
+    if (onJointChange && jointY != null) {
+      onJointChange(jointY + Math.sign(deltaMm) * Math.max(Math.abs(deltaMm), jointStep));
       return;
     }
+    // Один ряд (як у КП): ↓ опускає всі листи (довшають), ↑ піднімає; для металочерепиці — за модулем хвилі
+    if (onVShift) { onVShift(vShift - deltaMm); return; }
     const newV = verticalOffset + deltaMm;
     setVerticalOffset(newV);
     setManualMode(true);
@@ -347,7 +352,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       onUpdate?.(np);
     }
     setSelected(new Set());
-  }, [verticalOffset, layoutOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, rtl, onUpdate, onJointChange, jointY, jointStep]);
+  }, [verticalOffset, layoutOffset, W, polygonPoints, usefulWidth, fullWidth, sheetLength, eaveOverhang, ridgeGap, rtl, onUpdate, onJointChange, jointY, jointStep, onVShift, vShift]);
 
   // ============================================
   // Зміна довжини виділеного листа з КОМПЕНСАЦІЄЮ
@@ -636,6 +641,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           <div style={{ fontSize:'.8rem', color:'var(--clr-text-3)', marginTop:'2px' }}>
             {calcResult.profile_name} · {visiblePlacements.length} листів · {calcResult.slope_area_m2.toFixed(2)} м²
             {jointY != null && <span> · Лінія стику: <b style={{ color:'var(--clr-text)' }}>{(jointY/1000).toFixed(3)} м</b>{jointRange ? ` (можна ${(jointRange[0]/1000).toFixed(3)}–${(jointRange[1]/1000).toFixed(3)})` : ''}</span>}
+            {jointY == null && vShift !== 0 && <span style={{ color:'var(--clr-brand)' }}> · По вертикалі: ↓{vShift} мм</span>}
             {(onShiftX ? shiftX : layoutOffset) !== 0 && <span style={{ color:'var(--clr-brand)' }}> · Зсув: {(onShiftX ? shiftX : layoutOffset)>0?'+':''}{onShiftX ? shiftX : layoutOffset} мм</span>}
             {hasSelection && <span style={{ color:COLORS.selected, fontWeight:600 }}> · Виділено: {selected.size} шт</span>}
           </div>
@@ -671,14 +677,14 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
         <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
           <span style={{ fontSize:'.82rem', fontWeight:600, color:'var(--clr-text-2)', whiteSpace:'nowrap' }}
             title={onJointChange ? 'Рухає лінію стику рядів — усі листи ската діляться по ній' : undefined}>
-            {onJointChange ? 'Лінія стику:' : 'По вертикалі:'}</span>
+            {onJointChange && jointY != null ? 'Лінія стику:' : 'По вертикалі:'}</span>
           <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+            {onJointChange && jointY == null && !onVShift && <span style={{ fontSize:'.78rem', color:'var(--clr-text-3)', alignSelf:'center' }}>скат в один ряд</span>}
             {onJointChange && jointY == null && <>
-              <span style={{ fontSize:'.78rem', color:'var(--clr-text-3)', alignSelf:'center' }}>скат в один ряд</span>
               {onForceSplit && <button onClick={() => onForceSplit(true)} style={{ ...shiftBtn, borderColor:'var(--clr-brand)', color:'var(--clr-brand)', fontWeight:700 }}
                 title="Розділити всі листи ската однією лінією (коротші листи)">＋ Додати стик</button>}
             </>}
-            {!(onJointChange && jointY == null) && STEPS.map(s => (
+            {!(onJointChange && jointY == null && !onVShift) && STEPS.map(s => (
               <React.Fragment key={s.mm}>
                 <button onClick={()=>shiftVerticalLayout(-s.mm)} style={shiftBtn}>↓ {s.label}</button>
                 <button onClick={()=>shiftVerticalLayout(+s.mm)} style={shiftBtn}>↑ {s.label}</button>
@@ -723,6 +729,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
                   <rect x={x1} y={y1-h} width={w} height={h}
                     fill={color} fillOpacity={isSel?0.5:0.35}
                     stroke={color} strokeWidth={isSel?2.5:1}/>
+                  {waveStep > 0 && waveStep * scale >= 4 && Array.from({ length: Math.floor(length / waveStep) }, (_, n) => (
+                    <line key={`w${n}`} x1={x1} x2={x1 + w} y1={y1 - (n + 1) * waveStep * scale} y2={y1 - (n + 1) * waveStep * scale}
+                      stroke={color} strokeOpacity={0.45} strokeWidth={0.6} />
+                  ))}
                   {h>20 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
                     fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(9,Math.min(13,h/4))} fontWeight="600">
                     {(length/1000).toFixed(3)}

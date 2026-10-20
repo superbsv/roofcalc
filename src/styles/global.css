@@ -1310,8 +1310,10 @@ tr:hover td { background: var(--clr-surface-2); }
 
 .kp-round { display: flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--clr-text-2); }
 .kp-round span { white-space: nowrap; font-weight: 600; }
-.kp-round select { width: auto; min-width: 150px; padding-top: 4px; padding-bottom: 4px; }
-.kp-round input { width: 80px; padding-top: 4px; padding-bottom: 4px; font-family: var(--font-mono); }
+.kp-round input { width: 120px; padding-top: 4px; padding-bottom: 4px; font-family: var(--font-mono); text-align: right; }
+.kp-spin { display: flex; flex-direction: column; }
+.kp-spin button { width: 26px; height: 15px; padding: 0; font-size: 9px; line-height: 1; border: 1px solid var(--clr-border-dark); background: var(--clr-surface-2); color: var(--clr-text); cursor: pointer; }
+.kp-spin button:first-child { border-radius: 4px 4px 0 0; } .kp-spin button:last-child { border-radius: 0 0 4px 4px; border-top: 0; }
 .land-len { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; fill: #F5F7FA; }
 .land-no { font-family: var(--font-mono); font-size: 8px; fill: #94A3B8; }
 .land-side { font-family: var(--font-mono); font-size: 11px; font-weight: 600; fill: #CBD5E1; paint-order: stroke; stroke: #101823; stroke-width: 3px; }

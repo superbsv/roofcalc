@@ -122,6 +122,7 @@ class Database
         self::ensureColumn('slopes', 'joint_y', 'INT NULL');
         self::ensureColumn('slopes', 'round_step', 'INT NULL');
         self::ensureColumn('slopes', 'layout_shift', 'INT NULL'); // зсув сітки колонок по горизонталі, мм
+        self::ensureColumn('slopes', 'v_shift', 'INT NULL'); // зсув листів по вертикалі (↑/↓), мм
         self::ensureColumn('slopes', 'split_forced', 'TINYINT NULL'); // стик рядів навіть коли скат вкривається одним листом // округлення довжин для ската (NULL — з матеріалу)
     }
 

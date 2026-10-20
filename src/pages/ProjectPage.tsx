@@ -399,13 +399,18 @@ export default function ProjectPage({ projectId }: Props) {
     await calcSlope(active.id);
   });
 
+  const setVShift = (mm: number) => active && run('calc', async () => {
+    await patchSlope(active.id, { v_shift: mm });
+    await calcSlope(active.id);
+  });
+
   const setForced = (on: boolean) => active && run('calc', async () => {
-    await patchSlope(active.id, { split_forced: on, joint_y: null });
+    await patchSlope(active.id, { split_forced: on, joint_y: null, v_shift: 0 });
     await calcSlope(active.id);
   });
 
   const resetLayout = () => active && run('calc', async () => {
-    await patchSlope(active.id, { layout_shift: 0, joint_y: null, split_forced: false });
+    await patchSlope(active.id, { layout_shift: 0, joint_y: null, split_forced: false, v_shift: 0 });
     await calcSlope(active.id);
   });
 
@@ -799,7 +804,8 @@ export default function ProjectPage({ projectId }: Props) {
                   <LayoutScheme calcResult={res as any} polygonPoints={pts} holes={holes} slopeName={active.name}
                     jointY={res.joint_y_mm ?? null} jointRange={res.joint_range_mm ?? null} onJointChange={mm => setJoint(mm)}
                     jointStep={jointStep} shiftX={res.layout_shift_mm ?? 0} onShiftX={mm => setShift(mm)} onReset={resetLayout}
-                    splitForced={!!res.split_forced} onForceSplit={on => setForced(on)} />
+                    splitForced={!!res.split_forced} onForceSplit={on => setForced(on)}
+                    vShift={res.v_shift_mm ?? 0} onVShift={mm => setVShift(mm)} waveStep={res.wave_step_mm ?? 0} />
                   <div className="kp-infobar">
                     <dl>
                       <dt>Замовлення</dt><dd>№{settings.order_no} від {dateUa(settings.order_date)}</dd>
@@ -929,31 +935,30 @@ function CuttingTable({ rows }: { rows: NonNullable<Slope['calc_result']>['cutti
 // Вікно матеріалу: ліва частина — параметри (як «Металлочерепица» у КП).
 // edit = true — «Дозволити редагування»: параметри довідника стають доступними для зміни.
 // Округлення довжин листів для ската: з матеріалу або вибране / введене вручну
-const ROUND_OPTS = [1, 5, 10, 50, 100];
-function RoundPicker({ value, current, wave, disabled, onChange }: {
-  value: number | null; current: number; wave: number; disabled: boolean; onChange: (mm: number | null) => void;
+// Точність округлення довжин (як у КП: поле зі стрілками ▲▼), у мм. Порожнє — з довідника матеріалу.
+function RoundPicker({ value, current, disabled, onChange }: {
+  value: number | null; current: number; wave?: number; disabled: boolean; onChange: (mm: number | null) => void;
 }) {
-  const opts = Array.from(new Set([...ROUND_OPTS, ...(wave > 0 ? [wave] : [])])).sort((a, b) => a - b);
-  const [custom, setCustom] = useState(value != null && !opts.includes(value));
-  const sel = value == null ? 'mat' : custom ? 'custom' : String(value);
+  const [text, setText] = useState(value != null ? String(value) : '');
+  useEffect(() => { setText(value != null ? String(value) : ''); }, [value]);
+  const eff = value ?? current;
+  const commit = (raw: string) => {
+    if (raw.trim() === '') { if (value != null) onChange(null); return; }
+    const v = Math.round(parseFloat(raw.replace(',', '.')));
+    if (v >= 1 && v <= 1000) { if (v !== value) onChange(v); } else setText(value != null ? String(value) : '');
+  };
+  const step = (d: number) => { const v = Math.max(1, Math.min(1000, (eff < 5 && d > 0 ? 0 : eff) + d)); setText(String(v)); onChange(v); };
   return (
     <div className="kp-round">
-      <select className="form-control" value={sel} disabled={disabled}
-        onChange={e => {
-          const v = e.target.value;
-          if (v === 'mat') { setCustom(false); onChange(null); }
-          else if (v === 'custom') setCustom(true);
-          else { setCustom(false); onChange(+v); }
-        }}>
-        <option value="mat">як у довіднику ({current})</option>
-        {opts.map(o => <option key={o} value={o}>{o}{o === wave ? ' — хвиля' : ''}</option>)}
-        <option value="custom">вручну…</option>
-      </select>
-      {custom && (
-        <input className="form-control" type="number" min={1} max={1000} defaultValue={value ?? current} disabled={disabled} aria-label="Округлення вручну, мм"
-          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-          onBlur={e => { const v = Math.round(+e.target.value); if (v >= 1 && v <= 1000 && v !== value) onChange(v); }} />
-      )}
+      <input className="form-control" inputMode="numeric" value={text} placeholder={`${current} (довідник)`} disabled={disabled}
+        aria-label="Точність округлення, мм" onChange={e => setText(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'ArrowUp') { e.preventDefault(); step(5); } if (e.key === 'ArrowDown') { e.preventDefault(); step(-5); } }}
+        onBlur={e => commit(e.target.value)} />
+      <div className="kp-spin">
+        <button type="button" onClick={() => step(5)} disabled={disabled} aria-label="Більше на 5 мм">▲</button>
+        <button type="button" onClick={() => step(-5)} disabled={disabled} aria-label="Менше на 5 мм">▼</button>
+      </div>
+      {value != null && <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange(null)} title="Повернути значення з довідника">↺</button>}
     </div>
   );
 }
@@ -1025,7 +1030,7 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
               <label>Lmin, м{mf('min_length', m.min_length)}</label>
               {edit
                 ? <label>Округлення в довіднику, мм{mf('round_step', round, 'num')}</label>
-                : <label>Округлення довжин листів, мм
+                : <label>Точність округлення, мм
                     <RoundPicker value={settings.round_step ?? null} current={round} wave={ct === 'tile' ? (m.wave_step || 0) : 0} disabled={false}
                       onChange={mm => setSettings(s => ({ ...s, round_step: mm }))} />
                   </label>}

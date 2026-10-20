@@ -44,6 +44,7 @@ class SheetLayoutEngine
     private int $lmax;          // максимальна реальна довжина
     private int $lmaxStd;       // максимальна стандартна довжина (МЧ: хвиля × n + ПЗ)
     private int $wave;
+    private int $vShift = 0;    // фактичний зсув по вертикалі, мм
     private int $round;         // величина округлення
     private array $forbidden;   // [[min,max]] — межі виконувані
     private array $stock;       // [[len, qty|null]] за зростанням
@@ -163,6 +164,13 @@ class SheetLayoutEngine
         $extra = (int)ceil(abs($shift) / $uw) + 1;
         $cols = (int)ceil($bbox['width'] / $uw) + $extra;
 
+        // Зсув по вертикалі (кнопки ↑/↓, як у КП): низ листів опускається на vshift, довжини перераховуються.
+        // Для металочерепиці зсув береться за модулем кроку хвилі (зсув на цілу хвилю = вихідне положення).
+        $vshift = (int)($this->slope['v_shift'] ?? 0);
+        if ($this->wave > 0) $vshift = (($vshift % $this->wave) + $this->wave) % $this->wave;
+        else $vshift = max(-2000, min(2000, $vshift));
+        $this->vShift = $vshift;
+
         $columns = [];
         for ($c = -$extra; $c <= $cols; $c++) {
             $x = $rtl
@@ -171,9 +179,9 @@ class SheetLayoutEngine
             if ($x >= $bbox['maxX'] || $x + $uw <= $bbox['minX']) continue;
             $r = $this->columnRange($x, $x + $this->usefulWidth);
             if ($r === null) continue;
-            $need = ($r[1] - $r[0]) + $this->k - $this->pk;
+            $need = ($r[1] - $r[0]) + $this->k - $this->pk + $vshift;
             if ($need <= 0) continue;
-            $columns[] = ['col' => $c, 'x' => $x, 'bottom' => $r[0] - $this->k, 'need' => $need];
+            $columns[] = ['col' => $c, 'x' => $x, 'bottom' => $r[0] - $this->k - $vshift, 'need' => $need];
         }
 
         // 2. Довжини листів у кожній колонці (знизу вгору)
@@ -265,6 +273,8 @@ class SheetLayoutEngine
             'rounding_mm'        => $this->round,
             'joint_y_mm'         => $this->jointY,
             'joint_range_mm'     => $this->jointRange,
+            'v_shift_mm'         => $this->vShift,
+            'wave_step_mm'       => $this->wave,
             'split_forced'       => !empty($this->slope['split_forced']),
             'layout_shift_mm'    => (int)($this->slope['layout_shift'] ?? 0),
             'joint_custom'       => isset($this->slope['joint_y']) && $this->slope['joint_y'] !== null && $this->slope['joint_y'] !== '',
@@ -408,12 +418,15 @@ class SheetLayoutEngine
     public function fit(int $len, ?int $max = null): int
     {
         $max = $max ?? $this->lmax;
+        $need = $len;
         $len = (int)(ceil($len / $this->round) * $this->round);
         if ($len < $this->lmin) $len = $this->lmin;
         $r = $this->forbiddenRange($len);
         if ($r) {
             $orig = $len;
-            $len = $r[1] <= $max ? $r[1] : max($this->lmin, $r[0]);
+            // як у КП: беремо нижню межу діапазону, якщо вона ще покриває потрібну довжину, інакше — верхню
+            if ($r[0] >= $need && $r[0] >= $this->lmin) $len = $r[0];
+            else $len = $r[1] <= $max ? $r[1] : max($this->lmin, $r[0]);
             $this->warnings[] = sprintf('Довжина %d мм у діапазоні невиконуваних розмірів %d–%d мм — взято %d мм', $orig, $r[0], $r[1], $len);
         }
         return min($len, $max);
