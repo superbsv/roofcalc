@@ -70,22 +70,23 @@ class ExcelGenerator
         // Стилі
         $headerStyle = [
             'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 10],
-            'fill'      => ['fillType' => 'solid', 'startColor' => ['rgb' => '1B5E2E']],
+            'fill'      => ['fillType' => 'solid', 'startColor' => ['rgb' => '0B1119']],
             'alignment' => ['horizontal' => 'center', 'vertical' => 'center'],
             'borders'   => ['allBorders' => ['borderStyle' => 'thin', 'color' => ['rgb' => 'FFFFFF']]],
         ];
         $sectionStyle = [
-            'font'  => ['bold' => true, 'color' => ['rgb' => '1B5E2E']],
-            'fill'  => ['fillType' => 'solid', 'startColor' => ['rgb' => 'E8F5EC']],
+            'font'  => ['bold' => true, 'color' => ['rgb' => '0B1119']],
+            'fill'  => ['fillType' => 'solid', 'startColor' => ['rgb' => 'FFF1E5']],
         ];
         $totalStyle = [
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
-            'fill' => ['fillType' => 'solid', 'startColor' => ['rgb' => '1B5E2E']],
+            'fill' => ['fillType' => 'solid', 'startColor' => ['rgb' => '0B1119']],
         ];
 
         // Шапка
-        $ws->setCellValue('A1', $this->settings['company_name'] ?? 'ArtBudTrading');
-        $ws->getStyle('A1')->getFont()->setBold(true)->setSize(14)->getColor()->setRGB('1B5E2E');
+        $tn = !empty($this->project['tenant_id']) ? Database::fetchOne('SELECT name, doc_company FROM tenants WHERE id = ?', [(int)$this->project['tenant_id']]) : null;
+        $ws->setCellValue('A1', ($tn['doc_company'] ?? '') ?: (($tn['name'] ?? '') ?: ($this->settings['company_name'] ?? 'ROOFKIT')));
+        $ws->getStyle('A1')->getFont()->setBold(true)->setSize(14)->getColor()->setRGB('0B1119');
 
         $ws->setCellValue('A2', 'Специфікація матеріалів');
         $ws->setCellValue('A3', 'Проект: ' . ($this->project['name'] ?? ''));
@@ -96,10 +97,10 @@ class ExcelGenerator
         $row = 8;
 
         // Заголовки колонок
-        // Вартість не показуємо — лише кількість
-        $headers = ['№', 'Найменування', 'Од. вим.', 'К-сть'];
-        $colW    = [6, 70, 12, 14];
-        $cols    = ['A','B','C','D'];
+        // Ціни програма не знає: колонку «Ціна» менеджер заповнює вручну, «Сума» і «Всього» рахуються формулами
+        $headers = ['№', 'Найменування', 'Од. вим.', 'К-сть', 'Ціна, грн', 'Сума, грн'];
+        $colW    = [6, 60, 10, 12, 14, 16];
+        $cols    = ['A','B','C','D','E','F'];
 
         foreach ($headers as $i => $h) {
             $ws->setCellValue($cols[$i] . $row, $h);
@@ -116,13 +117,15 @@ class ExcelGenerator
         ];
 
         $num         = 1;
+        $sumRows     = [];
+        $firstRow    = $row;
 
         foreach ($types as $type => $title) {
             $items = array_values(array_filter($this->specItems, fn($i) => $i['type'] === $type));
             if (!$items) continue;
 
             // Заголовок розділу
-            $ws->mergeCells("A{$row}:D{$row}");
+            $ws->mergeCells("A{$row}:F{$row}");
             $ws->setCellValue("A{$row}", $title);
             $ws->getStyle("A{$row}")->applyFromArray($sectionStyle);
             $ws->getRowDimension($row)->setRowHeight(18);
@@ -134,16 +137,32 @@ class ExcelGenerator
                 $ws->setCellValue("C{$row}", $item['unit']);
                 $ws->setCellValue("D{$row}", $item['quantity']);
                 $ws->getStyle("D{$row}")->getNumberFormat()->setFormatCode('#,##0.###');
+                // Ціна — поле для ручного введення (світло-жовте), сума — формула
+                $ws->getStyle("E{$row}")->getFill()->setFillType('solid')->getStartColor()->setRGB('FFF8D6');
+                $ws->getStyle("E{$row}:F{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
+                $ws->setCellValue("F{$row}", "=IF(E{$row}=\"\",\"\",D{$row}*E{$row})");
+                $sumRows[] = $row;
 
                 // Alternating rows
                 if ($num % 2 === 0) {
                     $ws->getStyle("A{$row}:D{$row}")->getFill()
-                       ->setFillType('solid')->getStartColor()->setRGB('F5F8F5');
+                       ->setFillType('solid')->getStartColor()->setRGB('F5F7FA');
                 }
 
                 $row++;
             }
             $row++;
+        }
+
+        // Підсумок: сума всіх рядків з ціною
+        if ($sumRows) {
+            $last = max($sumRows);
+            $ws->mergeCells("A{$row}:E{$row}");
+            $ws->setCellValue("A{$row}", 'Всього, грн (заповніть колонку «Ціна»)');
+            $ws->setCellValue("F{$row}", "=SUM(F{$firstRow}:F{$last})");
+            $ws->getStyle("A{$row}:F{$row}")->applyFromArray($totalStyle);
+            $ws->getStyle("F{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
+            $ws->getStyle("A{$row}")->getAlignment()->setHorizontal('right');
         }
     }
 
@@ -158,7 +177,7 @@ class ExcelGenerator
             $ws->setCellValue(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i+1) . '1', $h);
         }
         $ws->getStyle('A1:H1')->getFont()->setBold(true);
-        $ws->getStyle('A1:H1')->getFill()->setFillType('solid')->getStartColor()->setRGB('1B5E2E');
+        $ws->getStyle('A1:H1')->getFill()->setFillType('solid')->getStartColor()->setRGB('0B1119');
         $ws->getStyle('A1:H1')->getFont()->getColor()->setRGB('FFFFFF');
 
         $row = 2;
@@ -187,7 +206,7 @@ class ExcelGenerator
     {
         $ws->setTitle('Карта розкрою');
         $ws->setCellValue('A1', 'КАРТА РОЗКРОЮ');
-        $ws->getStyle('A1')->getFont()->setBold(true)->setSize(12)->getColor()->setRGB('1B5E2E');
+        $ws->getStyle('A1')->getFont()->setBold(true)->setSize(12)->getColor()->setRGB('0B1119');
 
         $row = 3;
         foreach ($this->slopes as $s) {
@@ -195,7 +214,7 @@ class ExcelGenerator
             if (!$cr || empty($cr['sheets_by_length'])) continue;
 
             $ws->setCellValue("A{$row}", $s['name']);
-            $ws->getStyle("A{$row}")->getFont()->setBold(true)->getColor()->setRGB('1B5E2E');
+            $ws->getStyle("A{$row}")->getFont()->setBold(true)->getColor()->setRGB('0B1119');
             $row++;
 
             $ws->setCellValue("A{$row}", 'Довжина, мм');

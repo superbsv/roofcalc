@@ -63,6 +63,7 @@ export interface TenantBrief {
   id: number; name: string; plan: string; status: string; is_internal: number | string;
   trial_until?: string | null; paid_until?: string | null; active: boolean;
   doc_company?: string | null;
+  is_manufacturer?: number | string;   // кабінет-виробник: публікує матеріали в каталог
 }
 
 export interface PlanDef {
@@ -261,6 +262,8 @@ export const slopesApi = {
 export interface MaterialProfile {
   id: number; type: 'tile'|'tile_module'|'profile'|'sheet'|'natural_tile'|'falts'; name: string;
   tenant_id?: number | null;   // null — загальний каталог ABT
+  published?: number | boolean;                      // опубліковано в каталозі виробників
+  owner_name?: string | null; owner_mf?: number | string | null; // кабінет-власник (виробник)
   manufacturer?: string;
   full_width: number; useful_width: number;
   side_overlap: number; length_overlap: number;
@@ -320,6 +323,7 @@ export interface Tenant {
   max_users?: number | null; max_projects_month?: number | null;
   contact_name?: string | null; contact_email?: string | null; contact_phone?: string | null;
   city?: string | null; notes?: string | null; created_at: string;
+  is_manufacturer?: number | string | boolean;
   state: TenantState;
   users_count?: number; projects_count?: number; projects_30d?: number; last_login_at?: string | null;
 }

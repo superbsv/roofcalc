@@ -104,6 +104,7 @@ export default function SuperPage({ onOpenCabinet }: { onOpenCabinet: () => void
                     <tr key={t.id} className={sel?.tenant.id === t.id ? 'super-row-on' : ''}>
                       <td>
                         <button type="button" className="super-link" onClick={() => open(t.id)}>{t.name}</button>
+                        {String(t.is_manufacturer ?? '0') === '1' && <span className="badge badge-orange" style={{ marginLeft: 6 }}>Виробник</span>}
                         <div className="text-xs text-muted">{[t.contact_email, t.contact_phone, t.city].filter(Boolean).join(' · ') || '—'}</div>
                       </td>
                       <td>{plans[t.plan] || t.plan}</td>
@@ -150,7 +151,7 @@ function TenantCard({ d, plans, busy, onClose, onChanged, run, onLoginAs }: {
       name: t.name, plan: t.plan, status: t.status, trial_until: t.trial_until || '', paid_until: t.paid_until || '',
       max_users: t.max_users ?? null, max_projects_month: t.max_projects_month ?? null,
       contact_name: t.contact_name || '', contact_email: t.contact_email || '', contact_phone: t.contact_phone || '',
-      city: t.city || '', notes: t.notes || '',
+      city: t.city || '', notes: t.notes || '', is_manufacturer: String(t.is_manufacturer ?? '0') === '1',
     });
   }, [t]);
   const set = (k: keyof Tenant, v: any) => setF(x => ({ ...x, [k]: v }));
@@ -214,6 +215,10 @@ function TenantCard({ d, plans, busy, onClose, onChanged, run, onLoginAs }: {
           <label className="form-label">Email<input className="form-control" type="email" value={f.contact_email || ''} onChange={e => set('contact_email', e.target.value)} /></label>
           <label className="form-label">Телефон<input className="form-control" type="tel" value={f.contact_phone || ''} onChange={e => set('contact_phone', e.target.value)} /></label>
         </div>
+        <label className="form-label" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <input type="checkbox" checked={!!f.is_manufacturer} onChange={e => set('is_manufacturer', e.target.checked)} />
+          Виробник — може публікувати свої матеріали в каталог виробників для всіх кабінетів
+        </label>
         <label className="form-label">Нотатки (бачить лише ABT)<textarea className="form-control" rows={2} value={f.notes || ''} onChange={e => set('notes', e.target.value)} /></label>
         <button className="btn btn-primary" type="submit" disabled={!!busy}>{busy === 'save' ? 'Збереження…' : 'Зберегти'}</button>
       </form>

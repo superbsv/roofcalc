@@ -165,7 +165,8 @@ class AuthController
 
         // Кабінет і права платформи
         Database::ensurePlatformSchema();
-        $t = Database::fetchOne('SELECT id, name, plan, status, is_internal, trial_until, paid_until, doc_company FROM tenants WHERE id = ?', [$payload['tid']]);
+        \RoofCalc\Core\Catalog::ensureSchema();
+        $t = Database::fetchOne('SELECT id, name, plan, status, is_internal, is_manufacturer, trial_until, paid_until, doc_company FROM tenants WHERE id = ?', [$payload['tid']]);
         $user['role']          = $payload['role'];
         $user['is_superadmin'] = !empty($payload['sa']);
         $user['impersonating'] = !empty($payload['imp']);

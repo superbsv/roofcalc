@@ -192,6 +192,9 @@ class AdminController
         foreach (['round_step', 'max_std_length'] as $f) {
             if (array_key_exists($f, $body)) { $extra[] = "$f = ?"; $vals[] = $body[$f] === '' ? null : $body[$f]; }
         }
+        if (!empty($body['published']) && !(!empty($me['sa']) && empty($me['imp'])) && \RoofCalc\Core\Catalog::isManufacturer((int)$me['tid'])) {
+            $extra[] = 'published = 1';
+        }
         // Супер-адмін у своєму кабінеті поповнює загальний каталог; решта — каталог свого кабінету
         $extra[] = 'tenant_id = ?'; $vals[] = (!empty($me['sa']) && empty($me['imp'])) ? null : $me['tid'];
         $vals[] = $id; Database::query('UPDATE material_profiles SET ' . implode(', ', $extra) . ' WHERE id = ?', $vals);
@@ -209,7 +212,7 @@ class AdminController
         if ($mat['tenant_id'] === null) {
             if (empty($me['sa']) || !empty($me['imp'])) $this->error('Це матеріал загального каталогу ABT — створіть копію для свого кабінету', 403);
         } elseif ((int)$mat['tenant_id'] !== (int)$me['tid']) {
-            $this->error('Матеріал не знайдено', 404);
+            $this->error('Це матеріал каталогу виробника — створіть копію для свого кабінету', 403);
         }
         Database::ensureMaterialSchema();
         $body = $this->body();
@@ -220,6 +223,11 @@ class AdminController
                        'min_joint_distance','join_overlap','min_slope_angle','price_per_m2','is_active','sort_order','type',
                        'round_step','max_std_length',
                        ...$jsonFields];
+        // Публікувати в каталозі виробників може лише кабінет-виробник (свій матеріал)
+        if (array_key_exists('published', $body) && $mat['tenant_id'] !== null && \RoofCalc\Core\Catalog::isManufacturer((int)$me['tid'])) {
+            $allowed[] = 'published';
+            $body['published'] = !empty($body['published']) ? 1 : 0;
+        }
 
         $fields = []; $params = [];
         foreach ($allowed as $f) {

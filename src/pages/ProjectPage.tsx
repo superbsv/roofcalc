@@ -86,7 +86,9 @@ export default function ProjectPage({ projectId }: Props) {
   const canEditMaterials = user?.role === 'admin' || user?.role === 'manager';
   // Загальний каталог ABT змінює лише супер-адмін; кабінети працюють з власними копіями
   const isGlobal = (m?: MaterialProfile) => !!m && (m.tenant_id === null || m.tenant_id === undefined);
-  const canEditThis = (m?: MaterialProfile) => !!m && canEditMaterials && (!isGlobal(m) || (!!user?.is_superadmin && !user?.impersonating));
+  const isOwn = (m?: MaterialProfile) => !!m && !isGlobal(m) && Number(m.tenant_id) === Number(user?.tenant?.id);
+  const srcOf = (m: MaterialProfile) => isGlobal(m) ? 'Каталог ABT' : isOwn(m) ? 'Мої матеріали' : `Виробник: ${m.owner_name || '—'}`;
+  const canEditThis = (m?: MaterialProfile) => !!m && canEditMaterials && (isOwn(m) || (isGlobal(m) && !!user?.is_superadmin && !user?.impersonating));
   const [clip, setClip] = useState<Slope | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
   const [showExplorer, setShowExplorer] = useState(true);
@@ -556,9 +558,10 @@ export default function ProjectPage({ projectId }: Props) {
               <select className="form-control kp-matsel" aria-label="Матеріал" value={settings.material_id || 0}
                 onChange={e => { const id = +e.target.value || undefined; const m = materials.find(x => x.id === id); setSettings(s => ({ ...s, material_id: id, coating: m?.coating_options?.[0], color: m?.color_options?.[0] })); }}>
                 <option value={0}>— Оберіть матеріал з бази —</option>
-                {Array.from(new Set(typeMaterials.map(m => m.manufacturer || 'Інші'))).sort().map(mf => (
-                  <optgroup key={mf} label={mf}>
-                    {typeMaterials.filter(m => (m.manufacturer || 'Інші') === mf).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                {/* Групи: мої матеріали, каталог ABT, каталоги виробників */}
+                {Array.from(new Set(typeMaterials.map(srcOf))).sort((a, b) => (a === 'Мої матеріали' ? -1 : b === 'Мої матеріали' ? 1 : a === 'Каталог ABT' ? -1 : b === 'Каталог ABT' ? 1 : a.localeCompare(b))).map(g => (
+                  <optgroup key={g} label={g}>
+                    {typeMaterials.filter(m => srcOf(m) === g).map(m => <option key={m.id} value={m.id}>{m.manufacturer && !g.startsWith('Виробник') ? `${m.manufacturer} · ` : ''}{m.name}</option>)}
                   </optgroup>
                 ))}
               </select>
@@ -574,7 +577,7 @@ export default function ProjectPage({ projectId }: Props) {
                 ) : (
                   <>
                     <button className="btn btn-secondary btn-sm" onClick={startNewMaterial} title="Створити новий запис у базі матеріалів">Новий</button>
-                    {material && <span className={`badge ${isGlobal(material) ? 'badge-blue' : 'badge-green'}`} title={isGlobal(material) ? 'Загальний каталог ABT: щоб змінити, створіть копію' : 'Матеріал вашого кабінету'}>{isGlobal(material) ? 'Каталог ABT' : 'Власний'}</span>}
+                    {material && <span className={`badge ${isGlobal(material) ? 'badge-blue' : isOwn(material) ? 'badge-green' : 'badge-orange'}`} title={isOwn(material) ? 'Матеріал вашого кабінету' : 'Матеріал каталогу: щоб змінити, створіть копію'}>{isGlobal(material) ? 'Каталог ABT' : isOwn(material) ? 'Власний' : `Виробник: ${material.owner_name || '—'}`}</span>}
                     {canEditThis(material) && <button className="btn btn-secondary btn-sm" onClick={() => material && setMatEdit({ mode: 'edit', draft: { ...material } })} title="Перейти в режим редагування поточного матеріалу">Дозволити редагування</button>}
                     <button className="btn btn-secondary btn-sm" onClick={() => material && setMatEdit({ mode: 'copy', draft: { ...material, id: 0, name: `${material.name} (копія)` } })} disabled={!material} title="Створити новий матеріал копіюванням поточного">Копіювати</button>
                     {canEditThis(material) && <button className="btn btn-danger btn-sm" onClick={deleteMaterial} disabled={!!busy} title="Прибрати матеріал з бази">Видалити</button>}

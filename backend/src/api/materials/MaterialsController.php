@@ -8,23 +8,28 @@ namespace RoofCalc\Api\Materials;
 
 use RoofCalc\Core\Auth;
 use RoofCalc\Core\Database;
+use RoofCalc\Core\Catalog;
 
 class MaterialsController
 {
     // GET /api/materials
     // Видимі матеріали: загальний каталог ABT (tenant_id IS NULL) + матеріали кабінету користувача
+    // + опубліковані матеріали виробників (каталог виробників)
     private function scope(): array
     {
         Database::ensureTenantSchema();
         $u = Auth::currentUser();
-        return $u ? ['(tenant_id IS NULL OR tenant_id = ?)', [(int)$u['tid']]] : ['tenant_id IS NULL', []];
+        return $u ? Catalog::visibleSql((int)$u['tid'], 'm.') : ['m.tenant_id IS NULL', []];
     }
+
+    // Власник матеріалу (для позначок «Каталог ABT» / «Виробник: …» / «Власний»)
+    private const SELECT = 'SELECT m.*, t.name AS owner_name, t.is_manufacturer AS owner_mf FROM material_profiles m LEFT JOIN tenants t ON t.id = m.tenant_id';
 
     public function index(): void
     {
         [$w, $p] = $this->scope();
         $profiles = Database::fetchAll(
-            "SELECT * FROM material_profiles WHERE is_active = 1 AND $w ORDER BY type, sort_order, name", $p
+            self::SELECT . " WHERE m.is_active = 1 AND $w ORDER BY m.type, m.sort_order, m.name", $p
         );
         $this->json(['profiles' => $this->decode($profiles)]);
     }
@@ -37,7 +42,7 @@ class MaterialsController
         }
         [$w, $p] = $this->scope();
         $profiles = Database::fetchAll(
-            "SELECT * FROM material_profiles WHERE type = ? AND is_active = 1 AND $w ORDER BY sort_order, name",
+            self::SELECT . " WHERE m.type = ? AND m.is_active = 1 AND $w ORDER BY m.sort_order, m.name",
             array_merge([$type], $p)
         );
         $this->json(['profiles' => $this->decode($profiles)]);
@@ -57,7 +62,7 @@ class MaterialsController
     public function show(int $id): void
     {
         [$w, $pp] = $this->scope();
-        $p = Database::fetchOne("SELECT * FROM material_profiles WHERE id = ? AND $w", array_merge([$id], $pp));
+        $p = Database::fetchOne(self::SELECT . " WHERE m.id = ? AND $w", array_merge([$id], $pp));
         if (!$p) $this->error('Профіль не знайдено', 404);
         $this->json(['profile' => $this->decodeOne($p)]);
     }

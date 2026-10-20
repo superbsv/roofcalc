@@ -159,8 +159,7 @@ class SlopesController
 
         // матеріал — лише з загального каталогу або свого кабінету
         if (!empty($body['material_profile_id'])) {
-            $m = Database::fetchOne('SELECT tenant_id FROM material_profiles WHERE id = ?', [(int)$body['material_profile_id']]);
-            if (!$m || ($m['tenant_id'] !== null && (int)$m['tenant_id'] !== (int)$user['tid'])) $this->error('Матеріал не знайдено', 404);
+            if (!\RoofCalc\Core\Catalog::isVisible((int)$body['material_profile_id'], (int)$user['tid'])) $this->error('Матеріал не знайдено', 404);
         }
 
         $allowed = ['name','polygon_points','holes','edge_types','element_kind','calc_mode','slope_angle','eave_side','ridge_side',

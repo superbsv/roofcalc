@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { MATERIAL_TYPES, isFixedType } from '../components/roof/materials';
+import { useAuth } from '../components/auth/AuthContext';
 
 const BASE = process.env.REACT_APP_API_URL || '/api';
 const tok  = () => localStorage.getItem('rc_token');
@@ -25,6 +26,9 @@ interface Material {
   id: number;
   type: Category;
   name: string;
+  tenant_id?: number | null;      // null — каталог ABT
+  published?: number | boolean;   // опубліковано в каталозі виробників
+  owner_name?: string | null; owner_mf?: number | string | null;
   manufacturer?: string;
   full_width: number;
   useful_width: number;
@@ -137,7 +141,16 @@ function ForbiddenRanges({ value, onChange }: { value: string; onChange: (v: str
   );
 }
 
+// Джерело матеріалу: каталог ABT, каталог виробника або власний матеріал кабінету
+export const materialSource = (m: { tenant_id?: number | null; owner_name?: string | null; owner_mf?: number | string | null }, myTid?: number) =>
+  m.tenant_id == null ? { kind: 'abt' as const, label: 'Каталог ABT' }
+    : myTid != null && Number(m.tenant_id) === Number(myTid) ? { kind: 'own' as const, label: 'Власний' }
+    : { kind: 'mf' as const, label: `Виробник: ${m.owner_name || '—'}` };
+
 export default function ProductsPage({ category }: { category?: Category }) {
+  const { user } = useAuth();
+  const myTid = user?.tenant?.id;
+  const isMf = String((user?.tenant as any)?.is_manufacturer ?? '0') === '1' && !(user?.is_superadmin && !user?.impersonating);
   const [cat, setCat]           = useState<Category>(category || 'tile');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [selected, setSelected] = useState<Material | null>(null);
@@ -248,7 +261,10 @@ export default function ProductsPage({ category }: { category?: Category }) {
               <div style={{ fontSize:'.75rem', color:'var(--clr-text-3)' }}>
                 {m.manufacturer && `${m.manufacturer} · `}{m.useful_width} мм
               </div>
-              <div style={{ fontSize:'.7rem', marginTop:'2px' }}>
+              <div style={{ fontSize:'.7rem', marginTop:'2px', display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                {(() => { const src = materialSource(m, myTid); return src.kind !== 'own' && (
+                  <span className={`badge ${src.kind === 'abt' ? 'badge-blue' : 'badge-orange'}`} style={{ fontSize:'.68rem' }}>{src.label}</span>); })()}
+                {m.published ? <span className="badge badge-green" style={{ fontSize:'.68rem' }}>У каталозі виробників</span> : null}
                 <span style={{ background: m.is_active ? 'var(--clr-success-bg)' : 'var(--clr-error-bg)', color: m.is_active ? 'var(--clr-success)' : 'var(--clr-error)', padding:'1px 6px', borderRadius:'10px' }}>
                   {m.is_active ? 'Активний' : 'Неактивний'}
                 </span>
@@ -274,6 +290,12 @@ export default function ProductsPage({ category }: { category?: Category }) {
                   <input type="checkbox" checked={form.is_active} onChange={e => f('is_active', e.target.checked)} />
                   Активний
                 </label>
+                {isMf && (isNew || (selected && materialSource(selected, myTid).kind === 'own')) && (
+                  <label style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'.85rem' }} title="Матеріал побачать усі кабінети ROOFKIT у каталозі виробників">
+                    <input type="checkbox" checked={!!(form as any).published} onChange={e => setForm(p => ({ ...p, published: e.target.checked ? 1 : 0 } as any))} />
+                    У каталог виробників
+                  </label>
+                )}
                 <button className="btn btn-primary" onClick={save} disabled={loading}>
                   {loading ? 'Збереження…' : '💾 Зберегти'}
                 </button>

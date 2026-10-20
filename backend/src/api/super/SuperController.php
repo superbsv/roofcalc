@@ -19,6 +19,7 @@ class SuperController
     public function __construct()
     {
         Database::ensurePlatformSchema();
+        \RoofCalc\Core\Catalog::ensureSchema();
         $u = Auth::currentUser();
         if (!$u) $this->error('Не авторизовано', 401);
         if (empty($u['sa'])) $this->error('Доступ лише для супер-адміна платформи', 403);
@@ -141,7 +142,7 @@ class SuperController
         $map = [
             'name' => 'str', 'plan' => 'plan', 'status' => 'status', 'trial_until' => 'date', 'paid_until' => 'date',
             'max_users' => 'int', 'max_projects_month' => 'int', 'contact_name' => 'str', 'contact_email' => 'str',
-            'contact_phone' => 'str', 'city' => 'str', 'notes' => 'str',
+            'contact_phone' => 'str', 'city' => 'str', 'notes' => 'str', 'is_manufacturer' => 'bool',
         ];
         foreach ($map as $f => $kind) {
             if (!array_key_exists($f, $b)) continue;
@@ -150,6 +151,7 @@ class SuperController
             elseif ($kind === 'int') $v = $this->intOrNull($v);
             elseif ($kind === 'plan') { if (!isset(Plans::names()[$v]) || ($v === 'internal') !== ((int)$t['is_internal'] === 1)) continue; }
             elseif ($kind === 'status') { if (!in_array($v, ['active', 'trial', 'blocked'], true)) continue; }
+            elseif ($kind === 'bool') $v = !empty($v) ? 1 : 0;
             else $v = trim((string)$v) === '' ? null : trim((string)$v);
             if ($f === 'name' && !$v) continue;
             if ((int)$t['is_internal'] === 1 && in_array($f, ['status', 'plan'], true)) continue;  // внутрішній кабінет ABT не блокується

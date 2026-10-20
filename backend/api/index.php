@@ -27,6 +27,7 @@ spl_autoload_register(function (string $class) {
 
 // нових класів немає в classmap composer на сервері — підключаємо явно
 require_once SRC_PATH . '/core/Plans.php';
+require_once SRC_PATH . '/core/Catalog.php';
 require_once SRC_PATH . '/api/super/SuperController.php';
 require_once SRC_PATH . '/api/tenant/TenantController.php';
 
