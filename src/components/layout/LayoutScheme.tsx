@@ -7,7 +7,7 @@
 // - горизонтальний зсув = повна перегенерація
 // ============================================
 
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo, useLayoutEffect } from 'react';
 import { Point as ApiPoint } from '../../api/client';
 import { interiorAngles, fmtAngle } from '../roof/edges';
 
@@ -270,7 +270,18 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [manualMode, setManualMode]   = useState(false);
   const [selected, setSelected]       = useState<Set<number>>(new Set());
-  const [zoom, setZoom]               = useState(1);
+  // Масштаб зберігається між перерахунками (схема перемальовується після кожного зсуву);
+  // спочатку — «вписати у висоту екрана», щоб схема не виходила за межі вікна
+  const [zoom, setZoomState]          = useState<number>(() => savedZoom ?? 1);
+  const setZoom = (f: number | ((z: number) => number)) => setZoomState(z => { const n = typeof f === 'function' ? f(z) : f; savedZoom = n; return n; });
+  const boxRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (savedZoom != null || !boxRef.current) return;
+    const w = boxRef.current.clientWidth || 900;
+    const fit = (window.innerHeight * 0.6) / (w * SVG_H / SVG_W);
+    const z = Math.max(0.3, Math.min(1, Math.floor(fit * 20) / 20));
+    savedZoom = z; setZoomState(z);
+  }, []);
   const [stepMm, setStepMm]           = useState(100); // крок зміни (як в KrovlyaProfy)
 
   const [rubberBand, setRubberBand] = useState<{x1:number;y1:number;x2:number;y2:number}|null>(null);
@@ -655,7 +666,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           <button onClick={()=>setZoom(z=>Math.max(0.3,z-0.1))} style={zoomBtn}>−</button>
           <span style={{ fontSize:'.85rem', minWidth:'40px', textAlign:'center' }}>{Math.round(zoom*100)}%</span>
           <button onClick={()=>setZoom(z=>Math.min(3,z+0.1))} style={zoomBtn}>+</button>
-          <button onClick={()=>setZoom(1)} style={zoomBtn}>⟳</button>
+          <button onClick={()=>{ savedZoom = null; const w = boxRef.current?.clientWidth || 900; setZoom(Math.max(0.3, Math.min(1, Math.floor(((window.innerHeight * 0.6) / (w * SVG_H / SVG_W)) * 20) / 20))); }} style={zoomBtn} title="Вписати в екран">⟳</button>
           <button onClick={resetAll} style={{ ...zoomBtn, color:'var(--clr-error)', borderColor:'var(--clr-error)' }}>↩ Скинути</button>
         </div>
       </div>
@@ -699,7 +710,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       </div>
 
       {/* SVG */}
-      <div style={{ overflowX:'auto', overflowY:'auto', maxHeight:'75vh', border:'1px solid var(--clr-border)', borderRadius:'8px', background:COLORS.bg }}>
+      <div ref={boxRef} style={{ overflowX:'auto', overflowY:'auto', maxHeight:'75vh', border:'1px solid var(--clr-border)', borderRadius:'8px', background:COLORS.bg }}>
         <svg ref={svgRef} viewBox={`0 0 ${SVG_W} ${SVG_H}`}
           style={{ display:'block', width:`${zoom*100}%`, height:'auto' }}
           onMouseDown={onSvgMouseDown} onMouseMove={onSvgMouseMove} onMouseUp={onSvgMouseUp} onClick={onSvgClick}>
@@ -905,6 +916,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   );
 }
 
+let savedZoom: number | null = null; // масштаб схеми на час сесії
 const zoomBtn: React.CSSProperties  = { padding:'4px 10px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', color:'var(--clr-text)' };
 const shiftBtn: React.CSSProperties = { padding:'5px 10px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', fontSize:'.78rem', fontWeight:500, color:'var(--clr-text)' };
 const lenBtn: React.CSSProperties   = { flex:1, padding:'7px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', color:'var(--clr-text)', fontWeight:600, fontSize:'.82rem' };

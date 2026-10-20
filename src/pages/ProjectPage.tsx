@@ -390,32 +390,32 @@ export default function ProjectPage({ projectId }: Props) {
   // Лінія стику рядів (одна на весь скат): null — посередині
   const jointStep = 1; // як у КП: лінія стику рухається точно на крок кнопки
   const setJoint = (mm: number | null) => active && run('calc', async () => {
-    await patchSlope(active.id, { joint_y: mm });
+    await patchSlope(active.id, { joint_y: mm }, true); // схема не зникає під час перерахунку
     await calcSlope(active.id);
   });
 
   const setShift = (mm: number) => active && run('calc', async () => {
-    await patchSlope(active.id, { layout_shift: mm });
+    await patchSlope(active.id, { layout_shift: mm }, true); // схема не зникає під час перерахунку
     await calcSlope(active.id);
   });
 
   const setVShift = (mm: number) => active && run('calc', async () => {
-    await patchSlope(active.id, { v_shift: mm });
+    await patchSlope(active.id, { v_shift: mm }, true); // схема не зникає під час перерахунку
     await calcSlope(active.id);
   });
 
   const setRowsDiv = (d: number) => active && run('calc', async () => {
-    await patchSlope(active.id, { rows_count: d, split_forced: false, joint_y: null, v_shift: 0 });
+    await patchSlope(active.id, { rows_count: d, split_forced: false, joint_y: null, v_shift: 0 }, true); // схема не зникає під час перерахунку
     await calcSlope(active.id);
   });
 
   const resetLayout = () => active && run('calc', async () => {
-    await patchSlope(active.id, { layout_shift: 0, joint_y: null, split_forced: false, v_shift: 0, rows_count: 0 });
+    await patchSlope(active.id, { layout_shift: 0, joint_y: null, split_forced: false, v_shift: 0, rows_count: 0 }, true); // схема не зникає під час перерахунку
     await calcSlope(active.id);
   });
 
   const setSlopeK = (k: number) => active && run('calc', async () => {
-    await patchSlope(active.id, { eave_overhang: k });
+    await patchSlope(active.id, { eave_overhang: k }, true); // схема не зникає під час перерахунку
     await calcSlope(active.id);
   });
 

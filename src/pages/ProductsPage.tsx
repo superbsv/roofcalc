@@ -216,10 +216,10 @@ export default function ProductsPage({ category }: { category?: Category }) {
   const showForm = isNew || selected !== null;
 
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+    <div className={`prod-wrap${showForm ? ' has-form' : ''}`}>
 
       {/* Ліва панель */}
-      <div style={{ width:'280px', minWidth:'280px', borderRight:'1px solid var(--clr-border)', display:'flex', flexDirection:'column', background:'var(--clr-surface)' }}>
+      <div className="prod-list">
         <div style={{ display:'flex', borderBottom:'1px solid var(--clr-border)' }}>
           {MATERIAL_TYPES.map(t => t.key as Category).map(c => (
             <button key={c} onClick={() => { setCat(c); setSelected(null); setIsNew(false); }}
@@ -259,7 +259,8 @@ export default function ProductsPage({ category }: { category?: Category }) {
       </div>
 
       {/* Права панель */}
-      <div style={{ flex:1, overflowY:'auto', padding:'24px' }}>
+      <div className="prod-form">
+        {showForm && <button type="button" className="btn btn-secondary btn-sm prod-back" onClick={() => { setSelected(null); setIsNew(false); }}>← До списку матеріалів</button>}
         {!showForm ? (
           <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'var(--clr-text-3)' }}>
             Оберіть матеріал зліва або додайте новий

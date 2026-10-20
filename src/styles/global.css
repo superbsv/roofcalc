@@ -1338,3 +1338,18 @@ tr:hover td { background: var(--clr-surface-2); }
 .trig-msg { margin: 0 14px 8px; }
 .trig-hint { padding: 0 14px 10px; font-size: .78rem; color: var(--clr-text-3); }
 .header-tool { background: none; border: 1px solid transparent; color: inherit; font: inherit; cursor: pointer; }
+
+/* ---------- Продукція (довідник матеріалів) ---------- */
+.prod-wrap { display: flex; height: 100%; overflow: hidden; }
+.prod-list { width: 280px; min-width: 280px; border-right: 1px solid var(--clr-border); display: flex; flex-direction: column; background: var(--clr-surface); }
+.prod-form { flex: 1; min-width: 0; overflow-y: auto; padding: 24px; }
+.prod-back { display: none; margin-bottom: 12px; }
+@media (max-width: 860px) {
+  .prod-wrap { flex-direction: column; height: auto; overflow: visible; }
+  .prod-list { width: 100%; min-width: 0; border-right: 0; border-bottom: 1px solid var(--clr-border); max-height: none; }
+  .prod-wrap.has-form .prod-list { display: none; }   /* на телефоні — або список, або форма */
+  .prod-wrap:not(.has-form) .prod-form { display: none; }
+  .prod-form { padding: 16px; overflow: visible; }
+  .prod-back { display: inline-flex; }
+  .prod-form > div:first-of-type { flex-wrap: wrap; gap: 8px; }
+}
