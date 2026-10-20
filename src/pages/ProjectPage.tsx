@@ -1135,7 +1135,7 @@ function Specification({ project, settings, slopes, material, items, projectId, 
         </div>
         <div className="kp-tools">
           <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>Друк</button>
-          <a className="btn btn-secondary btn-sm" href={exportApi.pdf(projectId)} target="_blank" rel="noopener noreferrer">PDF</a>
+          <a className="btn btn-primary btn-sm" href={exportApi.pdf(projectId)} target="_blank" rel="noopener noreferrer" title="PDF для замовника: реквізити, схеми скатів з листами, специфікація">Комерційна пропозиція (PDF)</a>
           <a className="btn btn-secondary btn-sm" href={exportApi.excel(projectId)} target="_blank" rel="noopener noreferrer">Експорт XLS</a>
           <a className="btn btn-secondary btn-sm" href={exportApi.productionPdf(projectId)} target="_blank" rel="noopener noreferrer">Розкрій (виробництво)</a>
           <a className="btn btn-secondary btn-sm" href={exportApi.json(projectId)} target="_blank" rel="noopener noreferrer">JSON</a>
