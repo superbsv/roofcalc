@@ -1317,3 +1317,22 @@ tr:hover td { background: var(--clr-surface-2); }
 .land-side { font-family: var(--font-mono); font-size: 11px; font-weight: 600; fill: #CBD5E1; paint-order: stroke; stroke: #101823; stroke-width: 3px; }
 .land-side-k { fill: var(--clr-brand); font-weight: 800; }
 .reg-plan-year { font-size: .8rem; color: var(--clr-success); font-weight: 600; margin-top: -4px; }
+
+/* ---------- Калькулятор тригонометричний ---------- */
+.trig-box { width: min(500px, 100%); }
+.trig-tabs { display: flex; border-bottom: 1px solid var(--clr-border); }
+.trig-tabs button { flex: 1; padding: 10px 12px; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--clr-text-2); font: inherit; font-weight: 600; cursor: pointer; }
+.trig-tabs button.on { color: var(--clr-text); border-bottom-color: var(--clr-brand); }
+.trig-scroll { overflow-x: auto; padding: 8px 0; }
+.trig-pane { position: relative; width: 440px; height: 340px; margin: 0 auto; }
+.trig-pane svg { position: absolute; inset: 0; }
+.trig-f { position: absolute; display: flex; align-items: center; gap: 4px; font-size: .82rem; color: var(--clr-text-2); white-space: nowrap; }
+.trig-f b { font-family: var(--font-display); font-size: 1.15rem; color: var(--clr-text); min-width: 14px; text-align: right; }
+.trig-f input { width: 86px; padding: 4px 6px; font-family: var(--font-mono); font-size: .9rem; border: 1px solid var(--clr-border-dark); border-radius: 6px; background: var(--clr-surface); color: var(--clr-text); text-align: right; }
+.trig-f.ang input { background: var(--clr-brand-pale); }
+.trig-f input:read-only { background: var(--clr-surface-2); color: var(--clr-text-2); }
+.trig-f.mine input { border-color: var(--clr-brand); font-weight: 700; }
+.trig-f input:focus { outline: 2px solid var(--clr-brand); outline-offset: 0; }
+.trig-msg { margin: 0 14px 8px; }
+.trig-hint { padding: 0 14px 10px; font-size: .78rem; color: var(--clr-text-3); }
+.header-tool { background: none; border: 1px solid transparent; color: inherit; font: inherit; cursor: pointer; }

@@ -11,6 +11,7 @@ import PlansPage    from './pages/PlansPage';
 import TenantSettingsPage from './pages/TenantSettingsPage';
 import BrandMark, { BrandWordmark } from './components/brand/BrandMark';
 import { ThemeToggle } from './components/theme/theme';
+import TrigCalc from './components/tools/TrigCalc';
 import { MATERIAL_TYPES } from './components/roof/materials';
 import { MaterialProfile } from './api/client';
 
@@ -30,6 +31,7 @@ function Shell() {
   const { user, logout, loading, leaveImpersonation } = useAuth();
   const [page, setPage] = useState<Page>({ type: 'projects' });
   const [productsOpen, setProductsOpen] = useState(false);
+  const [trigOpen, setTrigOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Закриваємо сайдбар при зміні сторінки
@@ -89,10 +91,14 @@ function Shell() {
           <a href="/" className={page.type==='projects'?'active':''} onClick={e=>{e.preventDefault();navigate({type:'projects'});}}>
             Проекти
           </a>
+          <a href="/" onClick={e=>{e.preventDefault();setTrigOpen(true);}} title="Калькулятор тригонометричний: сторони, кути і площа трикутника">
+            Калькулятор
+          </a>
           {page.type==='project' && (
             <a href="/" className="active" onClick={e=>e.preventDefault()}>← Поточний проект</a>
           )}
         </nav>
+        {trigOpen && <TrigCalc onClose={() => setTrigOpen(false)} />}
 
         <div className="header-right">
           <ThemeToggle />
@@ -126,6 +132,13 @@ function Shell() {
             </svg>,
             page.type==='projects',
             () => navigate({type:'projects'})
+          )}
+          {navItem('Калькулятор тригонометричний',
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 20 L20 20 L4 4 Z M4 16 h4 v4"/>
+            </svg>,
+            trigOpen,
+            () => { setTrigOpen(true); setSidebarOpen(false); }
           )}
         </div>
 
