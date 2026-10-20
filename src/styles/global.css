@@ -1375,3 +1375,53 @@ tr:hover td { background: var(--clr-surface-2); }
 .widget-mats legend { font-weight: 700; font-size: .82rem; padding: 0 4px; }
 .widget-mats label { display: flex; gap: 8px; align-items: center; font-size: .88rem; padding: 3px 0; }
 .badge-gray { background: var(--clr-surface-2); color: var(--clr-text-3); }
+
+/* ===== Калькулятор водостоку ===== */
+.gut-box { width: min(780px, 100%); display: flex; flex-direction: column; }
+.gut-steps { display: flex; list-style: none; margin: 0; padding: 0; border-bottom: 1px solid var(--clr-border); }
+.gut-steps li { flex: 1; }
+.gut-steps button { width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--clr-text-3); font: inherit; font-size: .85rem; cursor: pointer; text-align: left; }
+.gut-steps button:disabled { cursor: default; }
+.gut-steps b { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 2px solid currentColor; font-size: .78rem; flex: none; }
+.gut-steps li.on button { color: var(--clr-text); border-bottom-color: var(--clr-brand); font-weight: 600; }
+.gut-steps li.on b, .gut-steps li.done b { background: var(--clr-brand); border-color: var(--clr-brand); color: #fff; }
+.gut-steps li.done button { color: var(--clr-text-2); }
+.gut-body { padding: 16px; min-height: 300px; }
+.gut-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.gut-kind { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; border: 2px solid var(--clr-border); border-radius: 8px; background: var(--clr-surface); color: var(--clr-text); font: inherit; font-weight: 600; cursor: pointer; }
+.gut-kind:hover { border-color: var(--clr-brand); }
+.gut-kind.on { border-color: var(--clr-brand); background: var(--clr-brand-pale); }
+.gut-params { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.gut-pic { background: var(--clr-canvas); border: 1px solid var(--clr-border); border-radius: 8px; padding: 10px; align-self: start; }
+.gut-cap { font-size: .75rem; color: var(--clr-text-3); text-align: center; margin-top: 4px; }
+.gut-fields { display: flex; flex-direction: column; gap: 8px; }
+.gut-fields label { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; font-size: .85rem; }
+.gut-fields label b { font-family: var(--font-display); font-size: 1rem; }
+.gut-fields select { width: 200px; font-size: .85rem; padding: 6px 8px; height: auto; }
+.gut-fields hr { border: 0; border-top: 1px solid var(--clr-border); margin: 4px 0; width: 100%; }
+.gut-in { display: inline-flex; align-items: center; gap: 4px; color: var(--clr-text-2); }
+.gut-in input { width: 90px; padding: 5px 7px; font-family: var(--font-mono); border: 1px solid var(--clr-border-dark); border-radius: 6px; background: var(--clr-surface); color: var(--clr-text); text-align: right; }
+.gut-in input:focus { outline: 2px solid var(--clr-brand); }
+.gut-sum { font-size: .9rem; padding: 8px 10px; background: var(--clr-surface-2); border-radius: 6px; }
+.gut-colors { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.gut-color { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px; border: 2px solid var(--clr-border); border-radius: 8px; background: var(--clr-surface); color: var(--clr-text); font: inherit; cursor: pointer; }
+.gut-color i { width: 54px; height: 54px; border-radius: 50%; border: 1px solid var(--clr-border-dark); }
+.gut-color small { color: var(--clr-text-3); }
+.gut-color.on { border-color: var(--clr-brand); background: var(--clr-brand-pale); }
+.gut-res-head { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; font-size: .85rem; color: var(--clr-text-2); }
+.gut-res-head b { color: var(--clr-text); font-size: .95rem; }
+.gut-res-head i { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--clr-border-dark); flex: none; }
+.gut-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.gut-table th, .gut-table td { padding: 6px 8px; border-bottom: 1px solid var(--clr-border); text-align: left; }
+.gut-table th { background: var(--clr-surface-2); font-weight: 600; }
+.gut-table td.n { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.gut-table small { color: var(--clr-text-3); }
+.gut-note { margin-top: 10px; font-size: .75rem; color: var(--clr-text-3); }
+.gut-acts { display: flex; gap: 8px; }
+@media (max-width: 680px) {
+  .gut-params { grid-template-columns: 1fr; }
+  .gut-steps span { display: none; }
+  .gut-steps li.on span { display: inline; }
+  .gut-fields select { width: 160px; }
+  .gut-in input { width: 74px; }
+}
