@@ -47,6 +47,8 @@ interface Material {
   stock_lengths?: any[];
   round_step?: number | null;
   max_std_length?: number | null;
+  module_origin?: number | null;   // від низу листа до першої лінії штампа, мм
+  stamp_gap?: number | null;       // заборона різу ± від штампа, мм (порожньо — 50, 0 — правило вимкнено)
   lock_type?: string;
   min_joint_distance?: number;
   join_overlap?: number;
@@ -515,6 +517,16 @@ export default function ProductsPage({ section, onSection }: { section?: number;
                   </Field>
                 </>}
               </Row>
+              {cat === 'tile' && <Row>
+                <Field label="Без різу біля штампа, ± мм">
+                  <input type="number" className="form-control" value={form.stamp_gap ?? ''} placeholder="50" onChange={e => f('stamp_gap', e.target.value === '' ? null : Number(e.target.value))} />
+                  <div style={{ fontSize:'.75rem', color:'var(--clr-text-3)', marginTop:'4px' }}>Заводський поперечний різ не ближче цієї відстані до лінії штампа. 0 — не перевіряти.</div>
+                </Field>
+                <Field label="Початок модуля, мм">
+                  <input type="number" className="form-control" value={form.module_origin ?? ''} placeholder="0" onChange={e => f('module_origin', e.target.value === '' ? null : Number(e.target.value))} />
+                  <div style={{ fontSize:'.75rem', color:'var(--clr-text-3)', marginTop:'4px' }}>Від нижнього краю листа до першої лінії штампа.</div>
+                </Field>
+              </Row>}
             </Section>
 
             {/* Довжини */}

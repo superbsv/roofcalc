@@ -118,6 +118,10 @@ class Database
         // Етап 3 (КП 8.15): величина округлення і максимальна стандартна довжина
         self::ensureColumn('material_profiles', 'round_step', 'INT NULL');
         self::ensureColumn('material_profiles', 'max_std_length', 'INT NULL');
+        // Технологічний рівень металочерепиці: початок модуля (від низу листа до 1-ї лінії штампа) і заборона різу ± від штампа
+        self::ensureColumn('material_profiles', 'module_origin', 'INT NULL');
+        self::ensureColumn('material_profiles', 'stamp_gap', 'INT NULL');
+        self::ensureColumn('slopes', 'snap_off', 'TINYINT NULL'); // 1 — Snap вимкнено (довжини не підганяються, лише помилки)
         // Лінія стику рядів на скаті (висота верхнього краю нижнього листа, мм); NULL — посередині
         self::ensureColumn('slopes', 'joint_y', 'INT NULL');
         self::ensureColumn('slopes', 'round_step', 'INT NULL');

@@ -194,7 +194,7 @@ class AdminController
 
         // Поля етапу 3 (КП): величина округлення і стандартна довжина
         $extra = []; $vals = [];
-        foreach (['round_step', 'max_std_length'] as $f) {
+        foreach (['round_step', 'max_std_length', 'module_origin', 'stamp_gap'] as $f) {
             if (array_key_exists($f, $body)) { $extra[] = "$f = ?"; $vals[] = $body[$f] === '' ? null : $body[$f]; }
         }
         if (!empty($body['published']) && !(!empty($me['sa']) && empty($me['imp'])) && \RoofCalc\Core\Catalog::isManufacturer((int)$me['tid'])) {
@@ -281,7 +281,7 @@ class AdminController
         $allowed    = ['name','manufacturer','full_width','useful_width','side_overlap','length_overlap',
                        'wave_step','wave_height','min_length','max_length','cut_step','lock_type',
                        'min_joint_distance','join_overlap','min_slope_angle','price_per_m2','is_active','sort_order','type',
-                       'round_step','max_std_length',
+                       'round_step','max_std_length','module_origin','stamp_gap',
                        ...$jsonFields];
         // Публікувати в каталозі виробників може лише кабінет-виробник (свій матеріал)
         if (array_key_exists('published', $body) && $mat['tenant_id'] !== null && \RoofCalc\Core\Catalog::isManufacturer((int)$me['tid'])) {

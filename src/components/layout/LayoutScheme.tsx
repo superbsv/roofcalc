@@ -29,9 +29,11 @@ interface SheetPlacement {
   offset_x?: number;
   offset_y?: number;
   deleted?: boolean;
+  tech_err?: string;
 }
 
 type Point = ApiPoint;
+type TechCfg = { step_mm: number; origin_mm: number; zones_mm: [number, number][]; gap_mm: number; tolerance_mm: number };
 
 interface CalcResult {
   profile_name: string;
@@ -46,6 +48,15 @@ interface CalcResult {
   sheet_useful_width?: number;
   placements: SheetPlacement[];
   warnings: string[];
+  tech?: TechCfg;
+}
+
+// Технологічна перевірка поперечного різу (дзеркало MetalTileProfile на сервері — миттєво при правці стрілками)
+function stampErr(len: number, t?: TechCfg): string | null {
+  if (!t || !t.zones_mm?.length) return null;
+  const r = (((len - t.origin_mm) % t.step_mm) + t.step_mm) % t.step_mm;
+  if (t.zones_mm.some(([a, b]) => r >= a + (t.tolerance_mm || 0) && r <= b - (t.tolerance_mm || 0))) return null;
+  return `рез за ${Math.min(r, t.step_mm - r)} мм від лінії штампа`; // i18n-ignore (tpl «рез за {0} мм від лінії штампа»)
 }
 
 interface Props {
@@ -350,6 +361,26 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
     : `M ${tx(0)} ${ty(0)} L ${tx(W)} ${ty(0)} L ${tx(W)} ${ty(H)} L ${tx(0)} ${ty(H)} Z`;
 
   const visiblePlacements = placements.filter(p => !p.deleted);
+  // Лінії штампа (від низу листа: початок модуля + k × крок) і дозволені зони різу біля верхнього краю виділеного листа
+  const tech = calcResult.tech;
+  const stStep = tech?.step_mm || waveStep;
+  const stOrg = tech?.origin_mm || 0;
+  const stamps = (len: number) => {
+    const out: number[] = [];
+    if (stStep <= 0) return out;
+    for (let v = stOrg > 0 ? stOrg : stStep; v < len && out.length < 200; v += stStep) out.push(v);
+    return out;
+  };
+  const zoneBands = (len: number) => {
+    const out: [number, number][] = [];
+    if (!tech) return out;
+    const k0 = Math.floor((len - tech.origin_mm) / tech.step_mm);
+    for (let k = k0 - 1; k <= k0; k++) for (const [a, b] of tech.zones_mm) {
+      const lo = tech.origin_mm + k * tech.step_mm + a, hi = Math.min(len, tech.origin_mm + k * tech.step_mm + b);
+      if (hi > lo && lo >= 0) out.push([lo, hi]);
+    }
+    return out;
+  };
   const hasSelection = selected.size > 0;
 
   const getLen = (p: SheetPlacement) => p.manual_length ?? p.length;
@@ -782,9 +813,13 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
                   <rect x={x1} y={y1-h} width={w} height={h}
                     fill={color} fillOpacity={isSel?0.5:0.35}
                     stroke={color} strokeWidth={isSel?2.5:1}/>
-                  {waveStep > 0 && waveStep * scale >= 4 && Array.from({ length: Math.floor(length / waveStep) }, (_, n) => (
-                    <line key={`w${n}`} x1={x1} x2={x1 + w} y1={y1 - (n + 1) * waveStep * scale} y2={y1 - (n + 1) * waveStep * scale}
+                  {stStep > 0 && stStep * scale >= 4 && stamps(length).map(v => (
+                    <line key={`w${v}`} x1={x1} x2={x1 + w} y1={y1 - v * scale} y2={y1 - v * scale}
                       stroke={color} strokeOpacity={0.45} strokeWidth={0.6} />
+                  ))}
+                  {isSel && tech && zoneBands(length).map(([a, b]) => (
+                    <rect key={`z${a}`} x={x1} y={y1 - b * scale} width={w} height={(b - a) * scale}
+                      fill="#16A34A" fillOpacity={0.22} stroke="#16A34A" strokeOpacity={0.6} strokeWidth={0.6} pointerEvents="none" />
                   ))}
                   {h>20 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
                     fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(9,Math.min(13,h/4))} fontWeight="600">
@@ -795,6 +830,15 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
                     №{p.sheet_number}
                   </text>}
                   {p.manual_length && <text x={x1+3} y={y1-h+10} fill="#FF7A1A" fontSize={9}>✎</text>}
+                  {(() => {
+                    const err = length === p.length && p.tech_err ? p.tech_err : stampErr(length, tech);
+                    if (!err) return null;
+                    return <>
+                      <rect x={x1+1.5} y={y1-h+1.5} width={Math.max(0, w-3)} height={Math.max(0, h-3)} fill="none" stroke="#DC2626" strokeWidth={2} strokeDasharray="5 3" pointerEvents="none"/>
+                      <text x={x1+w-4} y={y1-h+12} textAnchor="end" fill="#DC2626" fontSize={11} fontWeight="700">⚠</text>
+                      <title>{`№${p.sheet_number}: ${err}`}</title>
+                    </>;
+                  })()}
                 </g>
               );
             })}

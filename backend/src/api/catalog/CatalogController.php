@@ -21,6 +21,7 @@ class CatalogController
         if (!$u) $this->error('Не авторизовано', 401);
         $this->me = $u;
         Catalog::ensureSchema();
+        \RoofCalc\Core\Database::ensureMaterialSchema();
     }
 
     private function platform(): bool { return !empty($this->me['sa']) && empty($this->me['imp']); }
@@ -181,7 +182,7 @@ class CatalogController
 
     // ---------- Імпорт / експорт ----------
     public const IO_FIELDS = [
-        'full_width', 'useful_width', 'min_length', 'max_length', 'max_std_length', 'wave_step', 'round_step', 'cut_step',
+        'full_width', 'useful_width', 'min_length', 'max_length', 'max_std_length', 'module_origin', 'stamp_gap', 'wave_step', 'round_step', 'cut_step',
         'length_overlap', 'min_slope_angle', 'lock_type', 'min_joint_distance', 'join_overlap', 'price_per_m2', 'is_active',
     ];
 

@@ -456,6 +456,11 @@ export default function ProjectPage({ projectId }: Props) {
     await calcSlope(active.id);
   });
 
+  const setSnap = (on: boolean) => active && run('calc', async () => {
+    await patchSlope(active.id, { snap_off: !on }, true);
+    await calcSlope(active.id);
+  });
+
   const setVShift = (mm: number) => active && run('calc', async () => {
     await patchSlope(active.id, { v_shift: mm }, true); // схема не зникає під час перерахунку
     await calcSlope(active.id);
@@ -872,6 +877,12 @@ export default function ProjectPage({ projectId }: Props) {
             <aside className="kp-left">
               <div className="kp-left-head"><div className="kp-h3">{active.name} · {slopeNo}</div>{sideBtn}</div>
               <div ref={setShiftHost} className="kp-shift-host" />
+              {res?.tech && (
+                <label className="kp-snap" title="Snap: довжини листів автоматично підганяються під дозволені зони заводського різу (не ближче ± до лінії штампа); лінія стику притягується до допустимого положення">
+                  <input type="checkbox" checked={res.snap !== false} onChange={e => setSnap(e.target.checked)} disabled={!!busy} />
+                  <span><b>Snap</b> {`— різ поза зоною штампа (±${res.tech.gap_mm} мм)`}</span>{/* i18n-ignore: tpl */}
+                </label>
+              )}
             </aside>
 
             <div className="kp-layout-main">
@@ -884,6 +895,13 @@ export default function ProjectPage({ projectId }: Props) {
                 <>
                   {optMsg && <div className="alert alert-success">{optMsg}</div>}
                   {res.warnings?.map((w, i) => <div key={i} className="alert alert-warning">{w}</div>)}
+                  {!!res.tech_errors?.length && (
+                    <div className="alert alert-error kp-tech-err">
+                      <b>Технологічні помилки розкрою — такі листи завод не виготовить:</b>
+                      {res.tech_errors.map((e, i) => <div key={i}>{e}</div>)}
+                      {res.snap === false && <div className="kp-tech-hint">Увімкніть Snap у бічній панелі — довжини підберуться автоматично.</div>}
+                    </div>
+                  )}
                   <LayoutScheme calcResult={res as any} polygonPoints={pts} holes={holes} slopeName={active.name}
                     jointY={res.joint_y_mm ?? null} jointRange={res.joint_range_mm ?? null} onJointChange={mm => setJoint(mm)}
                     jointStep={jointStep} shiftX={res.layout_shift_mm ?? 0} onShiftX={mm => setShift(mm)} onReset={resetLayout}
@@ -1250,6 +1268,9 @@ function Specification({ project, settings, slopes, material, items, projectId, 
           {project?.object_address && <div><span>Об'єкт:</span> {project.object_address}</div>}
         </div>
         <h2 className="kp-paper-title">СПЕЦИФІКАЦІЯ</h2>
+        {slopes.some(s => s.calc_result?.tech_errors?.length) && (
+          <div className="kp-paper-warn">⚠ Специфікація НЕКОРЕКТНА: є листи, які не можна виготовити (різ біля лінії штампа) — скати: {slopes.filter(s => s.calc_result?.tech_errors?.length).map(s => s.name).join(', ')}</div>
+        )}
         <div className="kp-paper-sub">
           <div>Замовлення №{settings.order_no} від {dateUa(settings.order_date)}</div>
           <div>Тип розрахунку: «{ct?.label?.toUpperCase()} НА ЗАМОВЛЕННЯ»</div>

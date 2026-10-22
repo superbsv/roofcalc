@@ -16,6 +16,8 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm ci
+      - name: Backend tests (технологічний розкрій металочерепиці)
+        run: php backend/tests/run.php
       - name: Build
         run: npm run build
       # Бекенд (PHP) іде в корінь сайту roofkit.com.ua одним FTP-підключенням

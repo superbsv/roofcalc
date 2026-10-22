@@ -199,6 +199,7 @@ export interface Slope {
   v_shift?: number | null;            // зсув листів по вертикалі, мм
   sheet_edits?: SheetEdits | null;    // ручні правки листів у «Укладці»
   split_forced?: boolean | number | null; // стик на вимогу, навіть коли вистачає одного листа
+  snap_off?: boolean | number | null;     // Snap вимкнено: довжини не підганяються під зони заводського різу
   layout_shift?: number | null;       // зсув сітки колонок по горизонталі, мм
   round_step?: number | null;         // округлення довжин листів для ската, мм (null — з матеріалу)
   created_at: string; updated_at: string;
@@ -230,6 +231,9 @@ export interface CalcResult {
   running_m?: number;
   max_real_length_mm?: number; max_std_length_mm?: number; rounding_mm?: number;
   rows_user?: number; row_len_mm?: number; v_shift_mm?: number; wave_step_mm?: number; split_forced?: boolean; layout_shift_mm?: number; joint_y_mm?: number | null; joint_range_mm?: [number, number] | null; joint_custom?: boolean;
+  // Технологічний рівень (штампи металочерепиці)
+  tech?: { step_mm: number; origin_mm: number; zones_mm: [number, number][]; gap_mm: number; tolerance_mm: number };
+  tech_errors?: string[]; tech_ok?: boolean; snap?: boolean; snap_from_mm?: number;
 }
 
 export interface CuttingGroup {
@@ -253,6 +257,8 @@ export interface SheetPlacement {
   x: number; y: number;
   full_width: number; useful_width: number; length: number;
   intersect_area_m2?: number; full_area_m2?: number; waste_area_m2?: number;
+  module_pos?: number;   // положення кінця листа в модулі штампа, мм
+  tech_err?: string;     // причина, чому заготовку не виготовити
 }
 
 export interface AccessoryResult {

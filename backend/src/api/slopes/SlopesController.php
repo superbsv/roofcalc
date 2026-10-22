@@ -222,7 +222,7 @@ class SlopesController
 
         $allowed = ['name','polygon_points','holes','edge_types','element_kind','calc_mode','slope_angle','eave_side','ridge_side',
                     'laying_direction','eave_overhang','ridge_gap','sort_order','joint_y','round_step','layout_shift','split_forced','v_shift','rows_count',
-                    'material_profile_id','material_color','material_coating','material_thickness','sheet_edits'];
+                    'material_profile_id','material_color','material_coating','material_thickness','sheet_edits','snap_off'];
 
         foreach ($allowed as $f) {
             if (!array_key_exists($f, $body)) continue;
@@ -243,6 +243,9 @@ class SlopesController
                 $fields[] = "$f = ?";
                 $v = ($body[$f] === null || $body[$f] === '') ? 0 : (int)$body[$f];
                 $params[] = $v === 0 ? null : max(-100000, min(100000, $v));
+            } elseif ($f === 'snap_off') {
+                $fields[] = "$f = ?";
+                $params[] = !empty($body[$f]) ? 1 : null;
             } elseif ($f === 'split_forced') {
                 $fields[] = "$f = ?";
                 $params[] = !empty($body[$f]) ? 1 : null;
@@ -324,6 +327,7 @@ class SlopesController
         for ($sh = -intdiv($uw, 2); $sh <= intdiv($uw, 2); $sh += $step) {
             $r = $this->calculateById($id, ['layout_shift' => $sh, 'joint_y' => $slope['joint_y']], true);
             if (!empty($r['errors'])) continue;
+            if (isset($r['tech_ok']) && !$r['tech_ok'] && !empty($base['tech_ok'])) continue; // не погіршуємо технологію
             [$m, $n] = $score($r);
             if ($best === null || $m < $best[1] - 0.0005 || (abs($m - $best[1]) <= 0.0005 && ($n < $best[2] || ($n === $best[2] && abs($sh) < abs($best[0]))))) $best = [$sh, $m, $n];
         }
@@ -335,6 +339,25 @@ class SlopesController
         $result = $this->calculateById($id);
         $this->json(['result' => $result, 'improved' => $improved, 'before_m' => round($m0, 3), 'after_m' => round($improved ? $best[1] : $m0, 3),
             'before_sheets' => $n0, 'after_sheets' => $improved ? $best[2] : $n0, 'layout_shift' => $improved ? $best[0] : $cur]);
+    }
+
+    // Snap: кандидати лінії стику навколо позиції користувача (±крок, обидва напрямки), перевірка всіх листів ската.
+    // Відкидаємо варіанти з невиконуваними листами; беремо мінімальне зміщення, при рівному — менший відхід.
+    private function snapJoint(int $id, int $user, ?array $range, int $step, int $inc = 5): ?array
+    {
+        $lo = $range ? (int)$range[0] : PHP_INT_MIN; $hi = $range ? (int)$range[1] : PHP_INT_MAX;
+        $inc = max(1, $inc);
+        for ($d = $inc; $d <= 2 * $step; $d += $inc) {
+            $best = null;
+            foreach ([$user - $d, $user + $d] as $j) {
+                if ($j < $lo || $j > $hi) continue;
+                $r = $this->calculateById($id, ['joint_y' => $j], true);
+                if (!empty($r['errors']) || empty($r['tech_ok']) || (int)$r['joint_y_mm'] !== $j) continue;
+                if ($best === null || (float)$r['running_m'] < (float)$best['running_m']) $best = $r;
+            }
+            if ($best) return $best;
+        }
+        return null;
     }
 
     // POST /api/slopes/{id}/calculate
@@ -402,6 +425,8 @@ class SlopesController
         $pr = is_array($ps) ? (int)($ps['round_step'] ?? 0) : 0;
         if ($pr > 0) $profile['round_step'] = min(1000, $pr);
         $profile['max_std_length'] = $slope['max_std_length'] ?? null;
+        $profile['module_origin']  = $slope['module_origin'] ?? null;
+        $profile['stamp_gap']      = $slope['stamp_gap'] ?? null;
         $profile['type']           = $slope['type'];
         // Розрахунок лише «на замовлення» (режими «зі складу» прибрано з програми)
         $mode = 'order';
@@ -432,8 +457,24 @@ class SlopesController
         }
         if ($dryRun) return $calcResult;   // пробний розрахунок (оптимізація) — без збереження
 
+        // Snap лінії стику: якщо при положенні, заданому користувачем, якийсь лист технологічно не виконати,
+        // шукаємо найближче допустиме положення лінії (перераховуються одразу всі листи ската). Збережене положення
+        // користувача не змінюється — немає дрейфу; вимкнув Snap — бачить своє положення з помилками.
+        $tech = $calc->tech();
+        if ($tech && !empty($calcResult['snap']) && empty($calcResult['tech_ok']) && $calcResult['joint_y_mm'] !== null) {
+            $snapped = $this->snapJoint($id, (int)$calcResult['joint_y_mm'], $calcResult['joint_range_mm'] ?? null, $tech->moduleStepMm, max(5, $tech->lengthIncrementMm));
+            if ($snapped) {
+                $snapped['snap_from_mm'] = (int)$calcResult['joint_y_mm'];
+                $snapped['warnings'][] = sprintf('Snap: лінію стику притягнуто з %.3f до %.3f м — у заданому положенні листи не виготовити', $snapped['snap_from_mm'] / 1000, $snapped['joint_y_mm'] / 1000);
+                $calcResult = $snapped;
+            } else {
+                $calcResult['warnings'][] = 'Snap: допустимого положення лінії стику не знайдено — див. технологічні помилки';
+            }
+        }
+
         // Ручні правки листів з «Укладки» (довжина / положення / видалення)
         $calcResult = self::applySheetEdits($calcResult, self::cleanSheetEdits(json_decode($slope['sheet_edits'] ?? 'null', true)));
+        if ($tech) $calcResult = $tech->annotate($calcResult);   // правлені вручну листи теж проходять перевірку
 
         // Вирізи (труби, вікна): віднімаємо їх площу від площі ската
         if (!empty($slope['holes'])) {

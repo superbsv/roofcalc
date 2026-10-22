@@ -13,6 +13,8 @@ export const COLS: [string, string, string[]][] = [
   ['max_length', 'Макс. довжина, мм', ['Макс. длина, мм', 'Max length, mm']], // i18n-ignore
   ['max_std_length', 'Стандартна довжина, мм', ['Стандартная длина, мм', 'Standard length, mm']], // i18n-ignore
   ['wave_step', 'Крок хвилі, мм', ['Шаг волны, мм', 'Wave step, mm']], // i18n-ignore
+  ['module_origin', 'Початок модуля (від низу листа до штампа), мм', ['Начало модуля (от низа листа до штампа), мм', 'Module origin (sheet bottom to stamp), mm']], // i18n-ignore
+  ['stamp_gap', 'Без різу біля штампа, ± мм', ['Без реза у штампа, ± мм', 'No cut near stamp, ± mm']], // i18n-ignore
   ['round_step', 'Округлення, мм', ['Округление, мм', 'Rounding, mm']], // i18n-ignore
   ['cut_step', 'Крок різання, мм', ['Шаг резки, мм', 'Cutting step, mm']], // i18n-ignore
   ['length_overlap', 'Поздовжній нахлест, мм', ['Продольный нахлёст, мм', 'Length overlap, mm']], // i18n-ignore

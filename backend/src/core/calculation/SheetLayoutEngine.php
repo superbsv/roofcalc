@@ -24,6 +24,8 @@ namespace RoofCalc\Core\Calculation;
 
 use RoofCalc\Core\Geometry\GeometryEngine;
 
+require_once __DIR__ . '/MetalTileProfile.php';
+
 class SheetLayoutEngine
 {
     public const FIXED_TYPES = ['tile_module', 'natural_tile'];
@@ -56,6 +58,8 @@ class SheetLayoutEngine
     private array $warnings = [];
     private ?int $jointY = null;
     private ?array $jointRange = null;
+    private ?MetalTileProfile $tech = null;  // технологічний рівень (штампи металочерепиці); null — правила не діють
+    private bool $snap = true;               // Snap: довжини автоматично підганяються під допустимі заводські
 
     public function __construct(array $profile, array $slope, string $mode = 'order')
     {
@@ -82,11 +86,17 @@ class SheetLayoutEngine
         $this->stock       = self::normalizeStock($profile['stock_lengths'] ?? null);
         $this->direction   = (string)($slope['laying_direction'] ?? 'right_left');
 
+        $this->tech = MetalTileProfile::fromMaterial($profile, $this->round);
+        $this->snap = empty($slope['snap_off']);
+
         $std = (int)($profile['max_std_length'] ?? 0);
         if ($this->wave > 0) {
             $base = $std > 0 ? $std : $this->lmax;
             $n = (int)floor(($base - $this->pz) / $this->wave);
             $this->lmaxStd = max($this->lmin, $n * $this->wave + $this->pz);
+            if ($this->tech && $this->snap && !$this->tech->isValid($this->lmaxStd)) {
+                $this->lmaxStd = $this->tech->floorValid($this->lmaxStd) ?? $this->lmaxStd;
+            }
         } else {
             $this->lmaxStd = $this->lmax;
         }
@@ -258,7 +268,7 @@ class SheetLayoutEngine
             $this->warnings[] = 'Режим «зі складу» ' . substr($this->mode, -1) . ': ' . self::modeLabel($this->mode);
         }
 
-        return [
+        $res = [
             'profile_name'       => $this->profile['name'] ?? '',
             'material_type'      => $this->type,
             'mode'               => $this->mode,
@@ -297,8 +307,12 @@ class SheetLayoutEngine
             'joint_custom'       => isset($this->slope['joint_y']) && $this->slope['joint_y'] !== null && $this->slope['joint_y'] !== '',
             'warnings'           => array_values(array_unique($this->warnings)),
             'errors'             => [],
+            'snap'               => $this->snap,
         ];
+        return $this->tech ? $this->tech->annotate($res) : $res;
     }
+
+    public function tech(): ?MetalTileProfile { return $this->tech; }
 
     public static function modeLabel(string $m): string
     {
@@ -453,7 +467,8 @@ class SheetLayoutEngine
     {
         if ($this->wave > 0) {
             $l = (int)(ceil(($len - $this->pz) / $this->wave) * $this->wave + $this->pz);
-            return min($l, $max);
+            $l = min($l, $max);
+            return $this->techLen($l, $max);
         }
         return $this->fit($len, $max);
     }
@@ -473,7 +488,16 @@ class SheetLayoutEngine
             else $len = $r[1] <= $max ? $r[1] : max($this->lmin, $r[0]);
             $this->warnings[] = sprintf('Довжина %d мм у діапазоні невиконуваних розмірів %d–%d мм — взято %d мм', $orig, $r[0], $r[1], $len);
         }
-        return min($len, $max);
+        return $this->techLen(min($len, $max), $max);
+    }
+
+    // Snap технологічного рівня: найменша допустима заводська довжина ≥ потрібної (надлишок — підрізка на об'єкті).
+    // Коротшою лист не робимо ніколи — інакше лишиться непокрита частина ската. Немає варіанта — довжина лишається,
+    // а перевірка (annotate) покаже причину.
+    private function techLen(int $len, int $max): int
+    {
+        if (!$this->tech || !$this->snap || $this->tech->isValid($len)) return $len;
+        return $this->tech->ceilValid($len, $max) ?? $len;
     }
 
     private function forbiddenRange(int $len): ?array
