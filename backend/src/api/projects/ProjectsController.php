@@ -147,6 +147,7 @@ class ProjectsController
             ]
         );
 
+        \RoofCalc\Api\Clients\ClientsController::linkProject($id, $user, $body);
         $this->log($user['sub'], 'project.create', 'project', $id);
         $project = self::decodeProject(Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$id]));
         $this->json(['project' => $project], 201);
@@ -199,11 +200,13 @@ class ProjectsController
             }
         }
 
-        if (!$fields) $this->error('Немає полів для оновлення', 400);
+        if (!$fields && !array_key_exists('client_id', $body)) $this->error('Немає полів для оновлення', 400);
+        if (!$fields) { $fields[] = 'updated_at = updated_at'; }
 
         $params[] = $id;
         Database::query("UPDATE projects SET " . implode(', ', $fields) . " WHERE id = ?", $params);
 
+        \RoofCalc\Api\Clients\ClientsController::linkProject($id, $user, $body);
         $this->log($user['sub'], 'project.update', 'project', $id);
         $this->json(['project' => self::decodeProject(Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$id]))]);
     }

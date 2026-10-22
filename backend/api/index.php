@@ -32,6 +32,7 @@ require_once SRC_PATH . '/api/super/SuperController.php';
 require_once SRC_PATH . '/api/tenant/TenantController.php';
 require_once SRC_PATH . '/api/widget/WidgetController.php';
 require_once SRC_PATH . '/api/catalog/CatalogController.php';
+require_once SRC_PATH . '/api/clients/ClientsController.php';
 
 use RoofCalc\Core\Auth;
 use RoofCalc\Api\Auth\AuthController;
@@ -45,6 +46,7 @@ use RoofCalc\Api\Super\SuperController;
 use RoofCalc\Api\Tenant\TenantController;
 use RoofCalc\Api\Widget\WidgetController;
 use RoofCalc\Api\Catalog\CatalogController;
+use RoofCalc\Api\Clients\ClientsController;
 
 date_default_timezone_set(in_array('Europe/Kyiv', timezone_identifiers_list(), true) ? 'Europe/Kyiv' : 'Europe/Kiev');
 
@@ -111,6 +113,11 @@ try {
         case $method==='POST'&&preg_match('#^/slopes/(\d+)/calculate$#',$uri,$m): (new SlopesController)->calculate((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/slopes/(\d+)/layout$#',$uri,$m): (new SlopesController)->layout((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/projects/(\d+)/specification$#',$uri,$m): (new SpecController)->index((int)$m[1]); break;
+        case $method==='GET' &&$uri==='/clients':              (new ClientsController)->index(); break;
+        case $method==='POST'&&$uri==='/clients':              (new ClientsController)->create(); break;
+        case $method==='GET' &&preg_match('#^/clients/(\d+)$#',$uri,$m): (new ClientsController)->show((int)$m[1]); break;
+        case $method==='PUT' &&preg_match('#^/clients/(\d+)$#',$uri,$m): (new ClientsController)->update((int)$m[1]); break;
+        case $method==='DELETE'&&preg_match('#^/clients/(\d+)$#',$uri,$m): (new ClientsController)->delete((int)$m[1]); break;
         case $method==='GET' &&$uri==='/catalog/sections':     (new CatalogController)->sections(); break;
         case $method==='POST'&&$uri==='/catalog/sections':     (new CatalogController)->create(); break;
         case $method==='PUT' &&preg_match('#^/catalog/sections/(\d+)$#',$uri,$m): (new CatalogController)->update((int)$m[1]); break;

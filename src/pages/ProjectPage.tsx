@@ -13,7 +13,7 @@ import SlopeEditor from '../components/editor/SlopeEditor';
 import LayoutScheme from '../components/layout/LayoutScheme';
 import {
   Project, ProjectSettings, Slope, MaterialProfile, Point, EdgeType, CalcMode, AccessoryType,
-  projectsApi, slopesApi, materialsApi, specApi, SpecItem, exportApi,
+  projectsApi, slopesApi, materialsApi, specApi, SpecItem, exportApi, clientsApi, Client,
 } from '../api/client';
 import { EDGE_TYPES, autoEdgeTypes, edgeColor, sideLengthMm, rectHole, mirrorElement, setSideLength } from '../components/roof/edges';
 import { useTheme } from '../components/theme/theme';
@@ -72,6 +72,8 @@ export default function ProjectPage({ projectId }: Props) {
   const [specItems, setSpecItems] = useState<SpecItem[]>([]);
   const [settings, setSettings] = useState<ProjectSettings>({});
   const [info, setInfo] = useState({ name: '', client_name: '', client_phone: '', object_address: '' });
+  const [clients, setClients] = useState<Client[]>([]);
+  const loadClients = () => { if (!clients.length) clientsApi.list().then(d => setClients(d.clients)).catch(() => {}); };
   const [step, setStep] = useState<Step>('order');
   const [activeId, setActiveId] = useState<number | null>(null);
   const [busy, setBusy] = useState('');
@@ -515,7 +517,11 @@ export default function ProjectPage({ projectId }: Props) {
                 <input className="form-control" type="date" value={settings.order_date || ''} onChange={e => setSettings(s => ({ ...s, order_date: e.target.value }))} style={{ maxWidth: 170 }} />
               </div>
               <label>Замовник</label>
-              <input className="form-control" value={info.client_name} onChange={e => setInfo(v => ({ ...v, client_name: e.target.value }))} placeholder="ПІБ або назва компанії" />
+              <input className="form-control" list="rk-clients" value={info.client_name} placeholder="ПІБ або назва компанії — або оберіть клієнта"
+                onFocus={loadClients}
+                onChange={e => { const v = e.target.value; const c = clients.find(x => x.name === v);
+                  setInfo(x => ({ ...x, client_name: v, client_phone: c?.phone ? c.phone : x.client_phone, object_address: c?.address && !x.object_address ? c.address : x.object_address })); }} />
+              <datalist id="rk-clients">{clients.map(c => <option key={c.id} value={c.name}>{c.phone || ''}</option>)}</datalist>
               <label>Телефон замовника</label>
               <input className="form-control" value={info.client_phone} onChange={e => setInfo(v => ({ ...v, client_phone: e.target.value }))} />
               <label>Об'єкт</label>

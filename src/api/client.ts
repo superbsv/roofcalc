@@ -135,7 +135,7 @@ export const authApi = {
 // PROJECTS
 // ============================================
 export interface Project {
-  id: number; name: string; client_name?: string; client_phone?: string;
+  id: number; name: string; client_name?: string; client_phone?: string; client_id?: number | null;
   client_email?: string; object_address?: string; roof_type?: string;
   notes?: string; status: 'draft'|'calculated'|'sent'|'archived';
   discount_pct: number; vat_pct: number;
@@ -376,4 +376,23 @@ export const superApi = {
   impersonate:(id: number) => post<{ token: string; tenant: { id: number; name: string } }>(`/super/tenants/${id}/impersonate`, {}),
   leave:      () => post<{}>('/super/leave', {}),
   savePlans:  (plans: Record<string, Partial<PlanDef>>) => put<{ plans: Record<string, PlanDef> }>('/super/plans', { plans }),
+};
+
+// ---------- Клієнти ----------
+export type ClientStatus = 'new' | 'work' | 'regular' | 'archive';
+export interface Client {
+  id: number; name: string; phone?: string | null; email?: string | null; address?: string | null;
+  source?: string | null; status: ClientStatus; notes?: string | null; user_id?: number | null; manager_name?: string | null;
+  projects_count?: number; total_area?: number; last_project_at?: string | null; created_at?: string; updated_at?: string;
+}
+export interface ClientProject {
+  id: number; name: string; object_address?: string | null; status: string; total_area?: number | null; total_price?: number | null;
+  order_no?: string | null; calc_type?: string | null; manager_name?: string | null; created_at: string; updated_at: string;
+}
+export const clientsApi = {
+  list:   (params?: Record<string, string>) => get<{ clients: Client[]; counts: Partial<Record<ClientStatus, number>> }>('/clients' + (params ? '?' + new URLSearchParams(params) : '')),
+  get:    (id: number) => get<{ client: Client; projects: ClientProject[] }>(`/clients/${id}`),
+  create: (body: Partial<Client>) => post<{ client: Client; projects: ClientProject[] }>('/clients', body),
+  update: (id: number, body: Partial<Client>) => put<{ client: Client; projects: ClientProject[] }>(`/clients/${id}`, body),
+  remove: (id: number, withProjects = false) => del<{ deleted: number }>(`/clients/${id}${withProjects ? '?projects=1' : ''}`),
 };
