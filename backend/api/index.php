@@ -123,6 +123,7 @@ try {
         case $method==='POST'&&$uri==='/super/tenants':        (new SuperController)->createTenant(); break;
         case $method==='GET' &&preg_match('#^/super/tenants/(\d+)$#',$uri,$m): (new SuperController)->tenant((int)$m[1]); break;
         case $method==='PUT' &&preg_match('#^/super/tenants/(\d+)$#',$uri,$m): (new SuperController)->updateTenant((int)$m[1]); break;
+        case $method==='DELETE'&&preg_match('#^/super/tenants/(\d+)$#',$uri,$m): (new SuperController)->deleteTenant((int)$m[1]); break;
         case $method==='POST'&&preg_match('#^/super/tenants/(\d+)/extend$#',$uri,$m): (new SuperController)->extend((int)$m[1]); break;
         case $method==='POST'&&preg_match('#^/super/tenants/(\d+)/users$#',$uri,$m): (new SuperController)->addUser((int)$m[1]); break;
         case $method==='POST'&&preg_match('#^/super/tenants/(\d+)/impersonate$#',$uri,$m): (new SuperController)->impersonate((int)$m[1]); break;

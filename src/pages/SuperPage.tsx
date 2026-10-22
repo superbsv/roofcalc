@@ -127,7 +127,8 @@ export default function SuperPage({ onOpenCabinet }: { onOpenCabinet: () => void
         </div>
 
         {sel && <TenantCard d={sel} plans={plans} busy={busy} onClose={() => setSel(null)} onChanged={afterChange}
-          run={run} onLoginAs={() => loginAs(sel.tenant)} />}
+          run={run} onLoginAs={() => loginAs(sel.tenant)}
+          onDeleted={async () => { setSel(null); await load(search); }} />}
       </div>
 
       {creating && <CreateTenant plans={plans} onClose={() => setCreating(false)}
@@ -137,11 +138,15 @@ export default function SuperPage({ onOpenCabinet }: { onOpenCabinet: () => void
 }
 
 // ---------- Картка кабінету ----------
-function TenantCard({ d, plans, busy, onClose, onChanged, run, onLoginAs }: {
+function TenantCard({ d, plans, busy, onClose, onChanged, run, onLoginAs, onDeleted }: {
   d: TenantDetail; plans: Record<string, string>; busy: string;
   onClose: () => void; onChanged: (d: TenantDetail) => Promise<void>;
   run: (label: string, fn: () => Promise<void>) => Promise<void>; onLoginAs: () => void;
+  onDeleted: () => Promise<void>;
 }) {
+  const [delOpen, setDelOpen] = useState(false);
+  const [delName, setDelName] = useState('');
+  useEffect(() => { setDelOpen(false); setDelName(''); }, [d.tenant.id]);
   const t = d.tenant;
   const internal = String(t.is_internal) === '1';
   const [f, setF] = useState<Partial<Tenant>>({});
@@ -256,6 +261,23 @@ function TenantCard({ d, plans, busy, onClose, onChanged, run, onLoginAs }: {
           <div className="super-log">
             {d.log.map((l, i) => <div key={i}><span className="text-muted">{l.created_at.slice(0, 16).replace('T', ' ')}</span> · {l.user_name || '—'} · {l.action}</div>)}
           </div>
+        </div>
+      )}
+
+      {!internal && (
+        <div className="super-danger">
+          {!delOpen
+            ? <button className="btn btn-ghost btn-sm super-del-btn" onClick={() => setDelOpen(true)} disabled={!!busy}>Видалити кабінет…</button>
+            : <form onSubmit={e => { e.preventDefault(); run('del', async () => { await superApi.remove(t.id, delName); await onDeleted(); }); }}>
+                <div className="super-danger-title">Видалення кабінету назавжди</div>
+                <p className="text-xs">Буде видалено всіх користувачів ({d.users.length}), усі розрахунки ({d.stats.projects}), заявки з сайту та власні матеріали кабінету. Відновити неможливо. Матеріали виробника, які вже використали інші кабінети, перейдуть у загальний каталог.</p>
+                <label className="form-label">Для підтвердження введіть назву: <b>{t.name}</b>
+                  <input className="form-control" value={delName} onChange={e => setDelName(e.target.value)} autoComplete="off" /></label>
+                <div className="flex gap-3">
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setDelOpen(false); setDelName(''); }}>Скасувати</button>
+                  <button type="submit" className="btn btn-danger btn-sm" disabled={!!busy || delName.trim() !== t.name.trim()}>{busy === 'del' ? 'Видалення…' : 'Видалити назавжди'}</button>
+                </div>
+              </form>}
         </div>
       )}
     </aside>

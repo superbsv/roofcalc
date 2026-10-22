@@ -45,7 +45,7 @@ async function request<T>(
 const get  = <T>(path: string, signal?: AbortSignal) => request<T>('GET',    path, undefined, signal);
 const post = <T>(path: string, body: unknown)          => request<T>('POST',   path, body);
 const put  = <T>(path: string, body: unknown)          => request<T>('PUT',    path, body);
-const del  = <T>(path: string)                         => request<T>('DELETE', path);
+const del  = <T>(path: string, body?: unknown)         => request<T>('DELETE', path, body);
 
 // ============================================
 // AUTH
@@ -369,6 +369,7 @@ export const superApi = {
   update:     (id: number, body: Partial<Tenant>) => put<TenantDetail>(`/super/tenants/${id}`, body),
   extend:     (id: number, months: number, plan?: string) => post<TenantDetail>(`/super/tenants/${id}/extend`, { months, plan }),
   addUser:    (id: number, body: Record<string, unknown>) => post<TenantDetail>(`/super/tenants/${id}/users`, body),
+  remove:     (id: number, confirm: string) => del<{ deleted: number; materials_to_catalog: number }>(`/super/tenants/${id}`, { confirm }),
   impersonate:(id: number) => post<{ token: string; tenant: { id: number; name: string } }>(`/super/tenants/${id}/impersonate`, {}),
   leave:      () => post<{}>('/super/leave', {}),
   savePlans:  (plans: Record<string, Partial<PlanDef>>) => put<{ plans: Record<string, PlanDef> }>('/super/plans', { plans }),

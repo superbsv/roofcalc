@@ -165,6 +165,45 @@ class SuperController
         $this->tenant($id);
     }
 
+    // DELETE /super/tenants/{id}  {confirm: "<назва кабінету>"} — повне видалення кабінету з усіма даними
+    public function deleteTenant(int $id): void
+    {
+        $t = $this->find($id);
+        if ((int)$t['is_internal'] === 1) $this->error('Внутрішній кабінет платформи видаляти не можна', 403);
+        if ((int)($this->me['tid'] ?? 0) === $id) $this->error('Не можна видалити кабінет, у якому ви зараз працюєте', 403);
+        if (Database::fetchOne('SELECT id FROM users WHERE tenant_id = ? AND is_superadmin = 1 LIMIT 1', [$id])) {
+            $this->error('У кабінеті є супер-адмін платформи — його видаляти не можна', 403);
+        }
+        $b = $this->body();
+        if (trim((string)($b['confirm'] ?? '')) !== trim((string)$t['name'])) $this->error('Для підтвердження введіть точну назву кабінету');
+
+        $pdo = Database::connection();
+        $pdo->beginTransaction();
+        try {
+            $pids = 'SELECT id FROM projects WHERE tenant_id = ?';
+            Database::query("DELETE FROM specification_items WHERE project_id IN ($pids)", [$id]);
+            Database::query("DELETE FROM slopes WHERE project_id IN ($pids)", [$id]);
+            Database::query('DELETE FROM projects WHERE tenant_id = ?', [$id]);
+            Database::query('DELETE FROM leads WHERE tenant_id = ?', [$id]);
+            // Матеріали виробника, які вже використані в розрахунках інших кабінетів, переходять у загальний каталог
+            $kept = Database::query(
+                'UPDATE material_profiles SET tenant_id = NULL WHERE tenant_id = ? AND id IN (SELECT s.material_profile_id FROM slopes s)',
+                [$id]
+            )->rowCount();
+            Database::query('DELETE FROM material_profiles WHERE tenant_id = ?', [$id]);
+            Database::query('DELETE FROM auth_sessions WHERE user_id IN (SELECT id FROM users WHERE tenant_id = ?)', [$id]);
+            Database::query('UPDATE activity_log SET tenant_id = NULL WHERE tenant_id = ?', [$id]);
+            $users = Database::query('DELETE FROM users WHERE tenant_id = ?', [$id])->rowCount();
+            Database::query('DELETE FROM tenants WHERE id = ?', [$id]);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            $this->error('Не вдалося видалити кабінет: ' . $e->getMessage(), 500);
+        }
+        $this->log('super.tenant.delete', $id, ['name' => $t['name'], 'users' => $users, 'materials_to_catalog' => $kept]);
+        $this->json(['deleted' => $id, 'materials_to_catalog' => $kept]);
+    }
+
     // POST /super/tenants/{id}/extend  {months} — продовжити оплату вручну
     public function extend(int $id): void
     {

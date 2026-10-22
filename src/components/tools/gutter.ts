@@ -4,62 +4,63 @@
 // Усі розміри в метрах.
 // ============================================
 
-export type RoofKind = 'shed' | 'gable' | 'hip' | 'L' | 'U' | 'T' | 'X';
+export type RoofKind = 'r1' | 'r2' | 'r3' | 'r4' | 'r5' | 'r6' | 'r7';
 
 export interface KindDef {
   id: RoofKind;
-  name: string;
-  /** Поля, які вводить користувач (літери на схемі) */
-  fields: { k: string; label: string; def: number }[];
-  /** Відкритий контур (жолоби із заглушками) чи замкнений по периметру */
-  open: boolean;
+  /** Літери сторін — точно як на схемі profil.com.ua */
+  letters: string[];
+  /** Літери, без яких розрахунок неможливий */
+  need: string[];
+  /** Мінімум водостоків (червоні вертикалі на схемі) */
+  minPipes: number;
 }
 
+// Порядок і набір літер — як у калькуляторі profil.com.ua (крок 1 → крок 2)
 export const KINDS: KindDef[] = [
-  { id: 'shed', name: 'Односхилий', open: true, fields: [{ k: 'a', label: 'Довжина карниза', def: 10 }] },
-  { id: 'gable', name: 'Двосхилий', open: true, fields: [{ k: 'a', label: 'Довжина карниза', def: 10 }] },
-  { id: 'hip', name: 'Чотирисхилий', open: false, fields: [
-    { k: 'a', label: 'Довжина', def: 12 }, { k: 'b', label: 'Ширина', def: 9 }] },
-  { id: 'L', name: 'Г-подібний', open: false, fields: [
-    { k: 'a', label: 'Загальна довжина', def: 14 }, { k: 'b', label: 'Загальна ширина', def: 12 },
-    { k: 'c', label: 'Ширина крила', def: 6 }, { k: 'd', label: 'Ширина корпусу', def: 7 }] },
-  { id: 'U', name: 'П-подібний', open: false, fields: [
-    { k: 'a', label: 'Загальна довжина', def: 18 }, { k: 'b', label: 'Загальна ширина', def: 12 },
-    { k: 'c', label: 'Ширина лівого крила', def: 6 }, { k: 'd', label: 'Глибина виїмки', def: 5 },
-    { k: 'e', label: 'Ширина правого крила', def: 6 }] },
-  { id: 'T', name: 'Т-подібний', open: false, fields: [
-    { k: 'a', label: 'Довжина поперечини', def: 16 }, { k: 'b', label: 'Ширина поперечини', def: 7 },
-    { k: 'c', label: 'Ширина ніжки', def: 6 }, { k: 'd', label: 'Довжина ніжки', def: 6 }] },
-  { id: 'X', name: 'Хрестоподібний', open: false, fields: [
-    { k: 'a', label: 'Довжина по горизонталі', def: 16 }, { k: 'b', label: 'Ширина горизонтального крила', def: 6 },
-    { k: 'c', label: 'Довжина по вертикалі', def: 16 }, { k: 'd', label: 'Ширина вертикального крила', def: 6 }] },
+  { id: 'r1', letters: ['A', 'B', 'C'], need: ['A'], minPipes: 4 },                                   // двосхилий
+  { id: 'r2', letters: ['A', 'B', 'C', 'D', 'E', 'F', 'G'], need: ['A', 'E', 'F', 'G'], minPipes: 4 }, // двосхилий з фронтоном
+  { id: 'r3', letters: ['A', 'B', 'C', 'D'], need: ['A', 'B'], minPipes: 4 },                         // вальмовий
+  { id: 'r4', letters: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J'], need: ['A', 'B', 'D', 'E', 'F', 'G'], minPipes: 6 }, // вальмовий з крилом
+  { id: 'r5', letters: ['A', 'B', 'C', 'D', 'E', 'F'], need: ['A', 'D', 'E', 'F'], minPipes: 4 },    // Г-подібний
+  { id: 'r6', letters: ['A', 'B', 'C', 'D', 'E', 'G'], need: ['A', 'D', 'E'], minPipes: 4 },         // двосхилий з виступом
+  { id: 'r7', letters: ['A', 'B', 'C'], need: ['A'], minPipes: 2 },                                   // односхилий
 ];
 
 export interface Run { len: number; caps: number }
 export interface Contour { runs: Run[]; extCorners: number; intCorners: number; error?: string }
 
-/** Ділянки жолоба (між кутами або заглушками) для обраного типу */
+/** Ділянки жолоба (червоні лінії на схемі) для обраного типу. Сторони в метрах. */
 export function contour(kind: RoofKind, v: Record<string, number>): Contour {
-  const { a = 0, b = 0, c = 0, d = 0, e = 0 } = v;
-  const closed = (sides: number[], ext: number, int: number): Contour => {
-    if (sides.some(s => !(s > 0.05))) return { runs: [], extCorners: 0, intCorners: 0, error: 'Перевірте розміри: одна зі сторін виходить нульовою або від’ємною' };
-    return { runs: sides.map(len => ({ len, caps: 0 })), extCorners: ext, intCorners: int };
-  };
+  const def = KINDS.find(k => k.id === kind)!;
+  const miss = def.need.filter(k => !(v[k] > 0));
+  if (miss.length) return { runs: [], extCorners: 0, intCorners: 0, error: `Вкажіть сторон${miss.length > 1 ? 'и' : 'у'} ${miss.join(', ')}` };
+  const { A = 0, B = 0, D = 0, E = 0, F = 0, G = 0 } = v;
+  const bad = (n: number) => !(n > 0.05);
+  const err = (s: string): Contour => ({ runs: [], extCorners: 0, intCorners: 0, error: s });
   switch (kind) {
-    case 'shed': return a > 0 ? { runs: [{ len: a, caps: 2 }], extCorners: 0, intCorners: 0 } : { runs: [], extCorners: 0, intCorners: 0, error: 'Вкажіть довжину карниза' };
-    case 'gable': return a > 0 ? { runs: [{ len: a, caps: 2 }, { len: a, caps: 2 }], extCorners: 0, intCorners: 0 } : { runs: [], extCorners: 0, intCorners: 0, error: 'Вкажіть довжину карниза' };
-    case 'hip': return closed([a, b, a, b], 4, 0);
-    case 'L': return closed([a, d, a - c, b - d, c, b], 5, 1);
-    case 'U': return closed([a, b, e, d, a - c - e, d, c, b], 6, 2);
-    case 'T': return closed([a, b, (a - c) / 2, d, c, d, (a - c) / 2, b], 6, 2);
-    case 'X': return closed([b, (a - d) / 2, (c - b) / 2, d, (c - b) / 2, (a - d) / 2, b, (a - d) / 2, (c - b) / 2, d, (c - b) / 2, (a - d) / 2], 8, 4);
+    case 'r1': return { runs: [{ len: A, caps: 2 }, { len: A, caps: 2 }], extCorners: 0, intCorners: 0 };
+    case 'r7': return { runs: [{ len: A, caps: 2 }], extCorners: 0, intCorners: 0 };
+    case 'r3': return { runs: [{ len: 2 * (A + B), caps: 0 }], extCorners: 4, intCorners: 0 };
+    case 'r2':   // задній карниз A; ліворуч F → кут → G; праворуч G → кут → E
+      return { runs: [{ len: A, caps: 2 }, { len: F + G, caps: 2 }, { len: G + E, caps: 2 }], extCorners: 0, intCorners: 2 };
+    case 'r4': { // замкнений контур: A, B, D, G, E, G, F, B  (A = F + E + D)
+      return { runs: [{ len: A + 2 * B + D + 2 * G + E + F, caps: 0 }], extCorners: 6, intCorners: 2 };
+    }
+    case 'r5':   // зовнішні карнизи F + A (зовнішній кут), внутрішні E + D (внутрішній кут)
+      return { runs: [{ len: F + A, caps: 2 }, { len: E + D, caps: 2 }], extCorners: 1, intCorners: 1 };
+    case 'r6': { // задній A; спереду E, D та решта A − E − D
+      const rest = A - E - D;
+      if (bad(rest)) return err('Сторона A має бути більшою за E + D');
+      return { runs: [{ len: A, caps: 2 }, { len: E, caps: 2 }, { len: D, caps: 2 }, { len: rest, caps: 2 }], extCorners: 0, intCorners: 0 };
+    }
   }
+  return err('Невідомий тип');
 }
 
 export interface Params {
-  height: number;      // від землі до карниза, м
-  overhang: number;    // винос карниза від стіни, м
-  pipes: number | null; // кількість водостоків (null — авто)
+  height: number;       // висота будинку (від землі до карниза), м
+  pipes?: number | null;
   system: '130/100' | '90/75';
 }
 
@@ -78,18 +79,16 @@ export function gutterPieces(len: number): { n3: number; n4: number } {
   return { n3: best.n3, n4: best.n4 };
 }
 
-export const autoPipes = (c: Contour, gutterLen: number) => {
+export const autoPipes = (kind: RoofKind, c: Contour, gutterLen: number) => {
   if (!c.runs.length) return 0;
-  // Не більше ~10 м жолоба на одну лійку; для двосхилого — мінімум по одній на кожен карниз
-  const byLen = Math.ceil(gutterLen / 10);
-  const min = c.runs.length === 1 ? 1 : c.runs.every(r => r.caps) ? c.runs.length : 4;
-  return Math.max(byLen, min);
+  // Як на схемі (червоні вертикалі), але не більше ~10 м жолоба на одну лійку
+  return Math.max(KINDS.find(k => k.id === kind)!.minPipes, Math.ceil(gutterLen / 10));
 };
 
 export function calculate(kind: RoofKind, v: Record<string, number>, p: Params): Result {
   const c = contour(kind, v);
   if (c.error) return { lines: [], gutterLen: 0, pipes: 0, pipeLen: 0, error: c.error };
-  if (!(p.height > 0.5)) return { lines: [], gutterLen: 0, pipes: 0, pipeLen: 0, error: 'Вкажіть висоту від землі до карниза' };
+  if (!(p.height > 0.5)) return { lines: [], gutterLen: 0, pipes: 0, pipeLen: 0, error: 'Вкажіть висоту будинку' };
 
   const gutterLen = c.runs.reduce((s, r) => s + r.len, 0);
   let n3 = 0, n4 = 0, gJoin = 0, brackets = 0, caps = 0;
@@ -100,11 +99,10 @@ export function calculate(kind: RoofKind, v: Record<string, number>, p: Params):
     brackets += Math.ceil(r.len / 0.6) + (r.caps ? 1 : 0);   // крок кронштейнів ≤ 60 см
     caps += r.caps;
   });
-  const pipes = Math.max(1, Math.round(p.pipes ?? autoPipes(c, gutterLen)));
+  const pipes = Math.max(1, Math.round(p.pipes ?? autoPipes(kind, c, gutterLen)));
 
-  // Труба на один водостік: висота мінус лійка/зливне коліно + обхід карниза
-  const offset = Math.max(0, p.overhang - 0.15);
-  const pipeOne = Math.max(0.5, p.height - 0.4) + offset;
+  // Труба на один водостік: висота будинку мінус лійка/коліна (≈ 0,4 м) + обхід карниза (≈ 0,35 м)
+  const pipeOne = Math.max(0.5, p.height - 0.4) + 0.35;
   let t3 = 0, t1 = 0, muff = 0;
   for (let i = 0; i < pipes; i++) {
     let rest = pipeOne, k3 = Math.floor(rest / 3); rest -= k3 * 3;
