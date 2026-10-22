@@ -37,7 +37,7 @@ class MaterialsController
     // GET /api/materials/{type}
     public function byType(string $type): void
     {
-        if (!in_array($type, ['tile','profile','falts','tile_module','sheet','natural_tile'])) {
+        if (!in_array($type, ['tile','profile','falts','siding','sandwich','tile_module','sheet','natural_tile'])) {
             $this->error('Невідомий тип матеріалу', 400);
         }
         [$w, $p] = $this->scope();

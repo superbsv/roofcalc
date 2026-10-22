@@ -380,6 +380,8 @@ class SlopesController
             case 'tile_module':
             case 'sheet':
             case 'natural_tile':
+            case 'siding':      // сайдинг і сендвіч-панелі: панелі під розмір з округленням (як профнастил)
+            case 'sandwich':
                 $calc = new SheetLayoutEngine($profile, $slope, $mode);
                 break;
             case 'falts':

@@ -23,10 +23,10 @@ class Catalog
         self::ensureSections();
     }
 
-    public const CALC_TYPES = ['tile', 'tile_module', 'profile', 'sheet', 'natural_tile', 'falts'];
+    public const CALC_TYPES = ['tile', 'profile', 'falts', 'siding', 'sandwich'];
     private const DEFAULT_SECTIONS = [
-        'tile' => 'Металочерепиця', 'tile_module' => 'Одномодульна металочерепиця', 'profile' => 'Профнастил',
-        'sheet' => 'Листові (ондулін, шифер)', 'natural_tile' => 'Натуральна черепиця', 'falts' => 'Фальцева покрівля',
+        'tile' => 'Металочерепиця', 'profile' => 'Профнастил', 'falts' => 'Клік-фальц',
+        'siding' => 'Металевий сайдинг', 'sandwich' => 'Сендвіч-панелі',
     ];
 
     // Розділи каталогу (структура «Каталогу продукції»): назва, порядок і тип розрахунку
@@ -58,6 +58,17 @@ class Catalog
                 foreach (self::DEFAULT_SECTIONS as $t => $n) {
                     Database::query('INSERT INTO catalog_sections (name, calc_type, sort_order) VALUES (?,?,?)', [$n, $t, ++$i * 10]);
                 }
+            }
+            // v2: основні продукти — металочерепиця, профнастил, клік-фальц, сайдинг, сендвіч-панелі.
+            // Інші розділи прибираємо; їх матеріали ховаються з каталогу (старі розрахунки працюють)
+            if (!Database::fetchOne("SELECT id FROM catalog_sections WHERE calc_type = 'siding' LIMIT 1")) {
+                $old = ['tile_module', 'sheet', 'natural_tile'];
+                $in = "'" . implode("','", $old) . "'";
+                Database::query("UPDATE material_profiles SET deleted = 1, published = 0 WHERE type IN ($in)");
+                Database::query("DELETE FROM catalog_sections WHERE calc_type IN ($in)");
+                Database::query("UPDATE catalog_sections SET name = 'Клік-фальц' WHERE calc_type = 'falts' AND name = 'Фальцева покрівля'");
+                $max = (int)(Database::fetchOne('SELECT MAX(sort_order) m FROM catalog_sections')['m'] ?? 0);
+                Database::query("INSERT INTO catalog_sections (name, calc_type, sort_order) VALUES ('Металевий сайдинг', 'siding', ?), ('Сендвіч-панелі', 'sandwich', ?)", [$max + 10, $max + 20]);
             }
             // матеріали без розділу — у перший розділ свого типу розрахунку
             if (Database::fetchOne('SELECT id FROM material_profiles WHERE section_id IS NULL LIMIT 1')) {

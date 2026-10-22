@@ -21,7 +21,7 @@ const api  = async (method: string, path: string, body?: unknown) => {
   return d;
 };
 
-type Category = 'tile' | 'tile_module' | 'profile' | 'sheet' | 'natural_tile' | 'falts';
+type Category = 'tile' | 'tile_module' | 'profile' | 'sheet' | 'natural_tile' | 'falts' | 'siding' | 'sandwich';
 
 interface Material {
   id: number;
@@ -87,6 +87,8 @@ const TYPE_DEFAULTS: Partial<Record<Category, Partial<Omit<Material, 'id'>>>> = 
   tile_module:  { full_width: 1180, useful_width: 1100, side_overlap: 80, length_overlap: 0,   min_length: 400,  max_length: 400,  wave_step: 0, cut_step: 0 },
   sheet:        { full_width: 950,  useful_width: 860,  side_overlap: 90, length_overlap: 170, min_length: 2000, max_length: 2000, wave_step: 0, cut_step: 0, min_slope_angle: 5 },
   natural_tile: { full_width: 300,  useful_width: 250,  side_overlap: 50, length_overlap: 80,  min_length: 420,  max_length: 420,  wave_step: 0, cut_step: 0, min_slope_angle: 22 },
+  siding:       { full_width: 260,  useful_width: 226,  side_overlap: 34, length_overlap: 0,   min_length: 300,  max_length: 6000,  wave_step: 0, cut_step: 10, min_slope_angle: 0 },
+  sandwich:     { full_width: 1000, useful_width: 1000, side_overlap: 0,  length_overlap: 0,   min_length: 1000, max_length: 14000, wave_step: 0, cut_step: 50, min_slope_angle: 0 },
   profile:      { full_width: 1150, useful_width: 1100, side_overlap: 50, length_overlap: 200, min_length: 500,  max_length: 12000, wave_step: 0, cut_step: 50, min_slope_angle: 8 },
 };
 

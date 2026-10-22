@@ -114,7 +114,7 @@ export default function CatalogNav({ active, onOpen }: { active?: number; onOpen
         ? <form className="catnav-add" onSubmit={add}>
             <input className="catnav-input" autoFocus placeholder="Назва розділу" value={newName} onChange={e => setNewName(e.target.value)} />
             <select className="catnav-input" value={newType} onChange={e => setNewType(e.target.value)} aria-label="Як рахувати">
-              {MATERIAL_TYPES.map(t => <option key={t.key} value={t.key}>Розрахунок: {t.label}</option>)}
+              {MATERIAL_TYPES.filter(t => !t.hidden).map(t => <option key={t.key} value={t.key}>Розрахунок: {t.label}</option>)}
             </select>
             <div className="catnav-add-btns">
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Скасувати</button>

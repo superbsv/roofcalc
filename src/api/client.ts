@@ -146,7 +146,7 @@ export interface Project {
 }
 
 // Реквізити замовлення і параметри проєкту як у «Кровля Профи»
-export type CalcType = 'tile' | 'piece' | 'profile' | 'falts' | 'sheet' | 'siding';
+export type CalcType = 'tile' | 'piece' | 'profile' | 'falts' | 'sheet' | 'siding' | 'sandwich';
 export type CalcMode = 'order' | 'stock1' | 'stock2' | 'stock3';
 export interface ProjectSettings {
   calc_type?: CalcType;
@@ -283,7 +283,7 @@ export const slopesApi = {
 // MATERIALS
 // ============================================
 export interface MaterialProfile {
-  id: number; type: 'tile'|'tile_module'|'profile'|'sheet'|'natural_tile'|'falts'; name: string;
+  id: number; type: 'tile'|'tile_module'|'profile'|'sheet'|'natural_tile'|'falts'|'siding'|'sandwich'; name: string;
   tenant_id?: number | null;   // null — загальний каталог ABT
   published?: number | boolean;                      // опубліковано в каталозі виробників
   owner_name?: string | null; owner_mf?: number | string | null; // кабінет-власник (виробник)

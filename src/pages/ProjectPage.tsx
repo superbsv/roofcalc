@@ -191,6 +191,8 @@ export default function ProjectPage({ projectId }: Props) {
       falts: { full_width: 560, useful_width: 530, length_overlap: 0, min_length: 500, max_length: 10000, round_step: 10, min_slope_angle: 7 },
       tile_module: { full_width: 1180, useful_width: 1100, length_overlap: 0, min_length: 400, max_length: 400, min_slope_angle: 14 },
       sheet: { full_width: 950, useful_width: 860, length_overlap: 170, min_length: 2000, max_length: 2000, min_slope_angle: 5 },
+      siding: { full_width: 260, useful_width: 226, length_overlap: 0, min_length: 300, max_length: 6000, round_step: 10, min_slope_angle: 0 },
+      sandwich: { full_width: 1000, useful_width: 1000, length_overlap: 0, min_length: 1000, max_length: 14000, round_step: 50, min_slope_angle: 0 },
     };
     const d = { ...(base[type] || base.tile) } as MaterialProfile;
     d.side_overlap = Math.max(0, d.full_width - d.useful_width);
@@ -529,7 +531,7 @@ export default function ProjectPage({ projectId }: Props) {
           <section className="kp-pane">
             <h2 className="kp-h">Вибрати тип розрахунку</h2>
             <div className="kp-types">
-              {CALC_TYPES.map(c => (
+              {CALC_TYPES.filter(c => !c.hidden || settings.calc_type === c.key).map(c => (
                 <button key={c.key} type="button" className={`kp-type${settings.calc_type === c.key ? ' on' : ''}`}
                   onClick={() => chooseType(c.key)} disabled={!!busy}>
                   <span className="kp-type-name">{c.label}</span>
