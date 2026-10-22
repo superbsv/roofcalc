@@ -287,7 +287,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
     const z = Math.max(0.3, Math.min(1, Math.floor(fit * 20) / 20));
     savedZoom = z; setZoomState(z);
   }, []);
-  const [stepMm, setStepMm]           = useState(100); // крок зміни (як в KrovlyaProfy)
 
   const [rubberBand, setRubberBand] = useState<{x1:number;y1:number;x2:number;y2:number}|null>(null);
   const svgRef     = useRef<SVGSVGElement>(null);
@@ -896,47 +895,32 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           </div>
           <div style={{ padding:'12px' }}>
 
-            {/* Крок зміни (мм) */}
-            <div style={{ marginBottom:'12px' }}>
-              <div style={{ fontSize:'.72rem', fontWeight:600, color:'var(--clr-text-3)', marginBottom:'4px' }}>
-                Крок зміни, мм:
-              </div>
-              <div style={{ display:'flex', gap:'4px' }}>
-                <input type="number" value={stepMm} min={1} max={1000}
-                  onChange={e => setStepMm(Math.max(1, Number(e.target.value) || 1))}
-                  style={{ flex:1, padding:'5px 8px', border:'1px solid var(--clr-border-dark)', background:'var(--abt-black)', color:'var(--clr-text)', borderRadius:'6px', fontSize:'.85rem', textAlign:'center' }}/>
-                {[1, 10, 100].map(v => (
-                  <button key={v} onClick={()=>setStepMm(v)}
-                    style={{ padding:'4px 8px', border: stepMm===v ? `1.5px solid ${COLORS.selected}` : '1px solid var(--clr-border-dark)',
-                      borderRadius:'6px', cursor:'pointer', background: stepMm===v ? 'var(--clr-brand-pale)' : 'var(--clr-surface-2)', color:'var(--clr-text)', fontSize:'.75rem' }}>
-                    {v}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Довжина ЗВЕРХУ */}
+            {/* Довжина ЗВЕРХУ: ▲ подовжити, ▼ вкоротити (▲ 0.1 м, ▲▲ 0.01 м, ▲▲▲ 0.001 м) */}
             <div style={{ marginBottom:'10px' }}>
               <div style={{ fontSize:'.72rem', fontWeight:600, color:'var(--clr-text-3)', marginBottom:'4px' }}>
                 ⬆ Довжина зверху (верхній край):
               </div>
-              <div style={{ display:'flex', gap:'4px' }}>
-                <button onClick={()=>changeLengthTop(-stepMm)} style={lenBtn}>− {stepMm}мм</button>
-                <button onClick={()=>changeLengthTop(+stepMm)} style={lenBtn}>+ {stepMm}мм</button>
+              <div className="ls-shift-row">
+                {STEPS.map((st, i) => <button key={'tu' + st.mm} type="button" className="ls-arr" title={`↑ ${st.label}`} aria-label={`↑ ${st.label}`} onClick={() => changeLengthTop(+st.mm)}>{'▲'.repeat(i + 1)}</button>)}
+              </div>
+              <div className="ls-shift-row" style={{ marginTop: 4 }}>
+                {STEPS.map((st, i) => <button key={'td' + st.mm} type="button" className="ls-arr" title={`↓ ${st.label}`} aria-label={`↓ ${st.label}`} onClick={() => changeLengthTop(-st.mm)}>{'▼'.repeat(i + 1)}</button>)}
               </div>
             </div>
 
-            {/* Довжина ЗНИЗУ */}
+            {/* Довжина ЗНИЗУ: ▼ подовжити донизу, ▲ вкоротити */}
             <div style={{ marginBottom:'12px' }}>
               <div style={{ fontSize:'.72rem', fontWeight:600, color:'var(--clr-text-3)', marginBottom:'4px' }}>
                 ⬇ Довжина знизу (нижній край):
               </div>
-              <div style={{ display:'flex', gap:'4px' }}>
-                <button onClick={()=>changeLengthBottom(-stepMm)} style={lenBtn}>− {stepMm}мм</button>
-                <button onClick={()=>changeLengthBottom(+stepMm)} style={lenBtn}>+ {stepMm}мм</button>
+              <div className="ls-shift-row">
+                {STEPS.map((st, i) => <button key={'bu' + st.mm} type="button" className="ls-arr" title={`↑ ${st.label}`} aria-label={`↑ ${st.label}`} onClick={() => changeLengthBottom(-st.mm)}>{'▲'.repeat(i + 1)}</button>)}
               </div>
-              <div style={{ fontSize:'.68rem', color:'var(--clr-text-3)', marginTop:'3px' }}>
-                Сусідній лист компенсує зміну (стик рухається)
+              <div className="ls-shift-row" style={{ marginTop: 4 }}>
+                {STEPS.map((st, i) => <button key={'bd' + st.mm} type="button" className="ls-arr" title={`↓ ${st.label}`} aria-label={`↓ ${st.label}`} onClick={() => changeLengthBottom(+st.mm)}>{'▼'.repeat(i + 1)}</button>)}
+              </div>
+              <div style={{ fontSize:'.68rem', color:'var(--clr-text-3)', marginTop:'4px' }}>
+                ▲ / ▼ — 0.1 м · ▲▲ — 0.01 м · ▲▲▲ — 0.001 м. Сусідній лист компенсує зміну (стик рухається)
               </div>
             </div>
 
@@ -960,7 +944,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
 
 let savedZoom: number | null = null; // масштаб схеми на час сесії
 const zoomBtn: React.CSSProperties  = { padding:'4px 10px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', color:'var(--clr-text)' };
-const lenBtn: React.CSSProperties   = { flex:1, padding:'7px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', color:'var(--clr-text)', fontWeight:600, fontSize:'.82rem' };
 
 function LegendItem({ color, label }: { color:string; label:string }) {
   return (

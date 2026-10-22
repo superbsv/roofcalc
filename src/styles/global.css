@@ -1018,7 +1018,7 @@ tr:hover td { background: var(--clr-surface-2); }
 .kp-field { display: flex; flex-direction: column; gap: 2px; font-size: .72rem; color: var(--clr-text-3); font-weight: 600; }
 .kp-field .form-control { width: 90px; padding: 4px 8px; }
 .kp-field-name .form-control { width: 150px; }
-.kp-tools { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.kp-tools { display: flex; gap: 6px; flex-wrap: wrap; flex: 1 1 auto; justify-content: center; }
 
 .kp-slope { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: var(--sp-3); min-height: calc(100vh - var(--header-h) - 230px); }
 .kp-slope.with-explorer { grid-template-columns: 250px minmax(0, 1fr) 200px; }
