@@ -893,7 +893,7 @@ export default function ProjectPage({ projectId }: Props) {
                     shiftPanelTarget={shiftHost} onOptimize={optimize}
                     overlay={<div className="ls-sides">
                       {pts.map((a, i) => (
-                        <span key={i} className="ls-side"><b>{sideLetter(i)}</b> = {m3(sideLengthMm(a, pts[(i + 1) % pts.length]))} <em>{doborLabel(edgeTypes[i])}</em></span>
+                        <span key={i} className="ls-side"><b>{sideLetter(i)}</b> = {m3(sideLengthMm(a, pts[(i + 1) % pts.length]))}</span>
                       ))}
                       {holes.map((h, i) => {
                         const xs = h.map(p => p[0]), ys = h.map(p => p[1]);
