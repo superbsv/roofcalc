@@ -100,6 +100,15 @@ export default function ProjectPage({ projectId }: Props) {
   const [clip, setClip] = useState<Slope | null>(null);
   const [libOpen, setLibOpen] = useState(false);
   const [shiftHost, setShiftHost] = useState<HTMLDivElement | null>(null);
+  // Бічна панель скатів / укладки — зліва або справа (кому як зручно), запам'ятовується в браузері
+  const [panelRight, setPanelRight] = useState<boolean>(() => { try { return localStorage.getItem('rk_panel_side') === 'right'; } catch { return false; } });
+  const togglePanel = () => setPanelRight(v => { const n = !v; try { localStorage.setItem('rk_panel_side', n ? 'right' : 'left'); } catch { /* ignore */ } return n; });
+  const sideBtn = (
+    <button type="button" className="kp-side-toggle" onClick={togglePanel}
+      title={panelRight ? 'Перенести панель ліворуч' : 'Перенести панель праворуч'} aria-label={panelRight ? 'Перенести панель ліворуч' : 'Перенести панель праворуч'}>
+      {panelRight ? '⇤' : '⇥'}
+    </button>
+  );
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
   const [showExplorer, setShowExplorer] = useState(true);
   const [loaded, setLoaded] = useState(false);
@@ -727,9 +736,10 @@ export default function ProjectPage({ projectId }: Props) {
             </div>
           </div>
 
-          <div className={`kp-slope${showExplorer ? ' with-explorer' : ''}`}>
+          <div className={`kp-slope${showExplorer ? ' with-explorer' : ''}${panelRight ? ' side-right' : ''}`}>
             {/* Ліва панель: шаблони → після вводу — таблиця сторін і доборних */}
             <aside className="kp-left">
+              {sideBtn}
               {!active ? (
                 <div className="text-sm text-muted">Немає скатів. <button className="btn btn-primary btn-sm" onClick={addSlope}>Додати скат</button></div>
               ) : pts.length < 3 ? (
@@ -858,9 +868,9 @@ export default function ProjectPage({ projectId }: Props) {
             </div>
           </div>
 
-          <div className={`kp-slope${showExplorer ? ' with-explorer' : ''}`}>
+          <div className={`kp-slope${showExplorer ? ' with-explorer' : ''}${panelRight ? ' side-right' : ''}`}>
             <aside className="kp-left">
-              <div className="kp-h3">{active.name} · {slopeNo}</div>
+              <div className="kp-left-head"><div className="kp-h3">{active.name} · {slopeNo}</div>{sideBtn}</div>
               <div ref={setShiftHost} className="kp-shift-host" />
             </aside>
 

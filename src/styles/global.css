@@ -1685,3 +1685,15 @@ tr:hover td { background: var(--clr-surface-2); }
 .catnav .sidebar-item.active { color: #fff; }
 .catnav .sidebar-item.active .catnav-cnt { color: rgba(255,255,255,.85); }
 .ls-arr:disabled { opacity: .4; cursor: not-allowed; }
+/* Бічна панель скатів / укладки праворуч (перемикач ⇥ / ⇤) */
+.kp-slope.side-right { grid-template-columns: minmax(0, 1fr) 250px; }
+.kp-slope.side-right.with-explorer { grid-template-columns: 200px minmax(0, 1fr) 250px; }
+.kp-slope.side-right > .kp-left { order: 3; }
+.kp-slope.side-right > .kp-explorer { order: 1; }
+.kp-slope.side-right > :not(.kp-left):not(.kp-explorer) { order: 2; }
+.kp-left-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.kp-left > .kp-side-toggle { align-self: flex-end; margin-bottom: -2px; }
+.kp-side-toggle { flex: none; width: 30px; height: 26px; border: 1px solid var(--clr-border-dark); border-radius: 7px; background: var(--clr-surface-2); color: var(--clr-text-2); font-size: 1rem; line-height: 1; cursor: pointer; }
+.kp-side-toggle:hover { border-color: var(--clr-brand); color: var(--clr-brand); background: var(--clr-brand-pale); }
+@media (max-width: 1200px) { .kp-slope.side-right.with-explorer { grid-template-columns: minmax(0, 1fr) 220px; } .kp-slope.side-right.with-explorer .kp-explorer { grid-column: 1 / -1; order: 4; } }
+@media (max-width: 860px) { .kp-slope.side-right, .kp-slope.side-right.with-explorer { grid-template-columns: 1fr; } .kp-side-toggle { display: none; } }
