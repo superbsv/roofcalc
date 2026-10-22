@@ -114,6 +114,29 @@ class Catalog
         return (bool)Database::fetchOne("SELECT id FROM material_profiles WHERE id = ? AND $w", array_merge([$materialId], $p));
     }
 
+    // Список виробників (без дублів): каталог ROOFKIT + власний каталог кабінету
+    public static function manufacturers(?int $tid): array
+    {
+        [$lw, $lp] = self::librarySql();
+        $w = "($lw)"; $p = $lp;
+        if ($tid) { $w .= ' OR (deleted = 0 AND tenant_id = ?)'; $p[] = $tid; }
+        $rows = Database::fetchAll("SELECT DISTINCT TRIM(manufacturer) n FROM material_profiles WHERE manufacturer IS NOT NULL AND TRIM(manufacturer) <> '' AND ($w)", $p);
+        $out = [];
+        foreach ($rows as $r) { $k = mb_strtolower($r['n']); if (!isset($out[$k])) $out[$k] = $r['n']; }
+        $list = array_values($out);
+        usort($list, function ($a, $b) { return strcmp(mb_strtolower($a), mb_strtolower($b)); });
+        return $list;
+    }
+
+    // Назва виробника в уже існуючому написанні (регістр, пробіли) — щоб не з'являлись дублі
+    public static function canonicalManufacturer($name, ?int $tid): ?string
+    {
+        $n = trim(preg_replace('/\s+/u', ' ', (string)$name));
+        if ($n === '') return null;
+        foreach (self::manufacturers($tid) as $m) if (mb_strtolower($m) === mb_strtolower($n)) return $m;
+        return mb_substr($n, 0, 100);
+    }
+
     // Копія матеріалу в каталог кабінету; повертає id копії
     public static function copyMaterial(int $id, int $tid): int
     {

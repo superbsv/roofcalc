@@ -8,6 +8,7 @@ import { MATERIAL_TYPES, isFixedType } from '../components/roof/materials';
 import { useAuth } from '../components/auth/AuthContext';
 import { useSections, catalogChanged, CATALOG_EVENT, MAT_DND } from '../components/catalog/CatalogNav';
 import LibraryPicker from '../components/catalog/LibraryPicker';
+import ManufacturerSelect, { useManufacturers, canonicalMf } from '../components/catalog/ManufacturerSelect';
 import { exportCatalog, importCatalog } from '../components/catalog/catalogIO';
 
 const BASE = process.env.REACT_APP_API_URL || '/api';
@@ -171,6 +172,7 @@ export default function ProductsPage({ section, onSection }: { section?: number;
   const platform = !!(user?.is_superadmin && !user?.impersonating);
   const canEdit = (m: Material) => { const k = materialSource(m, myTid).kind; return k === 'own' || (k === 'abt' && platform); };
   const isAdmin = user?.role === 'admin';
+  const mfList = useManufacturers();
   const [lib, setLib] = useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
   const doExport = async () => {
@@ -265,12 +267,12 @@ export default function ProductsPage({ section, onSection }: { section?: number;
     const mine = list.filter(canEdit);
     const n = window.prompt(`Нова назва виробника «${mf}»${mine.length < list.length ? ' (зміниться лише у ваших матеріалах)' : ''}:`, mf === 'Без виробника' ? '' : mf);
     if (n === null || n.trim() === mf) return;
-    try { await api('POST', '/catalog/move', { ids: mine.map(m => m.id), manufacturer: n.trim() }); loadMaterials(); }
+    try { await api('POST', '/catalog/move', { ids: mine.map(m => m.id), manufacturer: canonicalMf(n, mfList) }); catalogChanged(); loadMaterials(); }
     catch (e: any) { setError(e.message); }
   };
   const addMf = () => {
     const n = window.prompt('Назва нового виробника:');
-    if (n && n.trim()) newMaterial(n.trim());
+    if (n && n.trim()) newMaterial(canonicalMf(n, mfList));
   };
 
   const [forbiddenInput, setForbiddenInput] = useState('');
@@ -332,6 +334,7 @@ export default function ProductsPage({ section, onSection }: { section?: number;
         setIsNew(false);
       } else if (selected) {
         await api('PUT', `/admin/materials/${selected.id}`, payload);
+        catalogChanged();
         setSuccess('Збережено!');
       }
       loadMaterials();
@@ -476,7 +479,7 @@ export default function ProductsPage({ section, onSection }: { section?: number;
                   <input className="form-control" value={form.name} onChange={e => f('name', e.target.value)} placeholder="Н-р: MaxiTile Classic" />
                 </Field>
                 <Field label="Виробник *">
-                  <input className="form-control" value={form.manufacturer || ''} onChange={e => f('manufacturer', e.target.value)} placeholder="Н-р: Ruukki" />
+                  <ManufacturerSelect value={form.manufacturer || ''} onChange={v => f('manufacturer', v)} />
                 </Field>
                 <Field label="Розділ каталогу">
                   <input className="form-control" value={`${sec?.name || ''} · розрахунок: ${CAT_LABEL[cat]}`} readOnly title="Щоб перенести матеріал, перетягніть його на розділ у бічному меню" />

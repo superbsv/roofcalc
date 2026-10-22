@@ -19,6 +19,7 @@ import { EDGE_TYPES, autoEdgeTypes, edgeColor, sideLengthMm, rectHole, mirrorEle
 import { useTheme } from '../components/theme/theme';
 import { CALC_TYPES, calcTypeInfo } from '../components/roof/calcTypes';
 import LibraryPicker from '../components/catalog/LibraryPicker';
+import ManufacturerSelect from '../components/catalog/ManufacturerSelect';
 import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter, templateNums } from '../components/roof/templates';
 import { materialLabel } from '../components/roof/materials';
 import TemplateSketch from '../components/roof/TemplateSketch';
@@ -576,8 +577,7 @@ export default function ProjectPage({ projectId }: Props) {
               <div className="kp-matname">
                 <input className="form-control" aria-label="Назва матеріалу" placeholder="Назва матеріалу" value={matEdit.draft.name}
                   onChange={e => editDraft({ name: e.target.value })} />
-                <input className="form-control" aria-label="Виробник" placeholder="Виробник" value={matEdit.draft.manufacturer || ''}
-                  onChange={e => editDraft({ manufacturer: e.target.value })} />
+                <ManufacturerSelect value={matEdit.draft.manufacturer || ''} onChange={v => editDraft({ manufacturer: v })} />
                 {ct.materialTypes.length > 1 && (
                   <select className="form-control" aria-label="Різновид" value={matEdit.draft.type} onChange={e => editDraft({ type: e.target.value as any })}>
                     {ct.materialTypes.map(t => <option key={t} value={t}>{materialLabel(t)}</option>)}

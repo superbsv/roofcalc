@@ -122,7 +122,7 @@ class CatalogController
             $sec = Database::fetchOne('SELECT * FROM catalog_sections WHERE id = ?', [(int)$b['section_id']]);
             if (!$sec) $this->error('Розділ не знайдено', 404);
         }
-        $mf = array_key_exists('manufacturer', $b) ? trim((string)$b['manufacturer']) : null;
+        $mf = array_key_exists('manufacturer', $b) ? (string)(Catalog::canonicalManufacturer($b['manufacturer'], $this->platform() ? null : (int)$this->me['tid']) ?? '') : null;
         $moved = 0; $skipped = 0; $wrongType = 0;
         foreach ($ids as $id) {
             $m = Database::fetchOne('SELECT id, tenant_id, type FROM material_profiles WHERE id = ? AND deleted = 0', [$id]);
@@ -138,6 +138,12 @@ class CatalogController
         }
         if ($wrongType && !$moved) $this->error('Цей розділ має інший тип розрахунку — перетягувати можна лише в розділи того ж типу');
         $this->json(['moved' => $moved, 'skipped' => $skipped, 'wrong_type' => $wrongType]);
+    }
+
+    // GET /catalog/manufacturers — список виробників для випадаючого списку
+    public function manufacturers(): void
+    {
+        $this->json(['manufacturers' => Catalog::manufacturers($this->platform() ? null : (int)$this->me['tid'])]);
     }
 
     // ---------- Каталог ROOFKIT → особистий каталог ----------
@@ -217,7 +223,7 @@ class CatalogController
                 $existing = Database::fetchOne('SELECT * FROM material_profiles WHERE id = ? AND deleted = 0', [(int)$r['id']]);
                 if ($existing && !$this->canEdit($existing)) $existing = null;   // чужа позиція — створюємо свою
             }
-            $mf = trim((string)($r['manufacturer'] ?? ''));
+            $mf = (string)(Catalog::canonicalManufacturer($r['manufacturer'] ?? '', $tid) ?? '');
             if (!$existing) {
                 $existing = Database::fetchOne(
                     'SELECT * FROM material_profiles WHERE deleted = 0 AND tenant_id <=> ? AND name = ? AND COALESCE(manufacturer, \'\') = ?' . ($sec ? ' AND section_id = ?' : ''),

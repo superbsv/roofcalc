@@ -149,6 +149,7 @@ class AdminController
         \RoofCalc\Core\Catalog::ensureSchema();
         $body = $this->body();
         $sec = \RoofCalc\Core\Catalog::sectionFor(isset($body['section_id']) ? (int)$body['section_id'] : null, (string)($body['type'] ?? ''));
+        $body['manufacturer'] = \RoofCalc\Core\Catalog::canonicalManufacturer($body['manufacturer'] ?? '', (!empty($me['sa']) && empty($me['imp'])) ? null : (int)$me['tid']);
         if ($sec) $body['type'] = $sec['calc_type'];
 
         if (empty($body['type']) || empty($body['name'])) {
@@ -273,6 +274,8 @@ class AdminController
         }
         Database::ensureMaterialSchema();
         $body = $this->body();
+        $mfTid = (!empty($me['sa']) && empty($me['imp'])) ? null : (int)$me['tid'];
+        if (array_key_exists('manufacturer', $body)) $body['manufacturer'] = \RoofCalc\Core\Catalog::canonicalManufacturer($body['manufacturer'], $mfTid);
 
         $jsonFields = ['forbidden_lengths','stock_lengths','color_options','coating_options','thickness_options'];
         $allowed    = ['name','manufacturer','full_width','useful_width','side_overlap','length_overlap',
