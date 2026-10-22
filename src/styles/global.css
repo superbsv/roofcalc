@@ -1651,10 +1651,10 @@ tr:hover td { background: var(--clr-surface-2); }
 .ls-row-btn:hover { border-color: var(--clr-brand); color: var(--clr-brand); }
 .ls-shift-legend { font-size: .7rem; color: var(--clr-text-3); }
 .ls-box { position: relative; }
-.ls-overlay { position: absolute; left: 12px; bottom: 12px; right: 12px; pointer-events: none; }
+.ls-overlay { position: static; margin: 10px 0 0; }
 .ls-sides { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--clr-surface) 88%, transparent); border: 1px solid var(--clr-border); font-family: var(--font-mono); font-size: .8rem; color: var(--clr-text); pointer-events: auto; }
 .ls-side b { color: var(--clr-text); } .ls-side em { font-style: normal; color: var(--clr-text-3); }
-@media print { .ls-overlay { position: static; margin-top: 6px; } }
+@media print { .ls-overlay { margin-top: 6px; } }
 .kp-hole-kinds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 8px 0 4px; }
 .kp-hole-kind { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px; border: 1px solid var(--clr-border); border-radius: 6px; background: var(--clr-surface); color: var(--clr-text-2); font: inherit; font-size: .62rem; line-height: 1.15; cursor: pointer; text-align: center; }
 .kp-hole-kind svg { fill: var(--clr-brand-pale); stroke: var(--clr-text-2); stroke-width: 1.5; }
