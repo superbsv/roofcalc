@@ -58,6 +58,18 @@ class MaterialsController
         $this->json(['accessories' => $rows]);
     }
 
+    // GET /api/materials/section/{id} — матеріали розділу каталогу (порядок: sort_order, назва)
+    public function bySection(int $id): void
+    {
+        Catalog::ensureSchema();
+        [$w, $p] = $this->scope();
+        $profiles = Database::fetchAll(
+            self::SELECT . " WHERE m.section_id = ? AND $w ORDER BY m.sort_order, m.name",
+            array_merge([$id], $p)
+        );
+        $this->json(['profiles' => $this->decode($profiles)]);
+    }
+
     // GET /api/materials/{id}
     public function show(int $id): void
     {

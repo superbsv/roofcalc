@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { MATERIAL_TYPES, isFixedType } from '../components/roof/materials';
 import { useAuth } from '../components/auth/AuthContext';
+import { useSections, catalogChanged, CATALOG_EVENT, MAT_DND } from '../components/catalog/CatalogNav';
 
 const BASE = process.env.REACT_APP_API_URL || '/api';
 const tok  = () => localStorage.getItem('rc_token');
@@ -80,7 +81,6 @@ const EMPTY: Omit<Material, 'id'> = {
 };
 
 const CAT_LABEL: Record<Category, string> = Object.fromEntries(MATERIAL_TYPES.map(t => [t.key, t.label])) as Record<Category, string>;
-const CAT_SHORT: Record<Category, string> = Object.fromEntries(MATERIAL_TYPES.map(t => [t.key, t.short])) as Record<Category, string>;
 
 // Типові параметри нового матеріалу за типом (підказка, менеджер змінює під свій прайс)
 const TYPE_DEFAULTS: Partial<Record<Category, Partial<Omit<Material, 'id'>>>> = {
@@ -147,11 +147,14 @@ export const materialSource = (m: { tenant_id?: number | null; owner_name?: stri
     : myTid != null && Number(m.tenant_id) === Number(myTid) ? { kind: 'own' as const, label: 'Власний' }
     : { kind: 'mf' as const, label: `Виробник: ${m.owner_name || '—'}` };
 
-export default function ProductsPage({ category }: { category?: Category }) {
+export default function ProductsPage({ section, onSection }: { section?: number; onSection: (id: number) => void }) {
   const { user } = useAuth();
   const myTid = user?.tenant?.id;
   const isMf = String((user?.tenant as any)?.is_manufacturer ?? '0') === '1' && !(user?.is_superadmin && !user?.impersonating);
-  const [cat, setCat]           = useState<Category>(category || 'tile');
+  const { sections } = useSections();
+  const secId = section ?? sections[0]?.id;
+  const sec = sections.find(x => x.id === secId);
+  const cat = (sec?.calc_type || 'tile') as Category;
   const [materials, setMaterials] = useState<Material[]>([]);
   const [selected, setSelected] = useState<Material | null>(null);
   const [form, setForm]         = useState<Omit<Material,'id'>>(EMPTY);
@@ -179,7 +182,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
     const mine = list.filter(canEdit);
     if (!mine.length) return;
     const extra = mine.length < list.length ? `\n(${list.length - mine.length} чужих матеріалів залишаться — їх видаляє власник)` : '';
-    if (!window.confirm(`Видалити виробника «${mf}» — ${mine.length} шт. (${CAT_LABEL[cat]})?${extra}`)) return;
+    if (!window.confirm(`Видалити виробника «${mf}» — ${mine.length} шт. (${sec?.name || CAT_LABEL[cat]})?${extra}`)) return;
     setLoading(true); setError(''); setSuccess('');
     try {
       const r = await api('POST', '/admin/materials/delete-group', { type: cat, manufacturer: mf, ids: mine.map(m => m.id) });
@@ -189,19 +192,78 @@ export default function ProductsPage({ category }: { category?: Category }) {
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
   };
   const mfName = (m: Material) => (m.manufacturer || '').trim() || (m.owner_mf && String(m.owner_mf) === '1' ? (m.owner_name || '') : '') || 'Без виробника';
+  // Порядок як у каталозі: виробники і матеріали — за sort_order (перетягування), потім за назвою
+  const byOrder = (a: Material, b: Material) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) || a.name.localeCompare(b.name, 'uk');
   const mfGroups: [string, Material[]][] = Array.from(new Set(materials.map(mfName)))
-    .sort((a, b) => (a === 'Без виробника' ? 1 : b === 'Без виробника' ? -1 : a.localeCompare(b, 'uk')))
-    .map(mf => [mf, materials.filter(m => mfName(m) === mf).sort((a, b) => a.name.localeCompare(b.name, 'uk'))]);
+    .map(mf => [mf, materials.filter(m => mfName(m) === mf).sort(byOrder)] as [string, Material[]])
+    .sort(([a, la], [b, lb]) => (a === 'Без виробника' ? 1 : b === 'Без виробника' ? -1 : byOrder(la[0], lb[0])));
+
+  // ---- Перетягування ----
+  const [drag, setDrag] = useState<{ kind: 'mat' | 'mf'; id?: number; mf?: string } | null>(null);
+  const [dropAt, setDropAt] = useState<string>('');           // 'm:<id>' | 'g:<mf>'
+  const saveOrder = async (groups: [string, Material[]][]) => {
+    const ids = groups.flatMap(([, l]) => l.map(m => m.id));
+    // одразу показуємо новий порядок
+    setMaterials(ms => ms.map(m => ({ ...m, sort_order: (ids.indexOf(m.id) + 1) * 10 })));
+    try { await api('PUT', '/catalog/materials-order', { ids }); } catch (e: any) { setError(e.message); loadMaterials(); }
+  };
+  const moveMaterial = async (m: Material, toMf: string, beforeId?: number) => {
+    const groups = mfGroups.map(([g, l]) => [g, l.filter(x => x.id !== m.id)] as [string, Material[]]);
+    const target = groups.find(([g]) => g === toMf);
+    if (!target) return;
+    const moved = { ...m, manufacturer: toMf === 'Без виробника' ? '' : toMf };
+    const at = beforeId ? target[1].findIndex(x => x.id === beforeId) : -1;
+    if (at >= 0) target[1].splice(at, 0, moved); else target[1].push(moved);
+    try {
+      if (mfName(m) !== toMf) {
+        await api('POST', '/catalog/move', { ids: [m.id], manufacturer: moved.manufacturer });
+        setMaterials(ms => ms.map(x => (x.id === m.id ? moved : x)));
+        if (selected?.id === m.id) { setSelected(moved); setForm(f0 => ({ ...f0, manufacturer: moved.manufacturer })); }
+      }
+      await saveOrder(groups);
+    } catch (e: any) { setError(e.message); loadMaterials(); }
+  };
+  const moveGroup = (from: string, before: string) => {
+    if (from === before) return;
+    const g = mfGroups.filter(([n]) => n !== from);
+    const src = mfGroups.find(([n]) => n === from)!;
+    g.splice(g.findIndex(([n]) => n === before), 0, src);
+    saveOrder(g);
+  };
+  const onDropItem = (e: React.DragEvent, target: Material | null, groupName: string) => {
+    e.preventDefault(); e.stopPropagation(); setDropAt('');
+    const d = drag; setDrag(null);
+    if (!d) return;
+    if (d.kind === 'mf' && d.mf) { moveGroup(d.mf, groupName); return; }
+    const m = materials.find(x => x.id === d.id);
+    if (m && (!target || target.id !== m.id)) moveMaterial(m, groupName, target?.id);
+  };
+  const renameMf = async (mf: string, list: Material[]) => {
+    const mine = list.filter(canEdit);
+    const n = window.prompt(`Нова назва виробника «${mf}»${mine.length < list.length ? ' (зміниться лише у ваших матеріалах)' : ''}:`, mf === 'Без виробника' ? '' : mf);
+    if (n === null || n.trim() === mf) return;
+    try { await api('POST', '/catalog/move', { ids: mine.map(m => m.id), manufacturer: n.trim() }); loadMaterials(); }
+    catch (e: any) { setError(e.message); }
+  };
+  const addMf = () => {
+    const n = window.prompt('Назва нового виробника:');
+    if (n && n.trim()) newMaterial(n.trim());
+  };
 
   const [forbiddenInput, setForbiddenInput] = useState('');
   const [stockInput, setStockInput]         = useState('');
 
-  useEffect(() => { loadMaterials(); }, [cat]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (category) setCat(category); }, [category]);
+  useEffect(() => { setSelected(null); setIsNew(false); loadMaterials(); }, [secId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const h = () => loadMaterials();
+    window.addEventListener(CATALOG_EVENT, h);
+    return () => window.removeEventListener(CATALOG_EVENT, h);
+  }, [secId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMaterials = async () => {
+    if (!secId) return;
     try {
-      const d = await api('GET', `/materials/${cat}`);
+      const d = await api('GET', `/materials/section/${secId}`);
       setMaterials(d.profiles || []);
     } catch { setError('Помилка завантаження'); }
   };
@@ -215,10 +277,10 @@ export default function ProductsPage({ category }: { category?: Category }) {
     setError(''); setSuccess('');
   };
 
-  const newMaterial = () => {
+  const newMaterial = (mf?: string) => {
     setSelected(null);
     setIsNew(true);
-    setForm({ ...EMPTY, ...(TYPE_DEFAULTS[cat] || {}), type: cat });
+    setForm({ ...EMPTY, ...(TYPE_DEFAULTS[cat] || {}), type: cat, manufacturer: mf || '' });
     setForbiddenInput('[]');
     setStockInput('');
     setError(''); setSuccess('');
@@ -241,7 +303,8 @@ export default function ProductsPage({ category }: { category?: Category }) {
         stock_lengths: parseStock(stockInput),
       };
       if (isNew) {
-        await api('POST', '/admin/materials', payload);
+        await api('POST', '/admin/materials', { ...payload, section_id: secId });
+        catalogChanged();
         setSuccess('Матеріал створено!');
         setIsNew(false);
       } else if (selected) {
@@ -266,20 +329,17 @@ export default function ProductsPage({ category }: { category?: Category }) {
 
       {/* Ліва панель */}
       <div className="prod-list">
-        <div style={{ display:'flex', borderBottom:'1px solid var(--clr-border)' }}>
-          {MATERIAL_TYPES.map(t => t.key as Category).map(c => (
-            <button key={c} onClick={() => { setCat(c); setSelected(null); setIsNew(false); }}
-              style={{ flex:1, padding:'10px 4px', fontSize:'.72rem', fontWeight:600, border:'none',
-                borderBottom: cat===c ? '2px solid var(--clr-brand)' : '2px solid transparent',
-                background:'none', color: cat===c ? 'var(--clr-brand)' : 'var(--clr-text-3)', cursor:'pointer' }}>
-              <span title={CAT_LABEL[c]}>{CAT_SHORT[c]}</span>
-            </button>
-          ))}
+        <div className="prod-sec">
+          <select className="form-control" value={secId ?? ''} onChange={e => onSection(Number(e.target.value))} aria-label="Розділ каталогу">
+            {sections.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
         </div>
         <div style={{ padding:'8px' }}>
-          <button className="btn btn-primary btn-sm" style={{ width:'100%' }} onClick={newMaterial}>
-            + Додати {CAT_LABEL[cat]}
-          </button>
+          <div style={{ display:'flex', gap:'6px' }}>
+            <button className="btn btn-primary btn-sm" style={{ flex:1 }} onClick={() => newMaterial()}>+ Матеріал</button>
+            <button className="btn btn-secondary btn-sm" style={{ flex:1 }} onClick={addMf}>+ Виробник</button>
+          </div>
+          {isAdmin && <div className="prod-dnd-hint">Перетягуйте матеріали, щоб змінити порядок, виробника або розділ</div>}
         </div>
         <div style={{ flex:1, overflowY:'auto' }}>
           {materials.length === 0 && (
@@ -288,11 +348,20 @@ export default function ProductsPage({ category }: { category?: Category }) {
           {/* Каталог: вид матеріалу → виробник → назва форми */}
           {mfGroups.map(([mf, list]) => (
             <div key={mf} className="prod-mf">
-              <div className="prod-mf-row">
+              <div className={`prod-mf-row${dropAt === 'g:' + mf ? ' drop' : ''}`}
+                draggable={isAdmin && list.some(canEdit)}
+                onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'mf'); setDrag({ kind: 'mf', mf }); }}
+                onDragEnd={() => { setDrag(null); setDropAt(''); }}
+                onDragOver={e => { if (drag) { e.preventDefault(); setDropAt('g:' + mf); } }}
+                onDrop={e => onDropItem(e, null, mf)}>
                 <button type="button" className="prod-mf-head" onClick={() => setClosedMf(c => { const n = new Set(c); n.has(mf) ? n.delete(mf) : n.add(mf); return n; })}
                   aria-expanded={!closedMf.has(mf)}>
                   <span>{closedMf.has(mf) ? '▸' : '▾'} {mf}</span><em>{list.length}</em>
                 </button>
+                {isAdmin && list.some(canEdit) && (
+                  <button type="button" className="prod-mf-del" title={`Перейменувати виробника «${mf}»`} aria-label={`Перейменувати виробника ${mf}`}
+                    disabled={loading} onClick={() => renameMf(mf, list)}>✎</button>
+                )}
                 {isAdmin && list.some(canEdit) && (
                   <button type="button" className="prod-mf-del" title={`Видалити виробника «${mf}»`} aria-label={`Видалити виробника ${mf}`}
                     disabled={loading} onClick={() => delGroup(mf, list)}>
@@ -303,6 +372,12 @@ export default function ProductsPage({ category }: { category?: Category }) {
               {!closedMf.has(mf) && <div className="prod-mf-list">
               {list.map(m => (
             <div key={m.id} onClick={() => selectMaterial(m)}
+              className={`prod-item${dropAt === 'm:' + m.id ? ' drop' : ''}${drag?.id === m.id ? ' dragging' : ''}`}
+              draggable={isAdmin && canEdit(m)}
+              onDragStart={e => { e.stopPropagation(); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData(MAT_DND, JSON.stringify([m.id])); setDrag({ kind: 'mat', id: m.id }); }}
+              onDragEnd={() => { setDrag(null); setDropAt(''); }}
+              onDragOver={e => { if (drag?.kind === 'mat') { e.preventDefault(); e.stopPropagation(); setDropAt('m:' + m.id); } }}
+              onDrop={e => onDropItem(e, m, mf)}
               style={{ padding:'10px 12px', cursor:'pointer', borderBottom:'1px solid var(--clr-border)',
                 background: selected?.id===m.id ? 'var(--clr-brand-pale)' : 'transparent',
                 borderLeft: selected?.id===m.id ? '3px solid var(--clr-brand)' : '3px solid transparent' }}>
@@ -336,7 +411,7 @@ export default function ProductsPage({ category }: { category?: Category }) {
         ) : (
           <>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
-              <h2 style={{ margin:0 }}>{isNew ? `Новий матеріал (${CAT_LABEL[cat]})` : form.name}</h2>
+              <h2 style={{ margin:0 }}>{isNew ? `Новий матеріал (${sec?.name || CAT_LABEL[cat]})` : form.name}</h2>
               <div style={{ display:'flex', gap:'8px' }}>
                 <label style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'.85rem' }}>
                   <input type="checkbox" checked={form.is_active} onChange={e => f('is_active', e.target.checked)} />
@@ -369,10 +444,8 @@ export default function ProductsPage({ category }: { category?: Category }) {
                 <Field label="Виробник *">
                   <input className="form-control" value={form.manufacturer || ''} onChange={e => f('manufacturer', e.target.value)} placeholder="Н-р: Ruukki" />
                 </Field>
-                <Field label="Тип">
-                  <select className="form-control" value={form.type} onChange={e => f('type', e.target.value)}>
-                    {MATERIAL_TYPES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
-                  </select>
+                <Field label="Розділ каталогу">
+                  <input className="form-control" value={`${sec?.name || ''} · розрахунок: ${CAT_LABEL[cat]}`} readOnly title="Щоб перенести матеріал, перетягніть його на розділ у бічному меню" />
                 </Field>
               </Row>
               <Row>

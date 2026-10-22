@@ -146,7 +146,10 @@ class AdminController
     {
         $me = $this->requireMaterialEditor();
         Database::ensureMaterialSchema();
+        \RoofCalc\Core\Catalog::ensureSchema();
         $body = $this->body();
+        $sec = \RoofCalc\Core\Catalog::sectionFor(isset($body['section_id']) ? (int)$body['section_id'] : null, (string)($body['type'] ?? ''));
+        if ($sec) $body['type'] = $sec['calc_type'];
 
         if (empty($body['type']) || empty($body['name'])) {
             $this->error('Тип та назва обов\'язкові', 400);
@@ -184,7 +187,7 @@ class AdminController
                 json_encode($body['coating_options']   ?? null),
                 json_encode($body['thickness_options'] ?? null),
                 $body['is_active']          ?? 1,
-                $body['sort_order']         ?? 0,
+                $body['sort_order']         ?? ((int)(Database::fetchOne('SELECT MAX(sort_order) m FROM material_profiles WHERE section_id <=> ?', [$sec['id'] ?? null])['m'] ?? 0) + 10),
             ]
         );
 
@@ -196,6 +199,7 @@ class AdminController
         if (!empty($body['published']) && !(!empty($me['sa']) && empty($me['imp'])) && \RoofCalc\Core\Catalog::isManufacturer((int)$me['tid'])) {
             $extra[] = 'published = 1';
         }
+        if ($sec) { $extra[] = 'section_id = ?'; $vals[] = $sec['id']; }
         // Супер-адмін у своєму кабінеті поповнює загальний каталог; решта — каталог свого кабінету
         $extra[] = 'tenant_id = ?'; $vals[] = (!empty($me['sa']) && empty($me['imp'])) ? null : $me['tid'];
         $vals[] = $id; Database::query('UPDATE material_profiles SET ' . implode(', ', $extra) . ' WHERE id = ?', $vals);

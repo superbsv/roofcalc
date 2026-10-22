@@ -31,6 +31,7 @@ require_once SRC_PATH . '/core/Catalog.php';
 require_once SRC_PATH . '/api/super/SuperController.php';
 require_once SRC_PATH . '/api/tenant/TenantController.php';
 require_once SRC_PATH . '/api/widget/WidgetController.php';
+require_once SRC_PATH . '/api/catalog/CatalogController.php';
 
 use RoofCalc\Core\Auth;
 use RoofCalc\Api\Auth\AuthController;
@@ -43,6 +44,7 @@ use RoofCalc\Api\Admin\AdminController;
 use RoofCalc\Api\Super\SuperController;
 use RoofCalc\Api\Tenant\TenantController;
 use RoofCalc\Api\Widget\WidgetController;
+use RoofCalc\Api\Catalog\CatalogController;
 
 date_default_timezone_set(in_array('Europe/Kyiv', timezone_identifiers_list(), true) ? 'Europe/Kyiv' : 'Europe/Kiev');
 
@@ -109,6 +111,14 @@ try {
         case $method==='POST'&&preg_match('#^/slopes/(\d+)/calculate$#',$uri,$m): (new SlopesController)->calculate((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/slopes/(\d+)/layout$#',$uri,$m): (new SlopesController)->layout((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/projects/(\d+)/specification$#',$uri,$m): (new SpecController)->index((int)$m[1]); break;
+        case $method==='GET' &&$uri==='/catalog/sections':     (new CatalogController)->sections(); break;
+        case $method==='POST'&&$uri==='/catalog/sections':     (new CatalogController)->create(); break;
+        case $method==='PUT' &&preg_match('#^/catalog/sections/(\d+)$#',$uri,$m): (new CatalogController)->update((int)$m[1]); break;
+        case $method==='DELETE'&&preg_match('#^/catalog/sections/(\d+)$#',$uri,$m): (new CatalogController)->delete((int)$m[1]); break;
+        case $method==='PUT' &&$uri==='/catalog/sections-order': (new CatalogController)->order(); break;
+        case $method==='PUT' &&$uri==='/catalog/materials-order': (new CatalogController)->materialsOrder(); break;
+        case $method==='POST'&&$uri==='/catalog/move':         (new CatalogController)->move(); break;
+        case $method==='GET' &&preg_match('#^/materials/section/(\d+)$#',$uri,$m): (new MaterialsController)->bySection((int)$m[1]); break;
         case $method==='GET' &&$uri==='/materials':            (new MaterialsController)->index(); break;
         case $method==='GET' &&preg_match('#^/materials/(tile|profile|falts|tile_module|sheet|natural_tile)$#',$uri,$m): (new MaterialsController)->byType($m[1]); break;
         case $method==='GET' && $uri==='/accessories': (new MaterialsController)->accessories(); break;

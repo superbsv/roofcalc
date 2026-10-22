@@ -14,13 +14,12 @@ import BrandMark, { BrandWordmark } from './components/brand/BrandMark';
 import { ThemeToggle } from './components/theme/theme';
 import TrigCalc from './components/tools/TrigCalc';
 import GutterCalc from './components/tools/GutterCalc';
-import { MATERIAL_TYPES } from './components/roof/materials';
-import { MaterialProfile } from './api/client';
+import CatalogNav from './components/catalog/CatalogNav';
 
 type Page =
   | { type: 'projects' }
   | { type: 'project'; id: number }
-  | { type: 'products'; category?: MaterialProfile['type'] }
+  | { type: 'products'; section?: number }
   | { type: 'clients' }
   | { type: 'users' }
   | { type: 'settings' }
@@ -247,16 +246,8 @@ function Shell() {
 
             {productsOpen && (
               <div style={{paddingLeft:'16px'}}>
-                {MATERIAL_TYPES.map(t => ({ cat: t.key, label: t.label })).map(({cat, label}) => (
-                  <div
-                    key={cat}
-                    className={`sidebar-item${view.type==='products'&&(view as any).category===cat?' active':''}`}
-                    onClick={() => navigate({type:'products', category:cat})}
-                    style={{fontSize:'.85rem'}}
-                  >
-                    {label}
-                  </div>
-                ))}
+                <CatalogNav active={view.type==='products' ? (view as any).section : undefined}
+                  onOpen={id => { navigate({type:'products', section:id}); setSidebarOpen(false); }} />
               </div>
             )}
 
@@ -305,7 +296,7 @@ function Shell() {
         {view.type==='super' && user.is_superadmin && <SuperPage onOpenCabinet={() => navigate({type:'projects'})} />}
         {view.type==='projects' && <ProjectsPage onOpenProject={id => navigate({type:'project', id})} />}
         {view.type==='project' && <ProjectPage projectId={(view as any).id} />}
-        {view.type==='products' && <ProductsPage category={(view as any).category} />}
+        {view.type==='products' && <ProductsPage section={(view as any).section} onSection={id => navigate({type:'products', section:id})} />}
         {view.type==='users' && <AdminPage />}
         {view.type==='clients' && (
           <div style={{padding:'32px'}}>
