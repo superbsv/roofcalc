@@ -365,6 +365,13 @@ class SheetLayoutEngine
         }
         $rows = 1 + (int)ceil(max(0, $maxTop - $joint) / max(1, $rowLen - $this->pz));
 
+        // Одна нижня лінія листів на всю ширину ската (як у КП): усі колонки біля карниза починаються
+        // з того самого рівня, що й колонки, розділені лінією стику (нижній лист стандартної довжини)
+        $eave = PHP_INT_MAX;
+        foreach ($columns as $c0) $eave = min($eave, $c0['bottom']);
+        $len0Std = max($this->lmin, min($maxLower, $this->stdLen($joint - $eave, $maxLower)));
+        $baseLine = $joint - $len0Std;
+
         // Сітка ліній стику на весь скат: J0 = $joint, далі через (висота ряду − нахлест).
         // Кожна колонка ділиться саме цими лініями — і та, що починається вище першої лінії (над вирізом/уступом).
         $step = max(1, $rowLen - $this->pz);
@@ -378,6 +385,12 @@ class SheetLayoutEngine
             // перша лінія, вище низу колонки щонайменше на Lmin
             $first = null;
             foreach ($lines as $ly) { if ($ly > $bot + $this->lmin - 1 && $ly < $top) { $first = $ly; break; } }
+            $atEave = abs($bot - $eave) <= 1;
+            if ($first === null && $atEave && $baseLine < $bot) {   // колонка біля карниза — низ на спільній лінії
+                $this->colStart[$i] = $baseLine;
+                $need = $top - $baseLine;
+                $bot = $baseLine;
+            }
             if ($first === null) {   // жодна лінія стику не перетинає колонку — одним листом
                 if ($first === null && $need > $max) {
                     // лінії не перетинають колонку, але лист не вміщається — ряди знизу
@@ -390,8 +403,8 @@ class SheetLayoutEngine
             }
             // нижній лист — до першої лінії: від найнижчого карниза стандартна довжина (хвиля × n + ПЗ),
             // у колонках з вищим низом — рівно до лінії
-            $len0 = ($bot <= $minBottom && $first === $joint)
-                ? max($this->lmin, min($maxLower, $this->stdLen($first - $bot, $maxLower)))
+            $len0 = ($atEave && $first === $joint)
+                ? $len0Std
                 : max($this->lmin, min($maxLower, $this->fit($first - $bot, $maxLower)));
             $this->colStart[$i] = $first - $len0;   // низ першого листа (може бути нижче карниза)
             $lens = [$len0];

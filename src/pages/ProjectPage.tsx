@@ -349,6 +349,21 @@ export default function ProjectPage({ projectId }: Props) {
     goSlope(r.slope.id);
   });
 
+  // Копія ската одразу після нього: контур, вирізи, сторони, матеріал і вся розкладка (зсуви, ряди, ручні правки)
+  const duplicateSlope = (s: Slope) => run('dup', async () => {
+    const r = await slopesApi.create(projectId, slopeCopyBody(s, `${s.name} (копія)`));
+    const layout: Partial<Slope> = {};
+    (['layout_shift', 'v_shift', 'rows_count', 'joint_y', 'split_forced', 'round_step', 'sheet_edits'] as const).forEach(k => {
+      const v = (s as any)[k]; if (v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) (layout as any)[k] = v;
+    });
+    const copy = Object.keys(layout).length ? { ...r.slope, ...(await slopesApi.update(r.slope.id, layout)).slope } : r.slope;
+    const list = slopes.filter(x => x.id !== copy.id);
+    list.splice(list.findIndex(x => x.id === s.id) + 1, 0, copy);
+    await renumber(list);
+    if ((copy.polygon_points?.length || 0) >= 3 && s.calc_result) await calcSlope(copy.id);
+    goSlope(copy.id);
+  });
+
   const cutSlope = (s: Slope) => window.confirm(`Вирізати «${s.name}» у буфер?`) && run('cut', async () => {
     setClip(s);
     await slopesApi.delete(s.id);
@@ -661,6 +676,7 @@ export default function ProjectPage({ projectId }: Props) {
             )}
             <div className="kp-tools">
               <button className={`btn btn-sm ${cutouts ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setCutouts(v => !v)} disabled={!active || pts.length < 3} title="Режим «Вирізи»">Вирізи</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => active && duplicateSlope(active)} disabled={!active || !!busy} title="Копіювати скат (з розкладкою) і вставити одразу після нього">Копіювати скат</button>
               <button className="btn btn-secondary btn-sm" onClick={() => active && mirrorSlope(active)} disabled={!active || pts.length < 3} title="Зеркально відобразити і додати в кінець">Дзеркально</button>
               <button className="btn btn-secondary btn-sm" onClick={clearSlope} disabled={!active} title="Очистити поле">Очистити</button>
               <button className="btn btn-secondary btn-sm" onClick={addSlope} disabled={!!busy} title="Додати скат">+ Скат</button>
@@ -776,6 +792,7 @@ export default function ProjectPage({ projectId }: Props) {
                 onBlur={e => +e.target.value !== active.eave_overhang && setSlopeK(+e.target.value)} />
             </label>
             <div className="kp-tools">
+              <button className="btn btn-secondary btn-sm" onClick={() => duplicateSlope(active)} disabled={!!busy} title="Копіювати скат (з розкладкою) і вставити одразу після нього">Копіювати скат</button>
               <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>Друк</button>
               {!showExplorer && <button className="btn btn-secondary btn-sm" onClick={() => setShowExplorer(true)}>Провідник</button>}
             </div>
@@ -888,6 +905,7 @@ export default function ProjectPage({ projectId }: Props) {
       {/* Контекстне меню провідника */}
       {menu && menuSlope && (
         <div className="kp-menu" style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 260) }} role="menu" onClick={e => e.stopPropagation()}>
+          <button role="menuitem" onClick={() => { setMenu(null); duplicateSlope(menuSlope); }}>Копіювати скат</button>
           <button role="menuitem" onClick={() => { setClip(menuSlope); setMenu(null); }}>Копіювати в буфер</button>
           <button role="menuitem" onClick={() => { setMenu(null); mirrorSlope(menuSlope); }} disabled={(menuSlope.polygon_points?.length || 0) < 3}>Зеркально відобразити</button>
           <button role="menuitem" onClick={() => { setMenu(null); cutSlope(menuSlope); }}>Вирізати</button>
