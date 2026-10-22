@@ -115,7 +115,7 @@ export default function SuperPage({ onOpenCabinet }: { onOpenCabinet: () => void
                       <td className="text-xs text-muted">{t.last_login_at ? dateUa(t.last_login_at) : '—'}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
                         <button className="btn btn-ghost btn-sm" onClick={() => open(t.id)}>Відкрити</button>
-                        {t.state !== 'internal' && <button className="btn btn-secondary btn-sm" onClick={() => loginAs(t)} disabled={!!busy}>Увійти як</button>}
+                        <button className="btn btn-secondary btn-sm" onClick={() => loginAs(t)} disabled={!!busy}>Увійти як</button>
                       </td>
                     </tr>
                   );
@@ -173,6 +173,11 @@ function TenantCard({ d, plans, busy, onClose, onChanged, run, onLoginAs, onDele
         <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Закрити картку">✕</button>
       </div>
 
+      {internal && (
+        <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
+          <button className="btn btn-primary btn-sm" onClick={onLoginAs} disabled={!!busy}>Увійти в кабінет</button>
+        </div>
+      )}
       {!internal && (
         <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
           <button className="btn btn-primary btn-sm" onClick={onLoginAs} disabled={!!busy}>Увійти як клієнт</button>
