@@ -161,6 +161,33 @@ export default function ProductsPage({ category }: { category?: Category }) {
   const [success, setSuccess]   = useState('');
 
   const [closedMf, setClosedMf] = useState<Set<string>>(new Set());
+  const platform = !!(user?.is_superadmin && !user?.impersonating);
+  const canEdit = (m: Material) => { const k = materialSource(m, myTid).kind; return k === 'own' || (k === 'abt' && platform); };
+  const isAdmin = user?.role === 'admin';
+
+  const delOne = async () => {
+    if (!selected || !window.confirm(`Видалити «${selected.name}»?\nЯкщо матеріал уже використано в розрахунках — він зникне з каталогу, але старі проекти не зміняться.`)) return;
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      const r = await api('DELETE', `/admin/materials/${selected.id}`);
+      setSelected(null); setIsNew(false);
+      setSuccess(r.result === 'hidden' ? 'Матеріал прибрано з каталогу (є у старих розрахунках)' : 'Матеріал видалено');
+      loadMaterials();
+    } catch (e: any) { setError(e.message); } finally { setLoading(false); }
+  };
+  const delGroup = async (mf: string, list: Material[]) => {
+    const mine = list.filter(canEdit);
+    if (!mine.length) return;
+    const extra = mine.length < list.length ? `\n(${list.length - mine.length} чужих матеріалів залишаться — їх видаляє власник)` : '';
+    if (!window.confirm(`Видалити виробника «${mf}» — ${mine.length} шт. (${CAT_LABEL[cat]})?${extra}`)) return;
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      const r = await api('POST', '/admin/materials/delete-group', { type: cat, manufacturer: mf, ids: mine.map(m => m.id) });
+      if (selected && mine.some(m => m.id === selected.id)) { setSelected(null); setIsNew(false); }
+      setSuccess(`Видалено: ${r.deleted + r.hidden}${r.hidden ? ` (з них ${r.hidden} прибрано з каталогу — є в розрахунках)` : ''}`);
+      loadMaterials();
+    } catch (e: any) { setError(e.message); } finally { setLoading(false); }
+  };
   const mfName = (m: Material) => (m.manufacturer || '').trim() || (m.owner_mf && String(m.owner_mf) === '1' ? (m.owner_name || '') : '') || 'Без виробника';
   const mfGroups: [string, Material[]][] = Array.from(new Set(materials.map(mfName)))
     .sort((a, b) => (a === 'Без виробника' ? 1 : b === 'Без виробника' ? -1 : a.localeCompare(b, 'uk')))
@@ -261,10 +288,18 @@ export default function ProductsPage({ category }: { category?: Category }) {
           {/* Каталог: вид матеріалу → виробник → назва форми */}
           {mfGroups.map(([mf, list]) => (
             <div key={mf} className="prod-mf">
-              <button type="button" className="prod-mf-head" onClick={() => setClosedMf(c => { const n = new Set(c); n.has(mf) ? n.delete(mf) : n.add(mf); return n; })}
-                aria-expanded={!closedMf.has(mf)}>
-                <span>{closedMf.has(mf) ? '▸' : '▾'} {mf}</span><em>{list.length}</em>
-              </button>
+              <div className="prod-mf-row">
+                <button type="button" className="prod-mf-head" onClick={() => setClosedMf(c => { const n = new Set(c); n.has(mf) ? n.delete(mf) : n.add(mf); return n; })}
+                  aria-expanded={!closedMf.has(mf)}>
+                  <span>{closedMf.has(mf) ? '▸' : '▾'} {mf}</span><em>{list.length}</em>
+                </button>
+                {isAdmin && list.some(canEdit) && (
+                  <button type="button" className="prod-mf-del" title={`Видалити виробника «${mf}»`} aria-label={`Видалити виробника ${mf}`}
+                    disabled={loading} onClick={() => delGroup(mf, list)}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                )}
+              </div>
               {!closedMf.has(mf) && <div className="prod-mf-list">
               {list.map(m => (
             <div key={m.id} onClick={() => selectMaterial(m)}
@@ -312,6 +347,9 @@ export default function ProductsPage({ category }: { category?: Category }) {
                     <input type="checkbox" checked={!!(form as any).published} onChange={e => setForm(p => ({ ...p, published: e.target.checked ? 1 : 0 } as any))} />
                     У каталог виробників
                   </label>
+                )}
+                {!isNew && selected && isAdmin && canEdit(selected) && (
+                  <button className="btn btn-danger" onClick={delOne} disabled={loading}>Видалити</button>
                 )}
                 <button className="btn btn-primary" onClick={save} disabled={loading}>
                   {loading ? 'Збереження…' : '💾 Зберегти'}

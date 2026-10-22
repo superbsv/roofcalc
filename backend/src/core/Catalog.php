@@ -18,6 +18,8 @@ class Catalog
         Database::ensureTenantSchema();
         Database::ensureColumn('tenants', 'is_manufacturer', 'TINYINT NOT NULL DEFAULT 0');
         Database::ensureColumn('material_profiles', 'published', 'TINYINT NOT NULL DEFAULT 0');
+        // Видалений матеріал, що вже є в розрахунках: прихований з каталогу, але старі проекти рахуються
+        Database::ensureColumn('material_profiles', 'deleted', 'TINYINT NOT NULL DEFAULT 0');
     }
 
     // Умова видимості матеріалів для кабінету: каталог ABT + власні + опубліковані виробниками.
@@ -26,7 +28,7 @@ class Catalog
     {
         self::ensureSchema();
         return [
-            "({$a}tenant_id IS NULL OR {$a}tenant_id = ? OR ({$a}published = 1 AND {$a}tenant_id IN "
+            "{$a}deleted = 0 AND ({$a}tenant_id IS NULL OR {$a}tenant_id = ? OR ({$a}published = 1 AND {$a}tenant_id IN "
             . "(SELECT id FROM tenants WHERE is_manufacturer = 1 AND status <> 'blocked')))",
             [$tid],
         ];

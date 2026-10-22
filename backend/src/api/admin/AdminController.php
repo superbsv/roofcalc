@@ -127,9 +127,10 @@ class AdminController
     public function materials(): void
     {
         $me = $this->requireAdmin();
+        \RoofCalc\Core\Catalog::ensureSchema();
         // загальний каталог + матеріали свого кабінету
         $profiles = Database::fetchAll(
-            'SELECT * FROM material_profiles WHERE tenant_id IS NULL OR tenant_id = ? ORDER BY type, sort_order, name',
+            'SELECT * FROM material_profiles WHERE deleted = 0 AND (tenant_id IS NULL OR tenant_id = ?) ORDER BY type, sort_order, name',
             [$me['tid']]
         );
         foreach ($profiles as &$p) {
@@ -204,6 +205,58 @@ class AdminController
     }
 
     // PUT /api/admin/materials/{id}
+    // Чи може користувач змінювати/видаляти матеріал: власний кабінету або (супер-адмін платформи) каталог ABT
+    private function canEditMaterial(array $me, array $mat): bool
+    {
+        if ($mat['tenant_id'] === null) return !empty($me['sa']) && empty($me['imp']);
+        return (int)$mat['tenant_id'] === (int)$me['tid'];
+    }
+
+    // Видалити один матеріал: якщо він уже є в розрахунках — ховаємо з каталогу (проекти не ламаються)
+    private function removeMaterial(int $id): string
+    {
+        $used = Database::fetchOne('SELECT COUNT(*) c FROM slopes WHERE material_profile_id = ?', [$id]);
+        if ((int)($used['c'] ?? 0) > 0) {
+            Database::query('UPDATE material_profiles SET deleted = 1, published = 0, is_active = 0 WHERE id = ?', [$id]);
+            return 'hidden';
+        }
+        Database::query('DELETE FROM material_profiles WHERE id = ?', [$id]);
+        return 'deleted';
+    }
+
+    // DELETE /api/admin/materials/{id}
+    public function deleteMaterial(int $id): void
+    {
+        $me = $this->requireAdmin();
+        \RoofCalc\Core\Catalog::ensureSchema();
+        $mat = Database::fetchOne('SELECT id, name, tenant_id FROM material_profiles WHERE id = ? AND deleted = 0', [$id]);
+        if (!$mat) $this->error('Матеріал не знайдено', 404);
+        if (!$this->canEditMaterial($me, $mat)) $this->error('Видаляти можна лише власні матеріали кабінету', 403);
+        $r = $this->removeMaterial($id);
+        $this->log('material.delete', 'material', $id, ['name' => $mat['name'], 'result' => $r]);
+        $this->json(['result' => $r]);
+    }
+
+    // POST /api/admin/materials/delete-group  {type, manufacturer} — видалити виробника (усі його форми цього виду)
+    public function deleteMaterialGroup(): void
+    {
+        $me = $this->requireAdmin();
+        \RoofCalc\Core\Catalog::ensureSchema();
+        $b = $this->body();
+        $type = (string)($b['type'] ?? '');
+        $mf = trim((string)($b['manufacturer'] ?? ''));
+        $ids = array_map('intval', (array)($b['ids'] ?? []));
+        if ($type === '' || !$ids) $this->error('Не вказано матеріали');
+        $done = 0; $hidden = 0; $skipped = 0;
+        foreach ($ids as $id) {
+            $mat = Database::fetchOne('SELECT id, tenant_id FROM material_profiles WHERE id = ? AND type = ? AND deleted = 0', [$id, $type]);
+            if (!$mat || !$this->canEditMaterial($me, $mat)) { $skipped++; continue; }
+            $this->removeMaterial($id) === 'hidden' ? $hidden++ : $done++;
+        }
+        $this->log('material.delete_group', 'material', 0, ['manufacturer' => $mf, 'type' => $type, 'deleted' => $done, 'hidden' => $hidden, 'skipped' => $skipped]);
+        $this->json(['deleted' => $done, 'hidden' => $hidden, 'skipped' => $skipped]);
+    }
+
     public function updateMaterial(int $id): void
     {
         $me = $this->requireMaterialEditor();

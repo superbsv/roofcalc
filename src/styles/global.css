@@ -1446,3 +1446,7 @@ tr:hover td { background: var(--clr-surface-2); }
 .super-danger form { display: flex; flex-direction: column; gap: 8px; border: 1px solid #E5484D; border-radius: 8px; padding: 12px; background: rgba(229,72,77,.06); }
 .super-danger-title { font-weight: 700; color: #E5484D; }
 .super-del-btn { color: #E5484D; }
+.prod-mf-row { display: flex; background: var(--clr-surface-2); }
+.prod-mf-row .prod-mf-head { flex: 1; }
+.prod-mf-del { flex: none; width: 34px; border: 0; background: transparent; color: var(--clr-text-3); cursor: pointer; display: grid; place-items: center; }
+.prod-mf-del:hover { color: #E5484D; }

@@ -134,6 +134,8 @@ try {
         case $method==='GET' &&$uri==='/admin/logs':           (new AdminController)->logs(); break;
         case $method==='GET' &&$uri==='/admin/materials':      (new AdminController)->materials(); break;
         case $method==='POST'&&$uri==='/admin/materials':      (new AdminController)->createMaterial(); break;
+        case $method==='DELETE'&&preg_match('#^/admin/materials/(\d+)$#',$uri,$m): (new AdminController)->deleteMaterial((int)$m[1]); break;
+        case $method==='POST'&&$uri==='/admin/materials/delete-group': (new AdminController)->deleteMaterialGroup(); break;
         case $method==='PUT' &&preg_match('#^/admin/materials/(\d+)$#',$uri,$m): (new AdminController)->updateMaterial((int)$m[1]); break;
         case $method==='GET' &&$uri==='/admin/settings':       (new AdminController)->settings(); break;
         case $method==='PUT' &&$uri==='/admin/settings':       (new AdminController)->updateSettings(); break;
