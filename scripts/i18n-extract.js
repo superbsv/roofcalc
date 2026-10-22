@@ -7,8 +7,10 @@ function walk(dir) { for (const f of fs.readdirSync(dir)) { const p = path.join(
 function norm(s) { return s.replace(/\s+/g, ' ').trim(); }
 function scan(file) {
   const src = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const lines = src.text.split('\n');
   const visit = n => {
     if (ts.isImportDeclaration(n)) return;
+    if (n.pos >= 0 && n.kind !== ts.SyntaxKind.SourceFile && /i18n-ignore/.test(lines[src.getLineAndCharacterOfPosition(n.getStart(src)).line] || '')) return;
     if (ts.isCallExpression(n) && /console\./.test(n.expression.getText(src))) return;
     if ((ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) && CYR.test(n.text)) n.text.split('\n').forEach(x => { const t = norm(x); if (t && CYR.test(t)) out.exact.add(t); });
     else if (ts.isJsxText(n) && CYR.test(n.text)) { const t = norm(n.text); if (t) out.exact.add(t); }

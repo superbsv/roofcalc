@@ -224,7 +224,7 @@ function TenantCard({ d, plans, busy, onClose, onChanged, run, onLoginAs, onDele
           <input type="checkbox" checked={!!f.is_manufacturer} onChange={e => set('is_manufacturer', e.target.checked)} />
           Виробник — може публікувати свої матеріали в каталог виробників для всіх кабінетів
         </label>
-        <label className="form-label">Нотатки (бачить лише ABT)<textarea className="form-control" rows={2} value={f.notes || ''} onChange={e => set('notes', e.target.value)} /></label>
+        <label className="form-label">Нотатки (бачить лише адміністратор платформи)<textarea className="form-control" rows={2} value={f.notes || ''} onChange={e => set('notes', e.target.value)} /></label>
         <button className="btn btn-primary" type="submit" disabled={!!busy}>{busy === 'save' ? 'Збереження…' : 'Зберегти'}</button>
       </form>
 

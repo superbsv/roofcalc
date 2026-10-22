@@ -19,7 +19,10 @@ class MaterialsController
     {
         Database::ensureTenantSchema();
         $u = Auth::currentUser();
-        return $u ? Catalog::visibleSql((int)$u['tid'], 'm.') : ['m.tenant_id IS NULL', []];
+        if (!$u) return ['m.tenant_id IS NULL AND m.deleted = 0', []];
+        // Панель платформи бачить і веде «Каталог ROOFKIT»; кабінет — свій особистий каталог
+        if (!empty($u['sa']) && empty($u['imp'])) return Catalog::librarySql('m.');
+        return Catalog::visibleSql((int)$u['tid'], 'm.');
     }
 
     // Власник матеріалу (для позначок «Каталог ABT» / «Виробник: …» / «Власний»)

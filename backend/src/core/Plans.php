@@ -15,7 +15,7 @@ class Plans
         'trial' => ['name' => 'Пробний', 'price' => 0, 'users' => 2, 'projects_month' => 20, 'days' => 14, 'public' => false,
                     'features' => ['Усі можливості калькулятора', 'До 2 користувачів', 'До 20 розрахунків']],
         'start' => ['name' => 'Старт', 'price' => 490, 'price_year' => 4900, 'users' => 1, 'projects_month' => 30, 'public' => true,
-                    'features' => ['1 користувач', '30 розрахунків на місяць', 'Каталог матеріалів ABT', 'PDF-специфікація']],
+                    'features' => ['1 користувач', '30 розрахунків на місяць', 'Каталог ROOFKIT', 'PDF-специфікація']],
         'pro' => ['name' => 'Профі', 'price' => 1290, 'price_year' => 12900, 'users' => 5, 'projects_month' => null, 'public' => true, 'popular' => true,
                     'features' => ['До 5 користувачів', 'Без ліміту розрахунків', 'Власні матеріали', 'Логотип і реквізити в PDF', 'Excel і карта розкрою']],
         'business' => ['name' => 'Бізнес', 'price' => 2990, 'price_from' => true, 'users' => null, 'projects_month' => null, 'public' => true,
@@ -54,6 +54,11 @@ class Plans
                 Database::query("INSERT INTO app_settings (key_name, value, type, description, updated_at) VALUES ('platform_plans_prices_v2', '1', 'string', 'Ціни тарифів 2026-10 застосовано', NOW())");
             }
         } catch (\Throwable $e) {}
+        // назва каталогу в описах тарифів (раніше — «Каталог матеріалів ABT»)
+        foreach ($plans as &$pl) {
+            if (!empty($pl['features'])) $pl['features'] = array_map(function ($f) { return $f === 'Каталог матеріалів ABT' ? 'Каталог ROOFKIT' : $f; }, $pl['features']);
+        }
+        unset($pl);
         return self::$cache = $plans;
     }
 

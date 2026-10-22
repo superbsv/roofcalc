@@ -144,7 +144,7 @@ function WidgetSetup() {
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>2. Матеріали у віджеті</h3>
-        <p className="text-sm text-muted">Оберіть, що можуть рахувати відвідувачі (металочерепиця, профнастил, фальц). Якщо нічого не обрано — показуються ваші власні матеріали, а якщо їх немає — каталог ABT.</p>
+        <p className="text-sm text-muted">Оберіть, що можуть рахувати відвідувачі (металочерепиця, профнастил, фальц). Якщо нічого не обрано — показуються всі активні матеріали вашого каталогу.</p>
         <div className="widget-mats">
           {groups.map(([mf, list]) => (
             <fieldset key={mf}><legend>{mf}</legend>

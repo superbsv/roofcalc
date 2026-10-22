@@ -36,7 +36,7 @@ class CatalogController
     // GET /catalog/sections — розділи з кількістю видимих матеріалів
     public function sections(): void
     {
-        [$w, $p] = Catalog::visibleSql((int)$this->me['tid'], 'm.');
+        [$w, $p] = $this->platform() ? Catalog::librarySql('m.') : Catalog::visibleSql((int)$this->me['tid'], 'm.');
         $rows = Database::fetchAll(
             "SELECT s.id, s.name, s.calc_type, s.sort_order,
                     (SELECT COUNT(*) FROM material_profiles m WHERE m.section_id = s.id AND $w) AS cnt
@@ -138,6 +138,124 @@ class CatalogController
         }
         if ($wrongType && !$moved) $this->error('Цей розділ має інший тип розрахунку — перетягувати можна лише в розділи того ж типу');
         $this->json(['moved' => $moved, 'skipped' => $skipped, 'wrong_type' => $wrongType]);
+    }
+
+    // ---------- Каталог ROOFKIT → особистий каталог ----------
+    // GET /catalog/library?section=ID — позиції каталогу ROOFKIT (з позначкою «уже у вас»)
+    public function library(): void
+    {
+        [$w, $p] = Catalog::librarySql('m.');
+        if (!empty($_GET['section'])) { $w .= ' AND m.section_id = ?'; $p[] = (int)$_GET['section']; }
+        $rows = Database::fetchAll(
+            "SELECT m.id, m.name, m.manufacturer, m.type, m.section_id, m.full_width, m.useful_width, m.max_length, m.tenant_id, t.name AS owner_name,
+                    (SELECT COUNT(*) FROM material_profiles x WHERE x.tenant_id = ? AND x.source_id = m.id AND x.deleted = 0) AS in_my
+             FROM material_profiles m LEFT JOIN tenants t ON t.id = m.tenant_id
+             WHERE m.is_active = 1 AND $w ORDER BY m.sort_order, m.manufacturer, m.name LIMIT 2000",
+            array_merge([(int)$this->me['tid']], $p)
+        );
+        $this->json(['items' => $rows]);
+    }
+
+    // POST /catalog/copy {ids:[...]} — скопіювати позиції каталогу ROOFKIT у свій каталог
+    public function copy(): void
+    {
+        if ($this->platform()) $this->error('Каталог ROOFKIT — це і є основний каталог; копіювання — для кабінетів клієнтів');
+        $this->requireAdmin();
+        $ids = array_slice(array_map('intval', (array)($this->body()['ids'] ?? [])), 0, 500);
+        [$w, $p] = Catalog::librarySql();
+        $copied = 0; $skipped = 0;
+        foreach ($ids as $id) {
+            if (!Database::fetchOne("SELECT id FROM material_profiles WHERE id = ? AND $w", array_merge([$id], $p))) { $skipped++; continue; }
+            if (Database::fetchOne('SELECT id FROM material_profiles WHERE tenant_id = ? AND source_id = ? AND deleted = 0', [$this->me['tid'], $id])) { $skipped++; continue; }
+            Catalog::copyMaterial($id, (int)$this->me['tid']);
+            $copied++;
+        }
+        $this->json(['copied' => $copied, 'skipped' => $skipped]);
+    }
+
+    // ---------- Імпорт / експорт ----------
+    public const IO_FIELDS = [
+        'full_width', 'useful_width', 'min_length', 'max_length', 'max_std_length', 'wave_step', 'round_step', 'cut_step',
+        'length_overlap', 'min_slope_angle', 'lock_type', 'min_joint_distance', 'join_overlap', 'price_per_m2', 'is_active',
+    ];
+
+    // GET /catalog/export — усі позиції каталогу (кабінет — свій, панель платформи — каталог ROOFKIT)
+    public function export(): void
+    {
+        [$w, $p] = $this->platform() ? ['m.deleted = 0 AND m.tenant_id IS NULL', []] : Catalog::visibleSql((int)$this->me['tid'], 'm.');
+        $rows = Database::fetchAll(
+            'SELECT m.id, s.name AS section, m.manufacturer, m.name, m.forbidden_lengths, m.' . implode(', m.', self::IO_FIELDS) . "
+             FROM material_profiles m LEFT JOIN catalog_sections s ON s.id = m.section_id
+             WHERE $w ORDER BY s.sort_order, m.sort_order, m.manufacturer, m.name", $p
+        );
+        foreach ($rows as &$r) {
+            $f = json_decode($r['forbidden_lengths'] ?? 'null', true);
+            $r['forbidden_lengths'] = is_array($f) ? implode('; ', array_map(function ($x) { return is_array($x) ? ((int)$x[0] . '-' . (int)$x[1]) : ''; }, $f)) : '';
+        }
+        $this->json(['rows' => $rows]);
+    }
+
+    // POST /catalog/import {rows:[{id?, section, manufacturer, name, ...}]} — створити або оновити позиції
+    public function import(): void
+    {
+        $this->requireAdmin();
+        $rows = (array)($this->body()['rows'] ?? []);
+        if (count($rows) > 3000) $this->error('Забагато рядків (максимум 3000 за один раз)');
+        $tid = $this->platform() ? null : (int)$this->me['tid'];
+        $sections = Database::fetchAll('SELECT * FROM catalog_sections');
+        $secByName = [];
+        foreach ($sections as $sc) $secByName[mb_strtolower(trim($sc['name']))] = $sc;
+        $created = 0; $updated = 0; $errors = [];
+        foreach ($rows as $i => $r) {
+            $line = $i + 2;
+            if (!is_array($r)) continue;
+            $name = trim((string)($r['name'] ?? ''));
+            if ($name === '') { if (array_filter($r, function ($v) { return trim((string)$v) !== ''; })) $errors[] = "Рядок {$line}: немає назви"; continue; }
+            $sec = $secByName[mb_strtolower(trim((string)($r['section'] ?? '')))] ?? null;
+            $existing = null;
+            if (!empty($r['id'])) {
+                $existing = Database::fetchOne('SELECT * FROM material_profiles WHERE id = ? AND deleted = 0', [(int)$r['id']]);
+                if ($existing && !$this->canEdit($existing)) $existing = null;   // чужа позиція — створюємо свою
+            }
+            $mf = trim((string)($r['manufacturer'] ?? ''));
+            if (!$existing) {
+                $existing = Database::fetchOne(
+                    'SELECT * FROM material_profiles WHERE deleted = 0 AND tenant_id <=> ? AND name = ? AND COALESCE(manufacturer, \'\') = ?' . ($sec ? ' AND section_id = ?' : ''),
+                    array_merge([$tid, $name, $mf], $sec ? [$sec['id']] : [])
+                );
+            }
+            if (!$existing && !$sec) { $errors[] = "Рядок {$line} «{$name}»: невідомий розділ «" . ($r['section'] ?? '') . '»'; continue; }
+            $vals = ['name' => mb_substr($name, 0, 150), 'manufacturer' => $mf === '' ? null : mb_substr($mf, 0, 100)];
+            foreach (self::IO_FIELDS as $f) {
+                if (!array_key_exists($f, $r) || trim((string)$r[$f]) === '') continue;
+                $v = str_replace([',', ' '], ['.', ''], trim((string)$r[$f]));
+                if ($f === 'lock_type') { $vals[$f] = mb_substr(trim((string)$r[$f]), 0, 30); continue; }
+                if (!is_numeric($v)) { $errors[] = "Рядок {$line} «{$name}»: «{$f}» має бути числом"; continue 2; }
+                $vals[$f] = in_array($f, ['min_slope_angle', 'price_per_m2'], true) ? (float)$v : (int)round((float)$v);
+            }
+            if (array_key_exists('forbidden_lengths', $r) && trim((string)$r['forbidden_lengths']) !== '') {
+                $ranges = [];
+                foreach (preg_split('/[;\n]+/', (string)$r['forbidden_lengths']) as $part) {
+                    if (preg_match('/(\d+)\s*[-–]\s*(\d+)/', $part, $m) && (int)$m[2] > (int)$m[1]) $ranges[] = [(int)$m[1], (int)$m[2]];
+                }
+                $vals['forbidden_lengths'] = json_encode($ranges);
+            }
+            if (isset($vals['full_width'], $vals['useful_width'])) $vals['side_overlap'] = max(0, $vals['full_width'] - $vals['useful_width']);
+            if ($existing) {
+                if ($sec && (int)$existing['section_id'] !== (int)$sec['id'] && $sec['calc_type'] === $existing['type']) $vals['section_id'] = $sec['id'];
+                $set = implode(', ', array_map(function ($k) { return "$k = ?"; }, array_keys($vals)));
+                Database::query("UPDATE material_profiles SET $set WHERE id = ?", array_merge(array_values($vals), [$existing['id']]));
+                $updated++;
+            } else {
+                $vals += ['full_width' => 1180, 'useful_width' => 1100, 'min_length' => 400, 'max_length' => 8000, 'is_active' => 1];
+                $vals['side_overlap'] = max(0, $vals['full_width'] - $vals['useful_width']);
+                $vals['type'] = $sec['calc_type']; $vals['section_id'] = $sec['id']; $vals['tenant_id'] = $tid;
+                $vals['sort_order'] = (int)(Database::fetchOne('SELECT MAX(sort_order) m FROM material_profiles WHERE section_id = ?', [$sec['id']])['m'] ?? 0) + 10;
+                Database::insert('INSERT INTO material_profiles (' . implode(',', array_keys($vals)) . ') VALUES (' . implode(',', array_fill(0, count($vals), '?')) . ')', array_values($vals));
+                $created++;
+            }
+        }
+        $this->json(['created' => $created, 'updated' => $updated, 'errors' => array_slice($errors, 0, 50), 'errors_count' => count($errors)]);
     }
 
     private function body(): array { return json_decode(file_get_contents('php://input'), true) ?? []; }

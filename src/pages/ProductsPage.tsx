@@ -7,6 +7,8 @@ import React, { useEffect, useState } from 'react';
 import { MATERIAL_TYPES, isFixedType } from '../components/roof/materials';
 import { useAuth } from '../components/auth/AuthContext';
 import { useSections, catalogChanged, CATALOG_EVENT, MAT_DND } from '../components/catalog/CatalogNav';
+import LibraryPicker from '../components/catalog/LibraryPicker';
+import { exportCatalog, importCatalog } from '../components/catalog/catalogIO';
 
 const BASE = process.env.REACT_APP_API_URL || '/api';
 const tok  = () => localStorage.getItem('rc_token');
@@ -145,7 +147,7 @@ function ForbiddenRanges({ value, onChange }: { value: string; onChange: (v: str
 
 // Джерело матеріалу: каталог ABT, каталог виробника або власний матеріал кабінету
 export const materialSource = (m: { tenant_id?: number | null; owner_name?: string | null; owner_mf?: number | string | null }, myTid?: number) =>
-  m.tenant_id == null ? { kind: 'abt' as const, label: 'Каталог ABT' }
+  m.tenant_id == null ? { kind: 'abt' as const, label: 'Каталог ROOFKIT' }
     : myTid != null && Number(m.tenant_id) === Number(myTid) ? { kind: 'own' as const, label: 'Власний' }
     : { kind: 'mf' as const, label: `Виробник: ${m.owner_name || '—'}` };
 
@@ -169,6 +171,25 @@ export default function ProductsPage({ section, onSection }: { section?: number;
   const platform = !!(user?.is_superadmin && !user?.impersonating);
   const canEdit = (m: Material) => { const k = materialSource(m, myTid).kind; return k === 'own' || (k === 'abt' && platform); };
   const isAdmin = user?.role === 'admin';
+  const [lib, setLib] = useState(false);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const doExport = async () => {
+    setError(''); setSuccess('');
+    try {
+      const n = await exportCatalog(`${platform ? 'ROOFKIT_catalog' : 'my_catalog'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      setSuccess(`Експортовано позицій: ${n}`);
+    } catch (e: any) { setError(e.message); }
+  };
+  const doImport = async (f?: File) => {
+    if (!f) return;
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      const r = await importCatalog(f);
+      setSuccess(`Імпорт: додано ${r.created}, оновлено ${r.updated}${r.errors_count ? `, з помилками ${r.errors_count}` : ''}`);
+      if (r.errors_count) setError(r.errors.join('\n'));
+      catalogChanged(); loadMaterials();
+    } catch (e: any) { setError(e.message); } finally { setLoading(false); if (fileRef.current) fileRef.current.value = ''; }
+  };
 
   const delOne = async () => {
     if (!selected || !window.confirm(`Видалити «${selected.name}»?\nЯкщо матеріал уже використано в розрахунках — він зникне з каталогу, але старі проекти не зміняться.`)) return;
@@ -341,7 +362,18 @@ export default function ProductsPage({ section, onSection }: { section?: number;
             <button className="btn btn-primary btn-sm" style={{ flex:1 }} onClick={() => newMaterial()}>+ Матеріал</button>
             <button className="btn btn-secondary btn-sm" style={{ flex:1 }} onClick={addMf}>+ Виробник</button>
           </div>
+          {isAdmin && !platform && (
+            <button className="btn btn-secondary btn-sm prod-libbtn" onClick={() => setLib(true)}>+ З каталогу ROOFKIT</button>
+          )}
+          {isAdmin && (
+            <div className="prod-io">
+              <button className="btn btn-ghost btn-sm" onClick={doExport} title="Завантажити весь каталог у файл Excel">⭳ Експорт Excel</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => fileRef.current?.click()} disabled={loading} title="Додати або оновити позиції з файлу Excel / CSV (формат — як у файлі експорту)">⭱ Імпорт</button>
+              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={e => doImport(e.target.files?.[0])} />
+            </div>
+          )}
           {isAdmin && <div className="prod-dnd-hint">Перетягуйте матеріали, щоб змінити порядок, виробника або розділ</div>}
+          {lib && <LibraryPicker section={secId} onClose={() => setLib(false)} onCopied={n => { setSuccess(`Скопійовано в ваш каталог: ${n}`); loadMaterials(); }} />}
         </div>
         <div style={{ flex:1, overflowY:'auto' }}>
           {materials.length === 0 && (

@@ -241,7 +241,7 @@ function Shell() {
 
         {(user.role === 'admin' || isPlatform) && (
           <div className="sidebar-section">
-            <div className="sidebar-title">{isPlatform ? 'Каталог ROOFKIT' : 'Адмін кабінету'}</div>
+            <div className="sidebar-title">{isPlatform ? 'Каталог' : 'Адмін кабінету'}</div>
 
             <div
               className={`sidebar-item${view.type==='products'?' active':''}`}
@@ -250,7 +250,7 @@ function Shell() {
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/>
               </svg>
-              Каталог продукції
+              {isPlatform ? 'Каталог ROOFKIT' : 'Мій каталог'}
               <span style={{marginLeft:'auto',fontSize:'.7rem'}}>{productsOpen?'▲':'▼'}</span>
             </div>
 
@@ -275,11 +275,7 @@ function Shell() {
 
         <div style={{marginTop:'auto',padding:'16px 12px',borderTop:'1px solid var(--clr-border)',fontSize:'.7rem',color:'var(--clr-text-3)'}}>
           <div style={{marginBottom:'4px',fontWeight:700,color:'var(--clr-text-2)'}}>ROOFKIT · калькулятор покрівлі</div>
-          <div>v1.0 · розробка ABT</div>
-          <a href="https://artbudtrading.com.ua" target="_blank" rel="noopener noreferrer"
-            style={{color:'var(--clr-brand)',fontSize:'.7rem'}}>
-            artbudtrading.com.ua
-          </a>
+          <div>v1.0 · roofkit.com.ua</div>
         </div>
       </aside>
 
@@ -293,7 +289,7 @@ function Shell() {
         )}
         {user.tenant && !user.tenant.active && (
           <div className="alert alert-warning" role="status" style={{ marginBottom: 16 }}>
-            Кабінет у режимі перегляду: {user.tenant.status === 'blocked' ? 'доступ заблоковано' : 'підписка закінчилась'}. Розрахунки збережені — для продовження зверніться до ABT.
+            Кабінет у режимі перегляду: {user.tenant.status === 'blocked' ? 'доступ заблоковано' : 'підписка закінчилась'}. Розрахунки збережені — для продовження зверніться в підтримку ROOFKIT.
           </div>
         )}
         {view.type==='super' && user.is_superadmin && <SuperPage onOpenCabinet={() => navigate({type:'projects'})} />}

@@ -448,7 +448,7 @@ class PdfGenerator
     {
         $pdf = new \TCPDF('P', 'mm', 'A4', true, 'UTF-8');
         $pdf->SetCreator('ROOFKIT');
-        $pdf->SetAuthor($this->settings['company_name'] ?? 'ArtBudTrading');
+        $pdf->SetAuthor($this->settings['company_name'] ?? 'ROOFKIT');
         $pdf->SetTitle($title);
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
@@ -470,7 +470,7 @@ class PdfGenerator
         $pdf->SetFont('dejavusans', 'B', 11);
         $pdf->SetTextColor(26, 26, 26);
         $pdf->SetXY($landscape ? 120 : 60, 10);
-        $pdf->Cell($pageW - 75, 6, $this->settings['company_name'] ?? 'ArtBudTrading', 0, 1, 'R');
+        $pdf->Cell($pageW - 75, 6, $this->settings['company_name'] ?? 'ROOFKIT', 0, 1, 'R');
         $pdf->SetFont('dejavusans', '', 8);
         $pdf->SetTextColor(100, 100, 100);
         $pdf->SetX($landscape ? 120 : 60);

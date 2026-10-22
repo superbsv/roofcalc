@@ -113,7 +113,7 @@ class ProjectsController
                 "SELECT COUNT(*) c FROM projects WHERE tenant_id = ? AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')", [$user['tid']]
             )['c'];
             if ($cnt >= (int)$lim['projects_month']) {
-                $this->error('Вичерпано ліміт тарифу: ' . $lim['projects_month'] . ' розрахунків на місяць. Змініть тариф або зверніться до ABT', 402);
+                $this->error('Вичерпано ліміт тарифу: ' . $lim['projects_month'] . ' розрахунків на місяць. Змініть тариф або зверніться в підтримку ROOFKIT', 402);
             }
         }
 

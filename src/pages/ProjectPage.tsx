@@ -18,6 +18,7 @@ import {
 import { EDGE_TYPES, autoEdgeTypes, edgeColor, sideLengthMm, rectHole, mirrorElement, setSideLength } from '../components/roof/edges';
 import { useTheme } from '../components/theme/theme';
 import { CALC_TYPES, calcTypeInfo } from '../components/roof/calcTypes';
+import LibraryPicker from '../components/catalog/LibraryPicker';
 import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter, templateNums } from '../components/roof/templates';
 import { materialLabel } from '../components/roof/materials';
 import TemplateSketch from '../components/roof/TemplateSketch';
@@ -92,6 +93,7 @@ export default function ProjectPage({ projectId }: Props) {
   const mfOf = (m: MaterialProfile) => (m.manufacturer || '').trim() || (!isGlobal(m) && !isOwn(m) ? (m.owner_name || '') : '') || 'Без виробника';
   const canEditThis = (m?: MaterialProfile) => !!m && canEditMaterials && (isOwn(m) || (isGlobal(m) && !!user?.is_superadmin && !user?.impersonating));
   const [clip, setClip] = useState<Slope | null>(null);
+  const [libOpen, setLibOpen] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
   const [showExplorer, setShowExplorer] = useState(true);
   const [loaded, setLoaded] = useState(false);
@@ -605,7 +607,8 @@ export default function ProjectPage({ projectId }: Props) {
                 ) : (
                   <>
                     <button className="btn btn-secondary btn-sm" onClick={startNewMaterial} title="Створити новий запис у базі матеріалів">Новий</button>
-                    {material && <span className={`badge ${isGlobal(material) ? 'badge-blue' : isOwn(material) ? 'badge-green' : 'badge-orange'}`} title={isOwn(material) ? 'Матеріал вашого кабінету' : 'Матеріал каталогу: щоб змінити, створіть копію'}>{isGlobal(material) ? 'Каталог ABT' : isOwn(material) ? 'Власний' : `Виробник: ${material.owner_name || '—'}`}</span>}
+                    {user?.role === 'admin' && <button className="btn btn-secondary btn-sm" onClick={() => setLibOpen(true)} title="Скопіювати позиції з каталогу ROOFKIT у свій каталог">+ З каталогу ROOFKIT</button>}
+                    {material && <span className={`badge ${isGlobal(material) ? 'badge-blue' : isOwn(material) ? 'badge-green' : 'badge-orange'}`} title={isOwn(material) ? 'Матеріал вашого кабінету' : 'Матеріал каталогу: щоб змінити, створіть копію'}>{isGlobal(material) ? 'Каталог ROOFKIT' : isOwn(material) ? 'Мій каталог' : `Виробник: ${material.owner_name || '—'}`}</span>}
                     {canEditThis(material) && <button className="btn btn-secondary btn-sm" onClick={() => material && setMatEdit({ mode: 'edit', draft: { ...material } })} title="Перейти в режим редагування поточного матеріалу">Дозволити редагування</button>}
                     <button className="btn btn-secondary btn-sm" onClick={() => material && setMatEdit({ mode: 'copy', draft: { ...material, id: 0, name: `${material.name} (копія)` } })} disabled={!material} title="Створити новий матеріал копіюванням поточного">Копіювати</button>
                     {canEditThis(material) && <button className="btn btn-danger btn-sm" onClick={deleteMaterial} disabled={!!busy} title="Прибрати матеріал з бази">Видалити</button>}
@@ -619,7 +622,9 @@ export default function ProjectPage({ projectId }: Props) {
           </div>
 
           {!ct.ready && <div className="alert alert-warning">Тип розрахунку «{ct.label}» ще в розробці — оберіть інший тип або поверніться пізніше.</div>}
-          {!typeMaterials.length && <div className="alert alert-info"> У базі немає матеріалів типу «{ct.label}». {canEditMaterials ? 'Натисніть «Новий», щоб додати.' : 'Зверніться до адміністратора.'}</div>}
+          {!typeMaterials.length && <div className="alert alert-info">У вашому каталозі немає матеріалів типу «{ct.label}». {canEditMaterials ? 'Скопіюйте їх з каталогу ROOFKIT або натисніть «Новий».' : 'Зверніться до адміністратора.'}
+            {user?.role === 'admin' && <div style={{ marginTop: 8 }}><button className="btn btn-primary btn-sm" onClick={() => setLibOpen(true)}>+ З каталогу ROOFKIT</button></div>}</div>}
+          {libOpen && ct && <LibraryPicker calcTypes={ct.materialTypes} onClose={() => setLibOpen(false)} onCopied={async () => { const ms = await materialsApi.list(); setMaterials(ms.profiles); }} />}
 
           {(matEdit || material) && (
             <div className="kp-material">

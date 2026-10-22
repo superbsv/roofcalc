@@ -28,7 +28,7 @@ export default function AdminPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Адмін-панель</h1>
-          <div className="page-subtitle">Управління системою ArtBudTrading</div>
+          <div className="page-subtitle">Управління системою ROOFKIT</div>
         </div>
       </div>
       <div className="tabs">

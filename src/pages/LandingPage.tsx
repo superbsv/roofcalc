@@ -20,7 +20,7 @@ const FEATURES: { t: string; d: string; i: React.ReactNode }[] = [
     i: <><path d="M8 4 H20 L26 10 V28 H8 Z" /><path d="M20 4 V10 H26" /></> },
   { t: 'Команда і ролі', d: 'Адміністратор, менеджери, переглядачі. Кожен бачить свої розрахунки, керівник — усі розрахунки компанії.',
     i: <><circle cx="11" cy="11" r="4" /><circle cx="22" cy="12" r="3" /><path d="M4 26 C4 19 18 19 18 26" /><path d="M18 22 C19 18 28 18 28 24" /></> },
-  { t: 'Матеріали', d: 'Каталог ABT і каталоги виробників — актуальні профілі й кольори від заводів. Додавайте власні профілі або копіюйте з каталогу.',
+  { t: 'Матеріали', d: 'Каталог ROOFKIT — актуальні профілі від заводів. Ведіть власний каталог: додавайте позиції вручну, копіюйте з каталогу ROOFKIT, імпортуйте з Excel.',
     i: <><path d="M4 12 Q8 6 12 12 T20 12 T28 12" /><path d="M4 20 Q8 14 12 20 T20 20 T28 20" /></> },
 ];
 
@@ -179,8 +179,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
       </section>
 
       <footer className="land-foot">
-        <span>© {new Date().getFullYear()} ROOFKIT · розробка ABT — Advanced Building Technologies</span>
-        <a href="https://artbudtrading.com.ua" target="_blank" rel="noopener noreferrer">artbudtrading.com.ua</a>
+        <span>© {new Date().getFullYear()} ROOFKIT</span>
       </footer>
     </div>
   );

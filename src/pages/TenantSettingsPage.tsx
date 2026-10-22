@@ -141,7 +141,7 @@ export default function TenantSettingsPage() {
               {lim ? <div className="tset-bar"><div style={{ width: `${bar(used, lim)}%`, background: bar(used, lim) >= 90 ? 'var(--clr-error)' : 'var(--clr-brand)' }} /></div> : null}
             </div>
           ))}
-          {!internal && <div className="text-sm text-muted">Щоб змінити тариф або продовжити підписку, зверніться до ABT. Онлайн-оплата з'явиться найближчим часом.</div>}
+          {!internal && <div className="text-sm text-muted">Щоб змінити тариф або продовжити підписку, зверніться в підтримку ROOFKIT. Онлайн-оплата з'явиться найближчим часом.</div>}
         </section>
 
         {isAdmin && (

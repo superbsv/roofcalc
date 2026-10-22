@@ -201,7 +201,7 @@ function LoginForm({ onRegister, onHome }: { onRegister: () => void; onHome: () 
 
         <div style={{marginTop:'24px',textAlign:'center',fontSize:'.75rem',color:'var(--clr-text-3)'}}>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onHome}>← Про ROOFKIT</button><br />
-          © {new Date().getFullYear()} ROOFKIT · розробка ABT
+          © {new Date().getFullYear()} ROOFKIT
         </div>
       </div>
     </div>

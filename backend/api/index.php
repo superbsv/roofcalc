@@ -124,6 +124,10 @@ try {
         case $method==='DELETE'&&preg_match('#^/catalog/sections/(\d+)$#',$uri,$m): (new CatalogController)->delete((int)$m[1]); break;
         case $method==='PUT' &&$uri==='/catalog/sections-order': (new CatalogController)->order(); break;
         case $method==='PUT' &&$uri==='/catalog/materials-order': (new CatalogController)->materialsOrder(); break;
+        case $method==='GET' &&$uri==='/catalog/library':      (new CatalogController)->library(); break;
+        case $method==='POST'&&$uri==='/catalog/copy':         (new CatalogController)->copy(); break;
+        case $method==='GET' &&$uri==='/catalog/export':       (new CatalogController)->export(); break;
+        case $method==='POST'&&$uri==='/catalog/import':       (new CatalogController)->import(); break;
         case $method==='POST'&&$uri==='/catalog/move':         (new CatalogController)->move(); break;
         case $method==='GET' &&preg_match('#^/materials/section/(\d+)$#',$uri,$m): (new MaterialsController)->bySection((int)$m[1]); break;
         case $method==='GET' &&$uri==='/materials':            (new MaterialsController)->index(); break;

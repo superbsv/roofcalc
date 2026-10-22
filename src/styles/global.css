@@ -1513,3 +1513,21 @@ tr:hover td { background: var(--clr-surface-2); }
 .auth-tools-floating { position: fixed; top: 16px; right: 16px; z-index: 10; display: flex; gap: 8px; align-items: center; }
 @media (max-width: 640px) { .app-header .lang-switch button { padding: 4px 6px; font-size: .66rem; } }
 .auth-tools-floating .theme-toggle-floating { position: static; } .auth-tools-floating .lang-switch { background: var(--clr-surface); color: var(--clr-text); }
+/* ===== Каталог ROOFKIT → мій каталог, імпорт/експорт ===== */
+.prod-libbtn { width: 100%; margin-top: 6px; }
+.prod-io { display: flex; gap: 4px; margin-top: 6px; }
+.prod-io .btn { flex: 1; }
+.lib-box { width: min(760px, 100%); display: flex; flex-direction: column; max-height: 90vh; }
+.lib-tools { display: flex; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--clr-border); }
+.lib-tools select { max-width: 260px; }
+.lib-list { overflow-y: auto; flex: 1; padding: 6px 0; min-height: 200px; }
+.lib-empty { padding: 30px; text-align: center; color: var(--clr-text-3); }
+.lib-group { padding: 4px 0; }
+.lib-ghead { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--clr-surface-2); font-size: .85rem; cursor: pointer; }
+.lib-ghead em { font-style: normal; color: var(--clr-text-3); font-size: .75rem; }
+.lib-item { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 30px; border-bottom: 1px solid var(--clr-border); cursor: pointer; font-size: .88rem; }
+.lib-item:hover { background: var(--clr-surface-2); }
+.lib-item.have { opacity: .65; cursor: default; }
+.lib-name { flex: 1; min-width: 0; }
+.lib-meta { color: var(--clr-text-3); font-size: .75rem; white-space: nowrap; }
+@media (max-width: 640px) { .lib-tools { flex-direction: column; } .lib-tools select { max-width: none; } .lib-meta { display: none; } }

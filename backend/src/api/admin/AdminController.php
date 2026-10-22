@@ -267,7 +267,7 @@ class AdminController
         $mat = Database::fetchOne('SELECT tenant_id FROM material_profiles WHERE id = ?', [$id]);
         if (!$mat) $this->error('Матеріал не знайдено', 404);
         if ($mat['tenant_id'] === null) {
-            if (empty($me['sa']) || !empty($me['imp'])) $this->error('Це матеріал загального каталогу ABT — створіть копію для свого кабінету', 403);
+            if (empty($me['sa']) || !empty($me['imp'])) $this->error('Це матеріал каталогу ROOFKIT — скопіюйте його у свій каталог', 403);
         } elseif ((int)$mat['tenant_id'] !== (int)$me['tid']) {
             $this->error('Це матеріал каталогу виробника — створіть копію для свого кабінету', 403);
         }

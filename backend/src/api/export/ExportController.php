@@ -131,7 +131,7 @@ class ExportController
         $project = Database::fetchOne('SELECT name FROM projects WHERE id = ?', [$id]);
         $name    = preg_replace('/[^а-яА-ЯёЁa-zA-Z0-9\s\-]/u', '', $project['name'] ?? 'project');
         $name    = trim(str_replace(' ', '_', $name));
-        return "ABT_{$type}_{$name}_" . date('Ymd');
+        return "ROOFKIT_{$type}_{$name}_" . date('Ymd');
     }
 
     private function log(int $projectId, string $action): void
