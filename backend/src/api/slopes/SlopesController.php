@@ -37,10 +37,68 @@ class SlopesController
         $s['polygon_points'] = json_decode($s['polygon_points'] ?? 'null', true) ?? [];
         $s['holes']          = json_decode($s['holes'] ?? 'null', true) ?? [];
         $s['edge_types']     = json_decode($s['edge_types'] ?? 'null', true) ?? [];
+        if (array_key_exists('sheet_edits', $s)) $s['sheet_edits'] = self::cleanSheetEdits(json_decode($s['sheet_edits'] ?? 'null', true));
         if (array_key_exists('calc_result', $s) && is_string($s['calc_result'])) {
             $s['calc_result'] = json_decode($s['calc_result'], true);
         }
         return $s;
+    }
+
+    // Ручні правки листів: {"кол:ряд": {len?: мм, y?: мм, del?: true}}
+    public static function cleanSheetEdits($e): array
+    {
+        if (!is_array($e)) return [];
+        $out = [];
+        foreach ($e as $k => $v) {
+            if (!preg_match('/^-?\d+:-?\d+$/', (string)$k) || !is_array($v)) continue;
+            $o = [];
+            if (!empty($v['del'])) $o['del'] = true;
+            if (isset($v['len']) && is_numeric($v['len'])) $o['len'] = max(50, min(100000, (int)round($v['len'])));
+            if (isset($v['y']) && is_numeric($v['y'])) $o['y'] = max(-100000, min(100000, (int)round($v['y'])));
+            if ($o) $out[(string)$k] = $o;
+            if (count($out) >= 2000) break;
+        }
+        return $out;
+    }
+
+    // Застосувати ручні правки до результату і перерахувати підсумки (листи, п.м., площі, відходи)
+    private static function applySheetEdits(array $r, array $edits): array
+    {
+        if (!$edits || empty($r['placements'])) return $r;
+        $fw = (int)($r['sheet_full_width'] ?? ($r['placements'][0]['full_width'] ?? 0));
+        $uw = (int)($r['sheet_useful_width'] ?? ($r['placements'][0]['useful_width'] ?? 0));
+        $out = [];
+        foreach ($r['placements'] as $p) {
+            $k = ($p['col_index'] ?? 0) . ':' . ($p['row_index'] ?? 0);
+            $e = $edits[$k] ?? null;
+            if ($e) {
+                if (!empty($e['del'])) continue;
+                if (isset($e['len'])) $p['length'] = $e['len'];
+                if (isset($e['y'])) $p['y'] = $e['y'];
+                $p['full_area_m2'] = round(($p['full_width'] ?? $fw) * $p['length'] / 1e6, 4);
+                $p['edited'] = true;
+            }
+            $out[] = $p;
+        }
+        $lens = array_map(function ($p) { return (int)$p['length']; }, $out);
+        $sUsefulOld = (float)($r['useful_area_m2'] ?? 0);
+        $net = $sUsefulOld > 0 ? $sUsefulOld * (1 - (float)($r['waste_pct'] ?? 0) / 100) : (float)($r['slope_area_m2'] ?? 0);
+        $running = array_sum($lens) / 1000;
+        $sUseful = $uw / 1000 * $running;
+        $sFull = $fw / 1000 * $running;
+        $r['placements'] = $out;
+        $r['sheets_by_length'] = SheetLayoutEngine::groupLengths($lens, $fw);
+        $r['laid_by_length'] = $r['sheets_by_length'];
+        $r['total_sheets'] = count($lens);
+        $r['laid_sheets'] = count($lens);
+        $r['sheet_length_mm'] = $lens ? max($lens) : 0;
+        $r['running_m'] = round($running, 3);
+        $r['useful_area_m2'] = round($sUseful, 3);
+        $r['total_full_area_m2'] = round($sFull, 3);
+        $r['order_area_m2'] = round($sFull, 3);
+        $r['waste_pct'] = round($sUseful > 0 ? max(0, ($sUseful - $net) * 100 / $sUseful) : 0, 1);
+        $r['sheet_edits_count'] = count($edits);
+        return $r;
     }
 
     // Нормалізація вирізів: масив полігонів, кожен ≥3 точок [x,y] у мм (цілі)
@@ -164,7 +222,7 @@ class SlopesController
 
         $allowed = ['name','polygon_points','holes','edge_types','element_kind','calc_mode','slope_angle','eave_side','ridge_side',
                     'laying_direction','eave_overhang','ridge_gap','sort_order','joint_y','round_step','layout_shift','split_forced','v_shift','rows_count',
-                    'material_profile_id','material_color','material_coating','material_thickness'];
+                    'material_profile_id','material_color','material_coating','material_thickness','sheet_edits'];
 
         foreach ($allowed as $f) {
             if (!array_key_exists($f, $body)) continue;
@@ -202,6 +260,10 @@ class SlopesController
             } elseif ($f === 'element_kind') {
                 $fields[] = "$f = ?";
                 $params[] = $body[$f] === 'facade' ? 'facade' : 'roof';
+            } elseif ($f === 'sheet_edits') {
+                $fields[] = "$f = ?";
+                $e = self::cleanSheetEdits($body[$f]);
+                $params[] = $e ? json_encode($e) : null;
             } elseif ($f === 'polygon_points') {
                 $fields[] = "$f = ?";
                 $params[] = json_encode($body[$f]);
@@ -215,13 +277,19 @@ class SlopesController
 
         // Скидаємо кешований результат при зміні геометрії або матеріалу
         // (назва, порядок і кут нахилу — «лише для специфікації» — укладку не змінюють)
-        if (array_diff(array_keys(array_intersect_key($body, array_flip($allowed))), ['name', 'sort_order', 'slope_angle'])) {
+        $changed = array_diff(array_keys(array_intersect_key($body, array_flip($allowed))), ['name', 'sort_order', 'slope_angle', 'sheet_edits']);
+        if ($changed) {
             $fields[] = 'calc_result = NULL';
             $fields[] = 'calc_at = NULL';
+            // зсув / ряди / контур / матеріал перебудовують укладку — ручні правки листів скидаються
+            if (!array_key_exists('sheet_edits', $body)) $fields[] = 'sheet_edits = NULL';
         }
 
         $params[] = $id;
         Database::query('UPDATE slopes SET ' . implode(', ', $fields) . ' WHERE id = ?', $params);
+
+        // ручні правки листів — одразу перераховуємо, щоб специфікація і підсумки їх враховували
+        if (array_key_exists('sheet_edits', $body) && !$changed) $this->calculateById($id);
 
         $slope = self::decodeSlope(Database::fetchOne('SELECT * FROM slopes WHERE id = ?', [$id]));
 
@@ -326,6 +394,9 @@ class SlopesController
         if (!empty($calcResult['errors'])) {
             return $calcResult;
         }
+
+        // Ручні правки листів з «Укладки» (довжина / положення / видалення)
+        $calcResult = self::applySheetEdits($calcResult, self::cleanSheetEdits(json_decode($slope['sheet_edits'] ?? 'null', true)));
 
         // Вирізи (труби, вікна): віднімаємо їх площу від площі ската
         if (!empty($slope['holes'])) {

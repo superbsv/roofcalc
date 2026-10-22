@@ -123,6 +123,7 @@ class Database
         self::ensureColumn('slopes', 'round_step', 'INT NULL');
         self::ensureColumn('slopes', 'layout_shift', 'INT NULL'); // зсув сітки колонок по горизонталі, мм
         self::ensureColumn('slopes', 'rows_count', 'INT NULL'); // ⇕ висота ряду: у скільки разів коротший за Lmax станд.
+        self::ensureColumn('slopes', 'sheet_edits', 'TEXT NULL'); // ручні правки листів у «Укладці»: {"кол:ряд": {len, y, del}}
         self::ensureColumn('slopes', 'v_shift', 'INT NULL'); // зсув листів по вертикалі (↑/↓), мм
         self::ensureColumn('slopes', 'split_forced', 'TINYINT NULL'); // стик рядів навіть коли скат вкривається одним листом // округлення довжин для ската (NULL — з матеріалу)
     }

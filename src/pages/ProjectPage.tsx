@@ -416,6 +416,11 @@ export default function ProjectPage({ projectId }: Props) {
     await calcSlope(active.id);
   });
 
+  // Ручні правки листів: зберігаємо на сервер (сервер одразу перераховує підсумки і специфікацію)
+  const saveEdits = (id: number, edits: NonNullable<Slope['sheet_edits']>) => run('edits', async () => {
+    await patchSlope(id, { sheet_edits: edits });
+  });
+
   const setSlopeK = (k: number) => active && run('calc', async () => {
     await patchSlope(active.id, { eave_overhang: k }, true); // схема не зникає під час перерахунку
     await calcSlope(active.id);
@@ -808,7 +813,8 @@ export default function ProjectPage({ projectId }: Props) {
                     jointY={res.joint_y_mm ?? null} jointRange={res.joint_range_mm ?? null} onJointChange={mm => setJoint(mm)}
                     jointStep={jointStep} shiftX={res.layout_shift_mm ?? 0} onShiftX={mm => setShift(mm)} onReset={resetLayout}
                     rowsDiv={res.rows_user ?? 0} rowLen={res.row_len_mm ?? 0} onRowsDiv={d => setRowsDiv(d)}
-                    vShift={res.v_shift_mm ?? 0} onVShift={mm => setVShift(mm)} waveStep={res.wave_step_mm ?? 0} />
+                    vShift={res.v_shift_mm ?? 0} onVShift={mm => setVShift(mm)} waveStep={res.wave_step_mm ?? 0}
+                    sheetEdits={active.sheet_edits} onEdits={e => saveEdits(active.id, e)} />
                   <div className="kp-infobar">
                     <dl>
                       <dt>Замовлення</dt><dd>№{settings.order_no} від {dateUa(settings.order_date)}</dd>

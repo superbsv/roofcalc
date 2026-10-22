@@ -197,6 +197,7 @@ export interface Slope {
   joint_y?: number | null;            // лінія стику рядів, мм (null — посередині)
   rows_count?: number | null;         // ⇕ висота ряду (дільник Lmax станд.), 0 — авто
   v_shift?: number | null;            // зсув листів по вертикалі, мм
+  sheet_edits?: SheetEdits | null;    // ручні правки листів у «Укладці»
   split_forced?: boolean | number | null; // стик на вимогу, навіть коли вистачає одного листа
   layout_shift?: number | null;       // зсув сітки колонок по горизонталі, мм
   round_step?: number | null;         // округлення довжин листів для ската, мм (null — з матеріалу)
@@ -244,6 +245,8 @@ export interface AccessoryType {
 export interface SheetGroup {
   length_mm: number; full_width_mm: number; count: number; full_area_m2: number;
 }
+
+export type SheetEdits = Record<string, { len?: number; y?: number; del?: boolean }>;
 
 export interface SheetPlacement {
   sheet_number: number; col_index: number; row_index: number;

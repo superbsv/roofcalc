@@ -68,6 +68,8 @@ interface Props {
   waveStep?: number;                            // крок хвилі — для ліній хвиль на листах
   onForceSplit?: (on: boolean) => void;         // додати / прибрати стик на вимогу
   onUpdate?: (placements: SheetPlacement[]) => void;
+  sheetEdits?: Record<string, { len?: number; y?: number; del?: boolean }> | null; // збережені ручні правки
+  onEdits?: (edits: Record<string, { len?: number; y?: number; del?: boolean }>) => void; // зберегти правки (на сервер)
 }
 
 // Кольори беруться з теми ABT (CSS-змінні працюють і для SVG-атрибутів)
@@ -248,7 +250,7 @@ function sheetState(x: number, y: number, len: number, usefulWidth: number, poly
   return 'full';
 }
 
-export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset, splitForced = false, onForceSplit, rowsDiv = 0, rowLen = 0, onRowsDiv, vShift = 0, onVShift, waveStep = 0 }: Props) {
+export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset, splitForced = false, onForceSplit, rowsDiv = 0, rowLen = 0, onRowsDiv, vShift = 0, onVShift, waveStep = 0, sheetEdits, onEdits }: Props) {
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
 
@@ -292,12 +294,36 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   const [panelPos, setPanelPos] = useState({ x: 20, y: 140 });
   const panelDrag = useRef<{startX:number;startY:number;startPX:number;startPY:number}|null>(null);
 
+  // ---- Збереження ручних правок листів (щоб не губились при переході на інший скат) ----
+  const dirty = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editsRef = useRef(sheetEdits); editsRef.current = sheetEdits;
+  const markDirty = () => { dirty.current = true; };
   useEffect(() => {
+    if (!dirty.current || !onEdits) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const base = new Map(calcResult.placements.map(p => [`${p.col_index}:${p.row_index}`, p]));
+      const map: Record<string, { len?: number; y?: number; del?: boolean }> = { ...(editsRef.current || {}) };
+      placements.forEach(p => {
+        const k = `${p.col_index}:${p.row_index}`, b = base.get(k);
+        if (p.deleted) { map[k] = { del: true }; return; }
+        const len = Math.round(p.manual_length ?? p.length), y = Math.round(p.y + (p.offset_y ?? 0));
+        if (!b || len !== Math.round(b.length) || y !== Math.round(b.y)) map[k] = { len, y };
+      });
+      dirty.current = false;
+      onEdits(map);
+    }, 500);
+  }, [placements]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
+
+  useEffect(() => {
+    if (dirty.current) return;              // поки є незбережені правки — не перезаписуємо їх
     setPlacements(calcResult.placements.map(p => ({ ...p })));
     setLayoutOffset(0);
     setVerticalOffset(0);
     setManualMode(false);
-    setSelected(new Set());
+    setSelected(sel => new Set(Array.from(sel).filter(n => calcResult.placements.some(p => p.sheet_number === n))));
   }, [calcResult]);
 
   // Рамка схеми залежить лише від контуру ската (з постійним запасом під листи) — при зсувах ←/→ ↑/↓
@@ -371,6 +397,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const changeLengthWithJoint = useCallback((deltaMm: number) => {
     setManualMode(true);
+    markDirty();
     setPlacements(prev => {
       const next = prev.map(p => ({ ...p }));
       const byNum = new Map(next.map(p => [p.sheet_number, p]));
@@ -415,6 +442,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   // Змінити довжину виділених листів ЗВЕРХУ (верхній край рухається)
   const changeLengthTop = useCallback((deltaMm: number) => {
     setManualMode(true);
+    markDirty();
     setPlacements(prev => {
       const next = prev.map(p => ({ ...p }));
       selected.forEach(num => {
@@ -441,6 +469,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   // Змінити довжину виділених листів ЗНИЗУ (нижній край рухається)
   const changeLengthBottom = useCallback((deltaMm: number) => {
     setManualMode(true);
+    markDirty();
     setPlacements(prev => {
       const next = prev.map(p => ({ ...p }));
       selected.forEach(num => {
@@ -473,6 +502,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const moveJointVertical = useCallback((deltaMm: number) => {
     setManualMode(true);
+    markDirty();
     setPlacements(prev => {
       const next = prev.map(p => ({ ...p }));
 
@@ -511,6 +541,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   }, [selected, onUpdate]);
 
   const deleteSelected = () => {
+    markDirty();
     setPlacements(prev => {
       const updated = prev.map(p => selected.has(p.sheet_number) ? { ...p, deleted: true } : p);
       onUpdate?.(updated.filter(p => !p.deleted));
