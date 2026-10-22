@@ -15,10 +15,11 @@ import {
   Project, ProjectSettings, Slope, MaterialProfile, Point, EdgeType, CalcMode, AccessoryType,
   projectsApi, slopesApi, materialsApi, specApi, SpecItem, clientsApi, Client, downloadProjectFile,
 } from '../api/client';
-import { EDGE_TYPES, autoEdgeTypes, edgeColor, sideLengthMm, rectHole, mirrorElement, setSideLength } from '../components/roof/edges';
+import { EDGE_TYPES, autoEdgeTypes, edgeColor, sideLengthMm, mirrorElement, setSideLength, HOLE_SHAPES, HoleShape, holeShape, holeValid } from '../components/roof/edges';
 import { useTheme } from '../components/theme/theme';
 import { CALC_TYPES, calcTypeInfo } from '../components/roof/calcTypes';
 import LibraryPicker from '../components/catalog/LibraryPicker';
+import { t } from '../i18n/i18n';
 import ManufacturerSelect from '../components/catalog/ManufacturerSelect';
 import { specToPdf, specToExcel } from '../components/spec/specExport';
 import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter, templateNums } from '../components/roof/templates';
@@ -83,7 +84,9 @@ export default function ProjectPage({ projectId }: Props) {
   const [error, setError] = useState('');
   const [editorRev, setEditorRev] = useState(0);
   const [cutouts, setCutouts] = useState(false);
-  const [hole, setHole] = useState({ x: '1.000', y: '1.000', w: '0.600', h: '0.600' });
+  const [hole, setHole] = useState<Record<string, string>>({ x: '1.000', y: '1.000', w: '0.600', h: '0.600' });
+  const [holeKind, setHoleKind] = useState<HoleShape>('rect');
+  const [optMsg, setOptMsg] = useState('');
   const [tpl, setTpl] = useState<{ t: Template; v: Record<string, string> } | null>(null);
   const [tplFocus, setTplFocus] = useState<string | null>(null);
   const [matEdit, setMatEdit] = useState<{ mode: 'new' | 'edit' | 'copy'; draft: MaterialProfile } | null>(null);
@@ -320,10 +323,12 @@ export default function ProjectPage({ projectId }: Props) {
   };
 
   const addHole = () => active && run('hole', async () => {
-    const mm = (v: string) => Math.round(parseFloat(v.replace(',', '.')) * 1000) || 0;
-    const w = mm(hole.w), h = mm(hole.h);
-    if (w <= 0 || h <= 0) return;
-    await patchSlope(active.id, { holes: [...holes, rectHole(mm(hole.x), mm(hole.y), w, h)] });
+    const mm = (v?: string) => Math.round(parseFloat(String(v ?? '').replace(',', '.')) * 1000) || 0;
+    const def = HOLE_SHAPES.find(x => x.key === holeKind)!;
+    const v: Record<string, number> = {};
+    def.fields.forEach(f => { v[f.k] = mm(hole[f.k] ?? f.def); });
+    if (!holeValid(holeKind, v)) throw new Error('Перевірте розміри вирізу');
+    await patchSlope(active.id, { holes: [...holes, holeShape(holeKind, mm(hole.x), mm(hole.y), v)] });
     setEditorRev(x => x + 1);
   });
   const removeHole = (i: number) => active && run('hole', async () => {
@@ -443,6 +448,16 @@ export default function ProjectPage({ projectId }: Props) {
   // Ручні правки листів: зберігаємо на сервер (сервер одразу перераховує підсумки і специфікацію)
   const saveEdits = (id: number, edits: NonNullable<Slope['sheet_edits']>) => run('edits', async () => {
     await patchSlope(id, { sheet_edits: edits });
+  });
+
+  // Оптимізація укладки: підбір зсуву сітки з найменшою витратою (з урахуванням вирізів)
+  const optimize = () => active && run('calc', async () => {
+    const r = await slopesApi.optimize(active.id);
+    setSlopes(prev => prev.map(x => x.id === active.id ? { ...x, calc_result: r.result, layout_shift: r.layout_shift, sheet_edits: null } : x));
+    setOptMsg(r.improved
+      ? t(`Оптимізовано: ${f2(r.before_m, 2)} → ${f2(r.after_m, 2)} п.м. (економія ${f2(r.before_m - r.after_m, 2)} п.м.)`)
+      : t('Поточна укладка вже найекономніша'));
+    setTimeout(() => setOptMsg(''), 8000);
   });
 
   const setSlopeK = (k: number) => active && run('calc', async () => {
@@ -737,13 +752,28 @@ export default function ProjectPage({ projectId }: Props) {
                       </tbody>
                     </table>
                   ) : <div className="text-xs text-muted">Вирізів немає.</div>}
+                  <div className="kp-hole-kinds" role="radiogroup" aria-label="Форма вирізу">
+                    {HOLE_SHAPES.map(k => (
+                      <button key={k.key} type="button" role="radio" aria-checked={holeKind === k.key} title={k.label}
+                        className={`kp-hole-kind${holeKind === k.key ? ' on' : ''}`} onClick={() => setHoleKind(k.key)}>
+                        <svg viewBox="0 0 40 30" width="40" height="30" aria-hidden="true">
+                          {k.key === 'rect' && <rect x="8" y="5" width="24" height="20" />}
+                          {k.key === 'circle' && <circle cx="20" cy="15" r="10" />}
+                          {k.key === 'triangle' && <path d="M6 26 H34 L20 4 Z" />}
+                          {k.key === 'trapezoid' && <path d="M5 25 H35 L27 6 H13 Z" />}
+                          {k.key === 'dormer' && <path d="M9 27 H31 V13 L20 4 L9 13 Z" />}
+                        </svg>
+                        <span>{k.label}</span>
+                      </button>
+                    ))}
+                  </div>
                   <div className="kp-holeform">
-                    {([['x', 'X лів. краю'], ['y', 'Y низу'], ['w', 'Ширина'], ['h', 'Висота']] as [keyof typeof hole, string][]).map(([k, l]) => (
-                      <label key={k}>{l}, м<input className="form-control" inputMode="decimal" value={hole[k]} onChange={e => setHole(v => ({ ...v, [k]: e.target.value }))} /></label>
+                    {[{ k: 'x', label: 'X лів. краю', def: '1.000' }, { k: 'y', label: 'Y низу', def: '1.000' }, ...HOLE_SHAPES.find(x => x.key === holeKind)!.fields].map(f => (
+                      <label key={f.k}>{f.label}, м<input className="form-control" inputMode="decimal" value={hole[f.k] ?? f.def} onChange={e => setHole(v => ({ ...v, [f.k]: e.target.value }))} /></label>
                     ))}
                   </div>
                   <button className="btn btn-secondary btn-sm" onClick={addHole} style={{ width: '100%' }}>Додати виріз</button>
-                  <div className="text-xs text-muted" style={{ marginTop: 6 }}>Вирізи не мають виходити за скат і перетинатися.</div>
+                  <div className="text-xs text-muted" style={{ marginTop: 6 }}>X, Y — лівий нижній кут габариту вирізу від лівого нижнього кута ската. Вирізи не мають виходити за скат і перетинатися. Листи над вирізом на всю ширину розриваються (економія), інші — вирізаються при монтажі.</div>
                 </>
               ) : (
                 <>
@@ -825,6 +855,7 @@ export default function ProjectPage({ projectId }: Props) {
                 <div className="alert alert-error">{res.errors.map((e, i) => <div key={i}>{e}</div>)}</div>
               ) : (
                 <>
+                  {optMsg && <div className="alert alert-success">{optMsg}</div>}
                   {res.warnings?.map((w, i) => <div key={i} className="alert alert-warning">{w}</div>)}
                   <LayoutScheme calcResult={res as any} polygonPoints={pts} holes={holes} slopeName={active.name}
                     jointY={res.joint_y_mm ?? null} jointRange={res.joint_range_mm ?? null} onJointChange={mm => setJoint(mm)}
@@ -832,7 +863,7 @@ export default function ProjectPage({ projectId }: Props) {
                     rowsDiv={res.rows_user ?? 0} rowLen={res.row_len_mm ?? 0} onRowsDiv={d => setRowsDiv(d)}
                     vShift={res.v_shift_mm ?? 0} onVShift={mm => setVShift(mm)} waveStep={res.wave_step_mm ?? 0}
                     sheetEdits={active.sheet_edits} onEdits={e => saveEdits(active.id, e)}
-                    shiftPanelTarget={shiftHost}
+                    shiftPanelTarget={shiftHost} onOptimize={optimize}
                     overlay={<div className="ls-sides">
                       {pts.map((a, i) => (
                         <span key={i} className="ls-side"><b>{sideLetter(i)}</b> = {m3(sideLengthMm(a, pts[(i + 1) % pts.length]))} <em>{doborLabel(edgeTypes[i])}</em></span>

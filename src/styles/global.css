@@ -1655,3 +1655,32 @@ tr:hover td { background: var(--clr-surface-2); }
 .ls-sides { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--clr-surface) 88%, transparent); border: 1px solid var(--clr-border); font-family: var(--font-mono); font-size: .8rem; color: var(--clr-text); pointer-events: auto; }
 .ls-side b { color: var(--clr-text); } .ls-side em { font-style: normal; color: var(--clr-text-3); }
 @media print { .ls-overlay { position: static; margin-top: 6px; } }
+.kp-hole-kinds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 8px 0 4px; }
+.kp-hole-kind { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px; border: 1px solid var(--clr-border); border-radius: 6px; background: var(--clr-surface); color: var(--clr-text-2); font: inherit; font-size: .62rem; line-height: 1.15; cursor: pointer; text-align: center; }
+.kp-hole-kind svg { fill: var(--clr-brand-pale); stroke: var(--clr-text-2); stroke-width: 1.5; }
+.kp-hole-kind.on { border-color: var(--clr-brand); color: var(--clr-text); background: var(--clr-brand-pale); }
+.kp-hole-kind.on svg { stroke: var(--clr-brand); }
+.ls-opt { width: 100%; justify-content: center; margin-bottom: 4px; }
+
+/* ===== Бічне меню: яскраві сучасні кнопки (іконка в кольоровій плитці, активний пункт — градієнт бренду) ===== */
+.sidebar { padding: 14px 10px; }
+.sidebar-title { padding: 0 8px 8px; }
+.sidebar-item { border-left: 0; border-radius: 12px; margin: 2px 0; padding: 8px 10px; gap: 12px; font-weight: 600; color: var(--clr-text);
+  transition: background .18s, color .18s, transform .18s, box-shadow .18s; }
+.sidebar-item svg { width: 32px; height: 32px; padding: 7px; border-radius: 10px; flex-shrink: 0; color: #fff;
+  background: linear-gradient(135deg, var(--ic1, #FF8A1F), var(--ic2, #FF5E00)); box-shadow: 0 4px 10px -4px var(--ic2, #FF5E00); transition: transform .18s; }
+.sidebar-section > .sidebar-item:nth-of-type(6n+1) { --ic1: #FF9A3C; --ic2: #FF5E00; }
+.sidebar-section > .sidebar-item:nth-of-type(6n+2) { --ic1: #4FA3FF; --ic2: #2563EB; }
+.sidebar-section > .sidebar-item:nth-of-type(6n+3) { --ic1: #A78BFA; --ic2: #7C3AED; }
+.sidebar-section > .sidebar-item:nth-of-type(6n+4) { --ic1: #2DD4BF; --ic2: #0D9488; }
+.sidebar-section > .sidebar-item:nth-of-type(6n+5) { --ic1: #4ADE80; --ic2: #16A34A; }
+.sidebar-section > .sidebar-item:nth-of-type(6n+6) { --ic1: #F472B6; --ic2: #DB2777; }
+.sidebar-item:hover { background: var(--clr-surface-2); color: var(--clr-text); transform: translateX(2px); }
+.sidebar-item:hover svg { transform: scale(1.06); }
+.sidebar-item.active { color: #fff; background: linear-gradient(135deg, #FF8A1F 0%, #FF5E00 100%); box-shadow: 0 8px 20px -10px rgba(255, 94, 0, .9); }
+.sidebar-item.active svg { background: rgba(255,255,255,.22); box-shadow: none; }
+.sidebar-item.active:hover { transform: none; }
+/* підпункти каталогу — без плиток, компактні «пігулки» */
+.catnav .sidebar-item { font-weight: 500; padding: 7px 12px; color: var(--clr-text-2); }
+.catnav .sidebar-item.active { color: #fff; }
+.catnav .sidebar-item.active .catnav-cnt { color: rgba(255,255,255,.85); }

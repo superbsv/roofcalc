@@ -111,6 +111,7 @@ try {
         case $method==='GET' &&preg_match('#^/projects/(\d+)/slopes$#',$uri,$m): (new SlopesController)->index((int)$m[1]); break;
         case $method==='POST'&&preg_match('#^/projects/(\d+)/slopes$#',$uri,$m): (new SlopesController)->create((int)$m[1]); break;
         case $method==='PUT' &&preg_match('#^/slopes/(\d+)$#',$uri,$m): (new SlopesController)->update((int)$m[1]); break;
+        case $method==='POST'&&preg_match('#^/slopes/(\d+)/optimize$#',$uri,$m): (new SlopesController)->optimize((int)$m[1]); break;
         case $method==='DELETE'&&preg_match('#^/slopes/(\d+)$#',$uri,$m): (new SlopesController)->delete((int)$m[1]); break;
         case $method==='POST'&&preg_match('#^/slopes/(\d+)/calculate$#',$uri,$m): (new SlopesController)->calculate((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/slopes/(\d+)/layout$#',$uri,$m): (new SlopesController)->layout((int)$m[1]); break;

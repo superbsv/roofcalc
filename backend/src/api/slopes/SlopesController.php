@@ -305,6 +305,38 @@ class SlopesController
         $this->json(['message' => 'Скат видалено']);
     }
 
+    // POST /api/slopes/{id}/optimize — підбір зсуву сітки листів з найменшою витратою матеріалу
+    // (з урахуванням вирізів: колонки, що повністю потрапляють у виріз, розриваються навколо нього)
+    public function optimize(int $id): void
+    {
+        $user = $this->requireAuth();
+        $slope = $this->findSlope($id, $user);
+        $mp = Database::fetchOne('SELECT useful_width FROM material_profiles WHERE id = ?', [(int)$slope['material_profile_id']]);
+        if (!$mp) $this->error('Не вибрано матеріал для ската');
+        $uw = max(100, (int)$mp['useful_width']);
+        $cur = (int)($slope['layout_shift'] ?? 0);
+        $best = null;
+        $score = function (array $r) { return [(float)($r['running_m'] ?? 1e9), (int)($r['total_sheets'] ?? 1e6)]; };
+        $base = $this->calculateById($id, ['layout_shift' => $cur], true);
+        if (!empty($base['errors'])) $this->error(implode('; ', $base['errors']));
+        [$m0, $n0] = $score($base);
+        $step = $uw > 400 ? 10 : 5;
+        for ($sh = -intdiv($uw, 2); $sh <= intdiv($uw, 2); $sh += $step) {
+            $r = $this->calculateById($id, ['layout_shift' => $sh, 'joint_y' => $slope['joint_y']], true);
+            if (!empty($r['errors'])) continue;
+            [$m, $n] = $score($r);
+            if ($best === null || $m < $best[1] - 0.0005 || (abs($m - $best[1]) <= 0.0005 && ($n < $best[2] || ($n === $best[2] && abs($sh) < abs($best[0]))))) $best = [$sh, $m, $n];
+        }
+        if ($best === null) $this->error('Не вдалося підібрати укладку');
+        $improved = $best[1] < $m0 - 0.0005 || ($best[1] <= $m0 + 0.0005 && $best[2] < $n0);
+        if ($improved) {
+            Database::query('UPDATE slopes SET layout_shift = ?, sheet_edits = NULL WHERE id = ?', [$best[0] === 0 ? null : $best[0], $id]);
+        }
+        $result = $this->calculateById($id);
+        $this->json(['result' => $result, 'improved' => $improved, 'before_m' => round($m0, 3), 'after_m' => round($improved ? $best[1] : $m0, 3),
+            'before_sheets' => $n0, 'after_sheets' => $improved ? $best[2] : $n0, 'layout_shift' => $improved ? $best[0] : $cur]);
+    }
+
     // POST /api/slopes/{id}/calculate
     public function calculate(int $id): void
     {
@@ -317,7 +349,7 @@ class SlopesController
     // ============================================
     // Внутрішній метод розрахунку (викликається і з ProjectsController)
     // ============================================
-    public function calculateById(int $id): array
+    public function calculateById(int $id, array $override = [], bool $dryRun = false): array
     {
         $slope = Database::fetchOne(
             'SELECT s.*, mp.*,
@@ -327,6 +359,7 @@ class SlopesController
              WHERE s.id = ?',
             [$id]
         );
+        if ($slope && $override) $slope = array_merge($slope, $override);
 
         if (!$slope) return ['errors' => ['Скат не знайдено']];
 
@@ -396,6 +429,7 @@ class SlopesController
         if (!empty($calcResult['errors'])) {
             return $calcResult;
         }
+        if ($dryRun) return $calcResult;   // пробний розрахунок (оптимізація) — без збереження
 
         // Ручні правки листів з «Укладки» (довжина / положення / видалення)
         $calcResult = self::applySheetEdits($calcResult, self::cleanSheetEdits(json_decode($slope['sheet_edits'] ?? 'null', true)));

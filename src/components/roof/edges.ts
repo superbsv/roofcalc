@@ -153,3 +153,29 @@ export function setVertexAngle(pts: Point[], i: number, deg: number): Point[] {
   }
   return out;
 }
+
+// ---------- Вирізи: типові фігури (мм, від лівого нижнього кута габариту) ----------
+export type HoleShape = 'rect' | 'circle' | 'triangle' | 'trapezoid' | 'dormer';
+export const HOLE_SHAPES: { key: HoleShape; label: string; fields: { k: string; label: string; def: string }[] }[] = [
+  { key: 'rect', label: 'Прямокутник', fields: [{ k: 'w', label: 'Ширина', def: '0.600' }, { k: 'h', label: 'Висота', def: '0.600' }] },
+  { key: 'circle', label: 'Коло (труба)', fields: [{ k: 'd', label: 'Діаметр', def: '0.200' }] },
+  { key: 'triangle', label: 'Трикутник', fields: [{ k: 'w', label: 'Основа', def: '2.000' }, { k: 'h', label: 'Висота', def: '1.200' }] },
+  { key: 'trapezoid', label: 'Трапеція', fields: [{ k: 'w', label: 'Низ', def: '2.000' }, { k: 'w2', label: 'Верх', def: '1.000' }, { k: 'h', label: 'Висота', def: '1.000' }] },
+  { key: 'dormer', label: "Слухове вікно (п'ятикутник)", fields: [{ k: 'w', label: 'Ширина', def: '1.500' }, { k: 'h', label: 'Висота стінки', def: '1.000' }, { k: 'h2', label: 'Висота до гребеня', def: '1.600' }] },
+];
+export function holeShape(shape: HoleShape, x: number, y: number, v: Record<string, number>): Point[] {
+  const { w = 0, h = 0, w2 = 0, d = 0, h2 = 0 } = v;
+  switch (shape) {
+    case 'circle': {
+      const r = d / 2, cx = x + r, cy = y + r, n = 16;
+      return Array.from({ length: n }, (_, i) => [Math.round(cx + r * Math.cos(-Math.PI / 2 + i * 2 * Math.PI / n)), Math.round(cy + r * Math.sin(-Math.PI / 2 + i * 2 * Math.PI / n))] as Point);
+    }
+    case 'triangle': return [[x, y], [x + w, y], [Math.round(x + w / 2), y + h]];
+    case 'trapezoid': { const o = Math.round((w - w2) / 2); return [[x, y], [x + w, y], [x + w - o, y + h], [x + o, y + h]]; }
+    case 'dormer': return [[x, y], [x + w, y], [x + w, y + h], [Math.round(x + w / 2), y + Math.max(h, h2)], [x, y + h]];
+    default: return rectHole(x, y, w, h);
+  }
+}
+/** Розміри фігури коректні? */
+export const holeValid = (shape: HoleShape, v: Record<string, number>) =>
+  shape === 'circle' ? v.d > 0 : shape === 'trapezoid' ? v.w > 0 && v.w2 > 0 && v.w2 <= v.w && v.h > 0 : v.w > 0 && v.h > 0;

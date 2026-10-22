@@ -270,6 +270,7 @@ export interface AccessoryItem {
 }
 
 export const slopesApi = {
+  optimize: (id: number) => post<{ result: CalcResult; improved: boolean; before_m: number; after_m: number; before_sheets: number; after_sheets: number; layout_shift: number }>(`/slopes/${id}/optimize`, {}),
   list:      (projectId: number)             => get<{ slopes: Slope[] }>(`/projects/${projectId}/slopes`),
   create:    (projectId: number, body: Partial<Slope>) =>
     post<{ slope: Slope }>(`/projects/${projectId}/slopes`, body),

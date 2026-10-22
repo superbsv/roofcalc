@@ -182,9 +182,20 @@ class SheetLayoutEngine
             if ($x >= $bbox['maxX'] || $x + $uw <= $bbox['minX']) continue;
             $r = $this->columnRange($x, $x + $this->usefulWidth);
             if ($r === null) continue;
-            $need = ($r[1] - $r[0]) + $this->k - $this->pk + $vshift;
-            if ($need <= 0) continue;
-            $columns[] = ['col' => $c, 'x' => $x, 'bottom' => $r[0] - $this->k - $vshift, 'need' => $need];
+            // Вирізи, що перекривають колонку на всю ширину, розривають її: лист знизу закінчується біля вирізу,
+            // лист зверху починається над ним (економія матеріалу). Вирізи, що закривають колонку лише частково,
+            // перекриваються листом — його вирізають при монтажі.
+            $gaps = $this->blockingGaps($x, $x + $this->usefulWidth, $r[0], $r[1]);
+            $segs = []; $from = $r[0];
+            foreach ($gaps as [$g0, $g1]) { $segs[] = [$from, $g0]; $from = $g1; }
+            $segs[] = [$from, $r[1]];
+            $last = count($segs) - 1;
+            foreach ($segs as $si => [$s0, $s1]) {
+                $isFirst = $si === 0; $isLast = $si === $last;
+                $need = ($s1 - $s0) + ($isFirst ? $this->k + $vshift : 0) - ($isLast ? $this->pk : 0);
+                if ($need <= 0) continue;
+                $columns[] = ['col' => $c, 'x' => $x, 'bottom' => $s0 - ($isFirst ? $this->k + $vshift : 0), 'need' => $need, 'seg' => $si];
+            }
         }
 
         // 2. Довжини листів у кожній колонці (знизу вгору)
@@ -207,7 +218,7 @@ class SheetLayoutEngine
                 $cover = $this->coveredArea($col['x'], $y, $this->usefulWidth, $len);
                 if ($cover > 1.0) {
                     $placements[] = [
-                        'sheet_number' => $num++, 'col_index' => $col['col'], 'row_index' => $row,
+                        'sheet_number' => $num++, 'col_index' => $col['col'], 'row_index' => $row + 100 * ($col['seg'] ?? 0),
                         'x' => (int)$col['x'], 'y' => (int)$y,
                         'full_width' => $this->fullWidth, 'useful_width' => $this->usefulWidth, 'length' => $len,
                         'lap' => $rtl ? 'left' : 'right', // бік, куди виходить нахлест (повна ширина − корисна)
@@ -717,6 +728,40 @@ class SheetLayoutEngine
         if (count($ys) < 2) return null;
         $lo = (int)floor(min($ys)); $hi = (int)ceil(max($ys));
         return $hi - $lo > 0 ? [$lo, $hi] : null;
+    }
+
+    // Ділянки по висоті, де виріз закриває колонку [x0, x1] на всю ширину (мм), лише ≥ 300 мм
+    private function blockingGaps(float $x0, float $x1, int $lo, int $hi): array
+    {
+        $gaps = [];
+        foreach ($this->holes as $hole) {
+            if (!is_array($hole) || count($hole) < 3) continue;
+            $hx = array_column($hole, 0);
+            if (min($hx) > $x0 + 0.5 || max($hx) < $x1 - 0.5) continue;      // виріз не перекриває всю ширину колонки
+            $bot = -INF; $top = INF; $ok = true;
+            foreach ([$x0 + 0.5, ($x0 + $x1) / 2, $x1 - 0.5] as $x) {
+                $ys = [];
+                $n = count($hole);
+                for ($i = 0; $i < $n; $i++) {
+                    [$ax, $ay] = $hole[$i]; [$bx, $by] = $hole[($i + 1) % $n];
+                    if ($ax == $bx || $x < min($ax, $bx) || $x > max($ax, $bx)) continue;
+                    $ys[] = $ay + ($x - $ax) / ($bx - $ax) * ($by - $ay);
+                }
+                if (count($ys) < 2) { $ok = false; break; }
+                $bot = max($bot, min($ys)); $top = min($top, max($ys));
+            }
+            if (!$ok || $top - $bot < 300) continue;
+            $g0 = (int)ceil($bot); $g1 = (int)floor($top);
+            if ($g0 <= $lo || $g1 >= $hi) continue;                            // виріз біля карниза / гребеня — не розриваємо
+            $gaps[] = [$g0, $g1];
+        }
+        usort($gaps, function ($a, $b) { return $a[0] <=> $b[0]; });
+        $out = [];
+        foreach ($gaps as $g) {
+            if ($out && $g[0] <= $out[count($out) - 1][1]) $out[count($out) - 1][1] = max($out[count($out) - 1][1], $g[1]);
+            else $out[] = $g;
+        }
+        return $out;
     }
 
     private function coveredArea(float $x, float $y, int $w, int $h): float

@@ -73,6 +73,7 @@ interface Props {
   onEdits?: (edits: Record<string, { len?: number; y?: number; del?: boolean }>) => void; // зберегти правки (на сервер)
   shiftPanelTarget?: HTMLElement | null;   // куди винести панель зсувів (бічна панель «Укладки»)
   overlay?: React.ReactNode;               // підписи під кресленням (розміри сторін)
+  onOptimize?: () => void;                 // підібрати укладку з найменшою витратою
 }
 
 // Кольори беруться з теми ABT (CSS-змінні працюють і для SVG-атрибутів)
@@ -253,7 +254,7 @@ function sheetState(x: number, y: number, len: number, usefulWidth: number, poly
   return 'full';
 }
 
-export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset, splitForced = false, onForceSplit, rowsDiv = 0, rowLen = 0, onRowsDiv, vShift = 0, onVShift, waveStep = 0, sheetEdits, onEdits, shiftPanelTarget, overlay }: Props) {
+export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset, splitForced = false, onForceSplit, rowsDiv = 0, rowLen = 0, onRowsDiv, vShift = 0, onVShift, waveStep = 0, sheetEdits, onEdits, shiftPanelTarget, overlay, onOptimize }: Props) {
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
 
@@ -709,6 +710,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
         const arrows = (ch: string, n: number) => ch.repeat(n);
         const panel = (
           <div className="ls-shift">
+            {onOptimize && <button type="button" className="btn btn-primary btn-sm ls-opt" onClick={onOptimize}
+              title="Підібрати зсув листів з найменшою витратою матеріалу (з урахуванням вирізів)">⚡ Оптимізувати укладку</button>}
             <div className="ls-shift-h">По горизонталі</div>
             <div className="ls-shift-row">
               {[...STEPS].reverse().map((st, i) => (
