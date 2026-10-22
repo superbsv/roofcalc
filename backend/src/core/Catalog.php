@@ -32,24 +32,41 @@ class Catalog
     // Розділи каталогу (структура «Каталогу продукції»): назва, порядок і тип розрахунку
     private static function ensureSections(): void
     {
-        $db = Database::connection();
-        $db->exec("CREATE TABLE IF NOT EXISTS catalog_sections (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(120) NOT NULL,
-            calc_type VARCHAR(32) NOT NULL,
-            sort_order INT NOT NULL DEFAULT 0,
-            created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
-        ) DEFAULT CHARSET=utf8mb4");
-        Database::ensureColumn('material_profiles', 'section_id', 'INT NULL');
-        if (!Database::fetchOne('SELECT id FROM catalog_sections LIMIT 1')) {
-            $i = 0;
-            foreach (self::DEFAULT_SECTIONS as $t => $n) {
-                Database::query('INSERT INTO catalog_sections (name, calc_type, sort_order) VALUES (?,?,?)', [$n, $t, ++$i * 10]);
+        try {
+            $db = Database::connection();
+            // Колація як у material_profiles — інакше MySQL падає на порівнянні «Illegal mix of collations»
+            $col = Database::fetchOne(
+                "SELECT COLLATION_NAME c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'material_profiles' AND COLUMN_NAME = 'type'"
+            )['c'] ?? 'utf8mb4_unicode_ci';
+            if (!preg_match('/^[a-z0-9_]+$/', $col)) $col = 'utf8mb4_unicode_ci';
+            $cs = explode('_', $col)[0];
+            $db->exec("CREATE TABLE IF NOT EXISTS catalog_sections (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(120) NOT NULL,
+                calc_type VARCHAR(32) NOT NULL,
+                sort_order INT NOT NULL DEFAULT 0,
+                created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
+            ) DEFAULT CHARSET=$cs COLLATE=$col");
+            $cur = Database::fetchOne(
+                "SELECT COLLATION_NAME c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'catalog_sections' AND COLUMN_NAME = 'calc_type'"
+            )['c'] ?? $col;
+            if ($cur !== $col) $db->exec("ALTER TABLE catalog_sections CONVERT TO CHARACTER SET $cs COLLATE $col");
+
+            Database::ensureColumn('material_profiles', 'section_id', 'INT NULL');
+            if (!Database::fetchOne('SELECT id FROM catalog_sections LIMIT 1')) {
+                $i = 0;
+                foreach (self::DEFAULT_SECTIONS as $t => $n) {
+                    Database::query('INSERT INTO catalog_sections (name, calc_type, sort_order) VALUES (?,?,?)', [$n, $t, ++$i * 10]);
+                }
             }
-        }
-        // матеріали без розділу — у перший розділ свого типу розрахунку
-        if (Database::fetchOne('SELECT id FROM material_profiles WHERE section_id IS NULL LIMIT 1')) {
-            Database::query('UPDATE material_profiles m SET m.section_id = (SELECT s.id FROM catalog_sections s WHERE s.calc_type = m.type ORDER BY s.sort_order, s.id LIMIT 1) WHERE m.section_id IS NULL');
+            // матеріали без розділу — у перший розділ свого типу розрахунку
+            if (Database::fetchOne('SELECT id FROM material_profiles WHERE section_id IS NULL LIMIT 1')) {
+                foreach (Database::fetchAll('SELECT id, calc_type FROM catalog_sections ORDER BY sort_order, id') as $sec) {
+                    Database::query('UPDATE material_profiles SET section_id = ? WHERE section_id IS NULL AND type = ?', [$sec['id'], $sec['calc_type']]);
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('ROOFKIT catalog sections: ' . $e->getMessage());   // не ламаємо вхід і решту сайту
         }
     }
 
