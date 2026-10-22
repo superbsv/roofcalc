@@ -96,6 +96,7 @@ export default function ProjectPage({ projectId }: Props) {
   const canEditThis = (m?: MaterialProfile) => !!m && canEditMaterials && (isOwn(m) || (isGlobal(m) && !!user?.is_superadmin && !user?.impersonating));
   const [clip, setClip] = useState<Slope | null>(null);
   const [libOpen, setLibOpen] = useState(false);
+  const [shiftHost, setShiftHost] = useState<HTMLDivElement | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; id: number } | null>(null);
   const [showExplorer, setShowExplorer] = useState(true);
   const [loaded, setLoaded] = useState(false);
@@ -813,22 +814,7 @@ export default function ProjectPage({ projectId }: Props) {
           <div className={`kp-slope${showExplorer ? ' with-explorer' : ''}`}>
             <aside className="kp-left">
               <div className="kp-h3">{active.name} · {slopeNo}</div>
-              {pts.map((a, i) => (
-                <div key={i} className="kp-side-ro"><b>{sideLetter(i)}</b> = {m3(sideLengthMm(a, pts[(i + 1) % pts.length]))} <span>{doborLabel(edgeTypes[i])}</span></div>
-              ))}
-              {holes.map((h, i) => {
-                const xs = h.map(p => p[0]), ys = h.map(p => p[1]);
-                return <div key={`h${i}`} className="kp-side-ro">Виріз №{i + 1}: {m3(Math.max(...xs) - Math.min(...xs))} × {m3(Math.max(...ys) - Math.min(...ys))}</div>;
-              })}
-              {res?.laid_by_length?.length ? (
-                <>
-                  <div className="kp-h3" style={{ marginTop: 12 }}>Довжини листів</div>
-                  <table className="kp-table">
-                    <thead><tr><th>L, м</th><th>шт</th></tr></thead>
-                    <tbody>{res.laid_by_length.map(g => <tr key={g.length_mm}><td>{m3(g.length_mm)}</td><td>{g.count}</td></tr>)}</tbody>
-                  </table>
-                </>
-              ) : null}
+              <div ref={setShiftHost} className="kp-shift-host" />
             </aside>
 
             <div className="kp-layout-main">
@@ -845,7 +831,17 @@ export default function ProjectPage({ projectId }: Props) {
                     jointStep={jointStep} shiftX={res.layout_shift_mm ?? 0} onShiftX={mm => setShift(mm)} onReset={resetLayout}
                     rowsDiv={res.rows_user ?? 0} rowLen={res.row_len_mm ?? 0} onRowsDiv={d => setRowsDiv(d)}
                     vShift={res.v_shift_mm ?? 0} onVShift={mm => setVShift(mm)} waveStep={res.wave_step_mm ?? 0}
-                    sheetEdits={active.sheet_edits} onEdits={e => saveEdits(active.id, e)} />
+                    sheetEdits={active.sheet_edits} onEdits={e => saveEdits(active.id, e)}
+                    shiftPanelTarget={shiftHost}
+                    overlay={<div className="ls-sides">
+                      {pts.map((a, i) => (
+                        <span key={i} className="ls-side"><b>{sideLetter(i)}</b> = {m3(sideLengthMm(a, pts[(i + 1) % pts.length]))} <em>{doborLabel(edgeTypes[i])}</em></span>
+                      ))}
+                      {holes.map((h, i) => {
+                        const xs = h.map(p => p[0]), ys = h.map(p => p[1]);
+                        return <span key={`h${i}`} className="ls-side">Виріз №{i + 1}: {m3(Math.max(...xs) - Math.min(...xs))} × {m3(Math.max(...ys) - Math.min(...ys))}</span>;
+                      })}
+                    </div>} />
                   <div className="kp-infobar">
                     <dl>
                       <dt>Замовлення</dt><dd>№{settings.order_no} від {dateUa(settings.order_date)}</dd>

@@ -1638,3 +1638,20 @@ tr:hover td { background: var(--clr-surface-2); }
 @media (max-width: 640px) { .house-body { padding: 4px 8px 12px; } }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .house-box .house3d { width: min(100%, calc(60vh * 4 / 3)); margin: 0 auto; }
+/* ===== Укладка: панель зсувів у бічній панелі, розміри сторін під кресленням ===== */
+.ls-shift { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.ls-shift-h { font-size: .78rem; font-weight: 700; color: var(--clr-text-2); margin-top: 6px; }
+.ls-shift-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.ls-shift-row:has(> :nth-child(6)) { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.ls-shift-col { display: flex; flex-direction: column; gap: 4px; }
+.ls-arr { height: 34px; padding: 0 2px; border: 1px solid var(--clr-border-dark); border-radius: 6px; background: var(--clr-surface-2); color: var(--clr-text); font-size: .62rem; letter-spacing: -2px; cursor: pointer; white-space: nowrap; }
+.ls-arr:hover { border-color: var(--clr-brand); color: var(--clr-brand); background: var(--clr-brand-pale); }
+.ls-arr:active { transform: translateY(1px); }
+.ls-row-btn { padding: 7px 8px; border: 1px solid var(--clr-border-dark); border-radius: 6px; background: var(--clr-surface-2); color: var(--clr-text); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.ls-row-btn:hover { border-color: var(--clr-brand); color: var(--clr-brand); }
+.ls-shift-legend { font-size: .7rem; color: var(--clr-text-3); }
+.ls-box { position: relative; }
+.ls-overlay { position: absolute; left: 12px; bottom: 12px; right: 12px; pointer-events: none; }
+.ls-sides { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--clr-surface) 88%, transparent); border: 1px solid var(--clr-border); font-family: var(--font-mono); font-size: .8rem; color: var(--clr-text); pointer-events: auto; }
+.ls-side b { color: var(--clr-text); } .ls-side em { font-style: normal; color: var(--clr-text-3); }
+@media print { .ls-overlay { position: static; margin-top: 6px; } }

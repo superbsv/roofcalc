@@ -64,8 +64,10 @@ export function BrandLogoFull({ width = 220 }: { width?: number }) {
       <Defs id={id} />
       <MarkPaths id={id} />
       <g fontFamily="Montserrat, Arial, Helvetica, sans-serif" fontWeight="900" fontSize="190" letterSpacing="-9">
-        <text x="85" y="640" fill={`url(#${id}silverText)`} stroke="#B5C3D1" strokeWidth="1.5">ROOF</text>
-        <text x="782" y="640" fill={`url(#${id}orangeText)`} stroke="#FF9B35" strokeWidth="1.5">KIT</text>
+        {/* одне слово ROOFKIT: KIT іде одразу за ROOF (без проміжку за будь-якого шрифту) */}
+        <text x="710" y="640" textAnchor="middle" strokeWidth="1.5">
+          <tspan fill={`url(#${id}silverText)`} stroke="#B5C3D1">ROOF</tspan><tspan fill={`url(#${id}orangeText)`} stroke="#FF9B35">KIT</tspan>
+        </text>
       </g>
     </svg>
   );

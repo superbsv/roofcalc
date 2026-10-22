@@ -8,6 +8,7 @@
 // ============================================
 
 import React, { useState, useRef, useCallback, useEffect, useMemo, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Point as ApiPoint } from '../../api/client';
 import { interiorAngles, fmtAngle } from '../roof/edges';
 
@@ -70,6 +71,8 @@ interface Props {
   onUpdate?: (placements: SheetPlacement[]) => void;
   sheetEdits?: Record<string, { len?: number; y?: number; del?: boolean }> | null; // збережені ручні правки
   onEdits?: (edits: Record<string, { len?: number; y?: number; del?: boolean }>) => void; // зберегти правки (на сервер)
+  shiftPanelTarget?: HTMLElement | null;   // куди винести панель зсувів (бічна панель «Укладки»)
+  overlay?: React.ReactNode;               // підписи під кресленням (розміри сторін)
 }
 
 // Кольори беруться з теми ABT (CSS-змінні працюють і для SVG-атрибутів)
@@ -250,7 +253,7 @@ function sheetState(x: number, y: number, len: number, usefulWidth: number, poly
   return 'full';
 }
 
-export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset, splitForced = false, onForceSplit, rowsDiv = 0, rowLen = 0, onRowsDiv, vShift = 0, onVShift, waveStep = 0, sheetEdits, onEdits }: Props) {
+export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset, splitForced = false, onForceSplit, rowsDiv = 0, rowLen = 0, onRowsDiv, vShift = 0, onVShift, waveStep = 0, sheetEdits, onEdits, shiftPanelTarget, overlay }: Props) {
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
 
@@ -701,41 +704,52 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
         💡 Клік — виділити лист · Shift+клік — додати · Тягни мишу — виділити область
       </div>
 
-      {/* Панель зсуву всієї розкладки */}
-      <div style={{ background:'var(--clr-surface)', border:'1px solid var(--clr-border)', borderRadius:'8px', padding:'10px 14px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
-          <span style={{ fontSize:'.82rem', fontWeight:600, color:'var(--clr-text-2)', whiteSpace:'nowrap' }}>По горизонталі:</span>
-          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-            {STEPS.map(s => (
-              <React.Fragment key={s.mm}>
-                <button onClick={()=>shiftLayout(-s.mm)} style={shiftBtn}>← {s.label}</button>
-                <button onClick={()=>shiftLayout(+s.mm)} style={shiftBtn}>→ {s.label}</button>
-              </React.Fragment>
-            ))}
+      {/* Панель зсуву всієї розкладки — у бічній панелі (стрілки як у «Кровля Профи»: ◀ 0.1 м, ◀◀ 0.01 м, ◀◀◀ 0.001 м) */}
+      {(() => {
+        const vertOk = !(onJointChange && jointY == null && !onVShift);
+        const arrows = (ch: string, n: number) => ch.repeat(n);
+        const panel = (
+          <div className="ls-shift">
+            <div className="ls-shift-h">По горизонталі</div>
+            <div className="ls-shift-row">
+              {[...STEPS].reverse().map((st, i) => (
+                <button key={'l' + st.mm} type="button" className="ls-arr" title={`← ${st.label}`} aria-label={`← ${st.label}`} onClick={() => shiftLayout(-st.mm)}>{arrows('◀', 3 - i)}</button>
+              ))}
+              {STEPS.map((st, i) => (
+                <button key={'r' + st.mm} type="button" className="ls-arr" title={`→ ${st.label}`} aria-label={`→ ${st.label}`} onClick={() => shiftLayout(+st.mm)}>{arrows('▶', i + 1)}</button>
+              ))}
+            </div>
+            <div className="ls-shift-h" title={onJointChange ? 'Рухає лінію стику рядів — усі листи ската діляться по ній' : undefined}>
+              {onJointChange && jointY != null ? 'Лінія стику' : 'По вертикалі'}</div>
+            {vertOk && (
+              <div className="ls-shift-col">
+                <div className="ls-shift-row">
+                  {STEPS.map((st, i) => (
+                    <button key={'u' + st.mm} type="button" className="ls-arr" title={`↑ ${st.label}`} aria-label={`↑ ${st.label}`} onClick={() => shiftVerticalLayout(+st.mm)}>{arrows('▲', i + 1)}</button>
+                  ))}
+                </div>
+                <div className="ls-shift-row">
+                  {STEPS.map((st, i) => (
+                    <button key={'d' + st.mm} type="button" className="ls-arr" title={`↓ ${st.label}`} aria-label={`↓ ${st.label}`} onClick={() => shiftVerticalLayout(-st.mm)}>{arrows('▼', i + 1)}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {onRowsDiv && (
+              <div className="ls-shift-col">
+                <button type="button" className="ls-row-btn" onClick={() => onRowsDiv(Math.max(2, rowsDiv + 1))}
+                  title="⇕ Коротший ряд: листи коротшають, з'являється розріз (як у Кровля Профи)">⇕ коротший ряд</button>
+                {rowsDiv >= 2 && <button type="button" className="ls-row-btn" onClick={() => onRowsDiv(rowsDiv - 1 < 2 ? 0 : rowsDiv - 1)} title="⇕ Довший ряд">⇕ довший ряд</button>}
+              </div>
+            )}
+            <div className="ls-shift-legend">◀ / ▲ — 0.1 м · ◀◀ — 0.01 м · ◀◀◀ — 0.001 м</div>
           </div>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
-          <span style={{ fontSize:'.82rem', fontWeight:600, color:'var(--clr-text-2)', whiteSpace:'nowrap' }}
-            title={onJointChange ? 'Рухає лінію стику рядів — усі листи ската діляться по ній' : undefined}>
-            {onJointChange && jointY != null ? 'Лінія стику:' : 'По вертикалі:'}</span>
-          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-            {onRowsDiv && <>
-              <button onClick={() => onRowsDiv(Math.max(2, rowsDiv + 1))} style={{ ...shiftBtn, fontWeight:700 }}
-                title="⇕ Коротший ряд: листи коротшають, з'являється розріз (як у Кровля Профи)">⇕ коротший ряд</button>
-              {rowsDiv >= 2 && <button onClick={() => onRowsDiv(rowsDiv - 1 < 2 ? 0 : rowsDiv - 1)} style={{ ...shiftBtn, fontWeight:700 }}
-                title="⇕ Довший ряд">⇕ довший ряд</button>}
-            </>}
-            {!(onJointChange && jointY == null && !onVShift) && STEPS.map(s => (
-              <React.Fragment key={s.mm}>
-                <button onClick={()=>shiftVerticalLayout(-s.mm)} style={shiftBtn}>↓ {s.label}</button>
-                <button onClick={()=>shiftVerticalLayout(+s.mm)} style={shiftBtn}>↑ {s.label}</button>
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-      </div>
+        );
+        return shiftPanelTarget ? createPortal(panel, shiftPanelTarget) : panel;
+      })()}
 
       {/* SVG */}
+      <div className="ls-box">
       <div ref={boxRef} style={{ overflowX:'auto', overflowY:'auto', maxHeight:'75vh', border:'1px solid var(--clr-border)', borderRadius:'8px', background:COLORS.bg }}>
         <svg ref={svgRef} viewBox={`0 0 ${SVG_W} ${SVG_H}`} overflow="hidden"
           style={{ display:'block', width:`${zoom*100}%`, height:'auto' }}
@@ -820,6 +834,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
             <text key={`ly${i}`} x={tx(vx0)-8} y={ty(i*1000)+3} textAnchor="end" fill="var(--clr-text-3)" fontSize="9">{i}</text>
           ))}
         </svg>
+      </div>
+      {overlay && <div className="ls-overlay">{overlay}</div>}
       </div>
 
       {/* Легенда */}
@@ -944,7 +960,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
 
 let savedZoom: number | null = null; // масштаб схеми на час сесії
 const zoomBtn: React.CSSProperties  = { padding:'4px 10px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', color:'var(--clr-text)' };
-const shiftBtn: React.CSSProperties = { padding:'5px 10px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', fontSize:'.78rem', fontWeight:500, color:'var(--clr-text)' };
 const lenBtn: React.CSSProperties   = { flex:1, padding:'7px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', color:'var(--clr-text)', fontWeight:600, fontSize:'.82rem' };
 
 function LegendItem({ color, label }: { color:string; label:string }) {
