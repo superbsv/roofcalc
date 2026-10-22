@@ -1532,3 +1532,105 @@ tr:hover td { background: var(--clr-surface-2); }
 .lib-meta { color: var(--clr-text-3); font-size: .75rem; white-space: nowrap; }
 @media (max-width: 640px) { .lib-tools { flex-direction: column; } .lib-tools select { max-width: none; } .lib-meta { display: none; } }
 .proj-head-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+/* ===== 3D-будинок на лендингу (з сайту-каталогу ABT) ===== */
+.land-house { flex: 1 1 520px; min-width: 0; max-width: 640px; --signal: var(--clr-brand); --r-l: 14px; }
+.swatch { margin-top: 10px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: var(--r-l); padding: 14px 16px; }
+.swatch__label { margin: 0 0 10px; font-weight: 700; font-size: 14px; }
+.swatch__list { display: flex; gap: 10px; flex-wrap: wrap; }
+.swatch__chip { width: 38px; height: 38px; border-radius: 50%; border: 2px solid rgba(255,255,255,.3); background: var(--c); box-shadow: inset 0 -8px 12px rgba(0,0,0,.25), inset 0 6px 10px rgba(255,255,255,.12); transition: transform .15s, border-color .15s; }
+.swatch__chip:hover { transform: translateY(-2px); }
+.swatch__chip[aria-checked="true"] { border-color: var(--signal); box-shadow: 0 0 0 3px rgba(255,122,0,.4), inset 0 -8px 12px rgba(0,0,0,.25); }
+.swatch__link { display: inline-flex; align-items: center; gap: 4px; margin-top: 12px; color: #fff; font-size: 14px; font-weight: 600; text-decoration: none; }
+.swatch__link:hover { color: var(--signal); }
+.swatch__link .ic { width: 16px; height: 16px; }
+.swatch__label { display: none; }
+.swatch__tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.swatch__tab { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: transparent; color: #d9d9d6; font-weight: 600; font-size: 13px; line-height: 1.2; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+.swatch__tab i { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(255,255,255,.35); transition: background .3s; }
+.swatch__tab:hover { border-color: rgba(255,255,255,.4); color: #fff; }
+.swatch__tab[aria-selected="true"] { background: var(--signal); border-color: var(--signal); color: #fff; }
+.swatch__tab[aria-selected="true"] i { box-shadow: 0 0 0 1.5px #fff; }
+.swatch__list { gap: 6px; }
+.swatch__chip { width: 27px; height: 27px; }
+.swatch__chip--wood { background: repeating-linear-gradient(92deg, rgba(0,0,0,.22) 0 1px, transparent 1px 4px), var(--c); }
+.swatch__link { flex-wrap: wrap; }
+.swatch__link b { color: var(--signal); font-weight: 700; }
+@media (max-width: 760px) {
+  .swatch__tab { padding: 5px 9px; font-size: 12px; }
+  .swatch__chip { width: 28px; height: 28px; }
+}
+/* hero: realistic 3D house (three.js) with a still poster until it is ready */
+.house3d { position: relative; aspect-ratio: 4 / 3; width: 100%; margin: -10px 0 -6px; }
+.house3d__poster, .house3d__canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.house3d__poster { object-fit: contain; transition: opacity .5s ease; }
+.house3d.is-ready .house3d__poster { opacity: 0; pointer-events: none; }
+.house3d__canvas { opacity: 0; transition: opacity .5s ease; }
+.house3d.is-ready .house3d__canvas { opacity: 1; }
+.house3d__hint { position: absolute; right: 8px; bottom: 14px; font-size: 12px; color: rgba(255,255,255,.75); background: rgba(0,0,0,.35); padding: 4px 10px; border-radius: 999px; opacity: 0; transition: opacity .4s; pointer-events: none; }
+@media (pointer: fine) {
+  .house3d.is-ready .house3d__canvas { cursor: grab; }
+  .house3d.is-ready .house3d__canvas:active { cursor: grabbing; }
+  .house3d.is-ready .house3d__hint { opacity: 1; }
+  .house3d.is-ready:hover .house3d__hint { opacity: 0; }
+}
+
+/* hero 3D house: round callouts with live close-ups of roof details */
+.house3d__callouts { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .5s .2s; }
+.house3d.is-ready .house3d__callouts { opacity: 1; }
+.house3d__lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.h3c__line { stroke: #fff; stroke-width: 1.5; stroke-opacity: .85; }
+.h3c__dot { fill: var(--signal); stroke: #fff; stroke-width: 2; }
+.h3c { position: absolute; width: var(--cs, 76px); transform: translate(-50%, calc(var(--cs, 76px) / -2)); text-align: center; }
+.h3c__img { display: block; width: var(--cs, 76px); height: var(--cs, 76px); border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 2px var(--signal), 0 10px 24px rgba(0,0,0,.45); background: #e9ebee; }
+.h3c__label { display: inline-block; margin-top: 6px; padding: 2px 9px; border-radius: 999px; background: rgba(15,15,15,.78); color: #fff; font-weight: 600; font-size: 12px; line-height: 1.35; white-space: nowrap; }
+.house3d { margin: 0 0 -6px; }
+@media (max-width: 760px) {
+  .h3c__img { border-width: 2px; }
+  .h3c__label { font-size: 10px; padding: 1px 6px; margin-top: 3px; }
+}
+@media (max-width: 560px) {
+  .h3c--l { text-align: left; }
+  .h3c--r { direction: rtl; text-align: right; }
+  .h3c--r .h3c__label { direction: ltr; unicode-bidi: isolate; }
+  .h3c__img { margin: 0 auto; }
+}
+
+/* hero configurator: product / finish switch, brick swatches, zoom controls */
+.swatch__panel[hidden], .swatch__list[hidden] { display: none; }
+.swatch__modes { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin: 0 0 12px; border-radius: 10px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); }
+.swatch__mode { padding: 7px 14px; border: 0; border-radius: 7px; background: transparent; color: #d9d9d6; font-weight: 700; font-size: 13px; line-height: 1.2; letter-spacing: .01em; cursor: pointer; transition: background .15s, color .15s; }
+.swatch__mode:hover { color: #fff; background: rgba(255,255,255,.08); }
+.swatch__mode[aria-checked="true"] { background: #fff; color: var(--graphite, #1a1a1a); }
+.swatch__chip--brick { background:
+  linear-gradient(rgba(255,255,255,.45) 0 0) 0 33% / 100% 1px no-repeat,
+  linear-gradient(rgba(255,255,255,.45) 0 0) 0 66% / 100% 1px no-repeat,
+  linear-gradient(90deg, transparent 49%, rgba(255,255,255,.45) 49% 52%, transparent 52%) 0 0 / 100% 33% no-repeat,
+  linear-gradient(90deg, transparent 24%, rgba(255,255,255,.45) 24% 27%, transparent 27% 74%, rgba(255,255,255,.45) 74% 77%, transparent 77%) 0 50% / 100% 33% no-repeat,
+  linear-gradient(90deg, transparent 49%, rgba(255,255,255,.45) 49% 52%, transparent 52%) 0 100% / 100% 34% no-repeat,
+  var(--c); }
+.house3d__zoom { position: absolute; right: 8px; bottom: 12px; display: flex; gap: 6px; z-index: 2; }
+.house3d__zoom button { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; border: 1px solid rgba(255,255,255,.3); background: rgba(15,15,15,.72); color: #fff; font-weight: 600; font-size: 19px; line-height: 1; cursor: pointer; transition: background .15s, transform .15s; }
+.house3d__zoom button:hover { background: var(--signal); border-color: var(--signal); }
+.house3d__zoom button:active { transform: scale(.94); }
+.house3d__hint { right: auto; left: 8px; }
+.house3d__hint-touch { display: none; }
+@media (pointer: coarse) {
+  .house3d__hint-mouse { display: none; }
+  .house3d__hint-touch { display: inline; }
+  .house3d.is-ready .house3d__hint { opacity: 1; }
+}
+.house3d.is-zoomed .house3d__callouts { opacity: 0; }
+.house3d:not(.is-ready) .house3d__zoom { display: none; }
+@media (max-width: 560px) {
+  .swatch__mode { padding: 6px 9px; font-size: 12px; }
+  .house3d__zoom button { width: 32px; height: 32px; font-size: 17px; }
+  .house3d__hint { font-size: 10px; }
+}
+@media (max-width: 560px) { .house3d__hint { display: none; } }
+.land-house .swatch__link { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; font-family: inherit; }
+.land-house .swatch__chip { cursor: pointer; padding: 0; }
+.land-house .house3d__poster { filter: drop-shadow(0 24px 30px rgba(0,0,0,.45)); }
+.land-howto { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: center; }
+.land-howto .land-scheme { max-width: none; }
+@media (max-width: 900px) { .land-howto { grid-template-columns: 1fr; } .land-house { flex-basis: 100%; } }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
