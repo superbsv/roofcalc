@@ -380,7 +380,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       return;
     }
     // Один ряд (як у КП): ↓ опускає всі листи (довшають), ↑ піднімає; для металочерепиці — за модулем хвилі
-    if (onVShift) { onVShift(vShift - deltaMm); return; }
+    if (onVShift) { const nv = Math.max(0, vShift - deltaMm); if (nv !== vShift) onVShift(nv); return; }
     const newV = verticalOffset + deltaMm;
     setVerticalOffset(newV);
     setManualMode(true);
@@ -727,7 +727,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
               <div className="ls-shift-col">
                 <div className="ls-shift-row">
                   {STEPS.map((st, i) => (
-                    <button key={'u' + st.mm} type="button" className="ls-arr" title={`↑ ${st.label}`} aria-label={`↑ ${st.label}`} onClick={() => shiftVerticalLayout(+st.mm)}>{arrows('▲', i + 1)}</button>
+                    <button key={'u' + st.mm} type="button" className="ls-arr" title={`↑ ${st.label}`} aria-label={`↑ ${st.label}`} disabled={!(onJointChange && jointY != null) && !!onVShift && vShift <= 0} onClick={() => shiftVerticalLayout(+st.mm)}>{arrows('▲', i + 1)}</button>
                   ))}
                 </div>
                 <div className="ls-shift-row">

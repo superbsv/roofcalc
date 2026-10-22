@@ -417,8 +417,9 @@ class SlopesController
             case 'sandwich':
                 $calc = new SheetLayoutEngine($profile, $slope, $mode);
                 break;
-            case 'falts':
-                $calc = new FaltsCalculator($profile, $slope);
+            case 'falts':   // клік-фальц — той самий движок (колонки під форму ската, округлення, зсуви, вирізи)
+                $profile['join_overlap'] = $slope['join_overlap'] ?? null;
+                $calc = new SheetLayoutEngine($profile, $slope, $mode);
                 break;
             default:
                 return ['errors' => ['Невідомий тип матеріалу: ' . $slope['type']]];

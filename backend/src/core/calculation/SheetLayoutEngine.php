@@ -68,6 +68,8 @@ class SheetLayoutEngine
         $this->fullWidth   = max(1, (int)$profile['full_width']);
         $this->usefulWidth = max(1, (int)$profile['useful_width']);
         $this->pz          = max(0, (int)$profile['length_overlap']);
+        // клік-фальц: стик картин по довжині — нахлест «перекриття в стику»
+        if (($profile['type'] ?? '') === 'falts' && $this->pz <= 0) $this->pz = max(0, (int)($profile['join_overlap'] ?? 100));
         $this->k           = (int)($slope['eave_overhang'] ?? 0);
         $this->pk          = max(0, (int)($slope['ridge_gap'] ?? 0));
         $this->lmin        = max(1, (int)$profile['min_length']);
@@ -169,9 +171,8 @@ class SheetLayoutEngine
 
         // Зсув по вертикалі (кнопки ↑/↓, як у КП): низ листів опускається на vshift, довжини перераховуються.
         // Для металочерепиці зсув береться за модулем кроку хвилі (зсув на цілу хвилю = вихідне положення).
-        $vshift = (int)($this->slope['v_shift'] ?? 0);
-        if ($this->wave > 0) $vshift = (($vshift % $this->wave) + $this->wave) % $this->wave;
-        else $vshift = max(-2000, min(2000, $vshift));
+        // Зсув рівно на крок кнопки (0.1 / 0.01 / 0.001 м); вище карниза листи не піднімаються (низ має закривати карниз)
+        $vshift = max(0, min(2000, (int)($this->slope['v_shift'] ?? 0)));
         $this->vShift = $vshift;
 
         $columns = [];

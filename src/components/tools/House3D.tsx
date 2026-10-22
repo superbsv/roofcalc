@@ -78,7 +78,13 @@ export default function House3D() {
       if (!alive || !el || (el as any).__houseApi) return;
       const init: Record<string, any> = { roofType: mode.roof, facadeMode: mode.facade };
       PARTS.forEach(p => { const c = color(sel[p.key]); init[p.key] = c.hex; if (c.wood) init[p.key + 'Wood'] = true; });
-      try { (window as any).ABTHouse3D.mount(el, init); api.current = (el as any).__houseApi; } catch { /* без WebGL лишається картинка */ }
+      try {
+        (window as any).ABTHouse3D.mount(el, init); api.current = (el as any).__houseApi;
+        // На телефоні: один палець — повертати будинок, два — наблизити / зсунути (у вікні сторінку не гортаємо)
+        const ctl = api.current?.controls;
+        if (ctl) { ctl.touches = { ONE: 0, TWO: 2 }; ctl.enableRotate = true; }
+        if (api.current?.canvas) api.current.canvas.style.touchAction = 'none';
+      } catch { /* без WebGL лишається картинка */ }
     }).catch(() => {});
     if ('IntersectionObserver' in window) {
       const io = new IntersectionObserver(e => { if (e[0].isIntersecting) { io.disconnect(); start(); } }, { rootMargin: '200px' });
@@ -112,7 +118,7 @@ export default function House3D() {
     <div className="land-house">
       <div className="house3d" ref={box}>
         <img className="house3d__poster" src="/house3d/house-poster.webp" width={1200} height={900} alt="Будинок з покрівлею, водостоком і підшивою — приміряйте кольори" />
-        <span className="house3d__hint" aria-hidden="true"><span className="house3d__hint-mouse">Потягніть — повернути · Ctrl + коліщатко — наблизити</span><span className="house3d__hint-touch">Двома пальцями — наблизити й повернути</span></span>
+        <span className="house3d__hint" aria-hidden="true"><span className="house3d__hint-mouse">Потягніть — повернути · Ctrl + коліщатко — наблизити</span><span className="house3d__hint-touch">Один палець — повернути · два — наблизити</span></span>
       </div>
       <div className="swatch">
         <div className="swatch__tabs" role="tablist" aria-label="Що змінюємо">

@@ -1684,3 +1684,4 @@ tr:hover td { background: var(--clr-surface-2); }
 .catnav .sidebar-item { font-weight: 500; padding: 7px 12px; color: var(--clr-text-2); }
 .catnav .sidebar-item.active { color: #fff; }
 .catnav .sidebar-item.active .catnav-cnt { color: rgba(255,255,255,.85); }
+.ls-arr:disabled { opacity: .4; cursor: not-allowed; }

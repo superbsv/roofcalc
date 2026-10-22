@@ -104,6 +104,23 @@ export default function ProjectPage({ projectId }: Props) {
   const [showExplorer, setShowExplorer] = useState(true);
   const [loaded, setLoaded] = useState(false);
 
+  // Точність округлення змінено на вкладці «Матеріал» — одразу зберігаємо і перераховуємо всі розраховані скати
+  const roundRef = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    if (!loaded) return;
+    const v = settings.round_step ?? null;
+    if (roundRef.current === undefined) { roundRef.current = v; return; }
+    if (roundRef.current === v) return;
+    roundRef.current = v;
+    const t0 = setTimeout(() => run('calc', async () => {
+      await saveSettings({});
+      for (const sl of slopesRef.current) {
+        if (sl.material_profile_id && (sl.polygon_points?.length || 0) >= 3) await calcSlope(sl.id);
+      }
+    }), 400);
+    return () => clearTimeout(t0);
+  }, [settings.round_step, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const active = slopes.find(s => s.id === activeId) || null;
   const slopesRef = useRef<Slope[]>([]);
   slopesRef.current = slopes;
