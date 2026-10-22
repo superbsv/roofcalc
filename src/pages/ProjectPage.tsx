@@ -13,13 +13,14 @@ import SlopeEditor from '../components/editor/SlopeEditor';
 import LayoutScheme from '../components/layout/LayoutScheme';
 import {
   Project, ProjectSettings, Slope, MaterialProfile, Point, EdgeType, CalcMode, AccessoryType,
-  projectsApi, slopesApi, materialsApi, specApi, SpecItem, exportApi, clientsApi, Client,
+  projectsApi, slopesApi, materialsApi, specApi, SpecItem, clientsApi, Client, downloadProjectFile,
 } from '../api/client';
 import { EDGE_TYPES, autoEdgeTypes, edgeColor, sideLengthMm, rectHole, mirrorElement, setSideLength } from '../components/roof/edges';
 import { useTheme } from '../components/theme/theme';
 import { CALC_TYPES, calcTypeInfo } from '../components/roof/calcTypes';
 import LibraryPicker from '../components/catalog/LibraryPicker';
 import ManufacturerSelect from '../components/catalog/ManufacturerSelect';
+import { specToPdf, specToExcel } from '../components/spec/specExport';
 import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter, templateNums } from '../components/roof/templates';
 import { materialLabel } from '../components/roof/materials';
 import TemplateSketch from '../components/roof/TemplateSketch';
@@ -1136,6 +1137,16 @@ function Specification({ project, settings, slopes, material, items, projectId, 
   project: Project | null; settings: ProjectSettings; slopes: Slope[]; material?: MaterialProfile;
   items: SpecItem[]; projectId: number; onBack: () => void; onMaterial: () => void;
 }) {
+  const paperRef = useRef<HTMLElement>(null);
+  const [saving, setSaving] = useState<'' | 'pdf' | 'xlsx'>('');
+  const save = async (kind: 'pdf' | 'xlsx') => {
+    if (!paperRef.current) return;
+    setSaving(kind);
+    const fname = `${project?.name || 'specification'} №${settings.order_no || projectId}`;
+    try { if (kind === 'pdf') await specToPdf(paperRef.current, fname); else await specToExcel(paperRef.current, fname); }
+    catch (e: any) { alert(e.message || String(e)); }
+    finally { setSaving(''); }
+  };
   const calc = slopes.filter(s => s.calc_result && !s.calc_result.errors?.length);
   const sum = (f: (s: Slope) => number) => calc.reduce((a, s) => a + (f(s) || 0), 0);
   const tot = {
@@ -1171,15 +1182,14 @@ function Specification({ project, settings, slopes, material, items, projectId, 
           <button className="btn btn-secondary btn-sm" onClick={onMaterial}>Вих. дані</button>
         </div>
         <div className="kp-tools">
-          <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>Друк</button>
-          <a className="btn btn-primary btn-sm" href={exportApi.pdf(projectId)} target="_blank" rel="noopener noreferrer" title="PDF для замовника: реквізити, схеми скатів з листами, специфікація">Комерційна пропозиція (PDF)</a>
-          <a className="btn btn-secondary btn-sm" href={exportApi.excel(projectId)} target="_blank" rel="noopener noreferrer">Експорт XLS</a>
-          <a className="btn btn-secondary btn-sm" href={exportApi.productionPdf(projectId)} target="_blank" rel="noopener noreferrer">Розкрій (виробництво)</a>
-          <a className="btn btn-secondary btn-sm" href={exportApi.json(projectId)} target="_blank" rel="noopener noreferrer">JSON</a>
+          <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>🖨 Друк</button>
+          <button className="btn btn-primary btn-sm" disabled={!!saving} onClick={() => save('pdf')}>{saving === 'pdf' ? 'Створення PDF…' : 'Зберегти PDF'}</button>
+          <button className="btn btn-secondary btn-sm" disabled={!!saving} onClick={() => save('xlsx')}>{saving === 'xlsx' ? 'Створення…' : 'Зберегти Excel'}</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => downloadProjectFile(projectId, project?.name).catch(e => alert(e.message))} title="Файл проекту (.roofkit) — його можна відкрити в будь-якому кабінеті ROOFKIT: «Мої проекти» → «Відкрити файл»">⭳ Файл проекту</button>
         </div>
       </div>
 
-      <article className="kp-paper">
+      <article className="kp-paper" ref={paperRef}>
         <div className="kp-paper-head">
           <div><span>Постачальник:</span> {settings.company || '—'}</div>
           <div><span>Замовник:</span> {project?.client_name || '—'}{project?.client_phone ? `, ${project.client_phone}` : ''}</div>

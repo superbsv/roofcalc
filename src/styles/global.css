@@ -1531,3 +1531,4 @@ tr:hover td { background: var(--clr-surface-2); }
 .lib-name { flex: 1; min-width: 0; }
 .lib-meta { color: var(--clr-text-3); font-size: .75rem; white-space: nowrap; }
 @media (max-width: 640px) { .lib-tools { flex-direction: column; } .lib-tools select { max-width: none; } .lib-meta { display: none; } }
+.proj-head-btns { display: flex; gap: 8px; flex-wrap: wrap; }

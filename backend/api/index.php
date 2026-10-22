@@ -103,6 +103,8 @@ try {
         case $method==='POST'&&$uri==='/projects':             (new ProjectsController)->create(); break;
         case $method==='GET' &&preg_match('#^/projects/(\d+)$#',$uri,$m): (new ProjectsController)->show((int)$m[1]); break;
         case $method==='PUT' &&preg_match('#^/projects/(\d+)$#',$uri,$m): (new ProjectsController)->update((int)$m[1]); break;
+        case $method==='GET' &&preg_match('#^/projects/(\d+)/file$#',$uri,$m): (new ProjectsController)->fileExport((int)$m[1]); break;
+        case $method==='POST'&&$uri==='/projects/import':      (new ProjectsController)->fileImport(); break;
         case $method==='DELETE'&&preg_match('#^/projects/(\d+)$#',$uri,$m): (new ProjectsController)->delete((int)$m[1]); break;
         case $method==='POST'&&preg_match('#^/projects/(\d+)/calculate-all$#',$uri,$m): (new ProjectsController)->calculateAll((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/projects/share/([a-zA-Z0-9_-]+)$#',$uri,$m): (new ProjectsController)->share($m[1]); break;

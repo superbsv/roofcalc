@@ -396,3 +396,25 @@ export const clientsApi = {
   update: (id: number, body: Partial<Client>) => put<{ client: Client; projects: ClientProject[] }>(`/clients/${id}`, body),
   remove: (id: number, withProjects = false) => del<{ deleted: number }>(`/clients/${id}${withProjects ? '?projects=1' : ''}`),
 };
+
+// ---------- Файл проекту (.roofkit) ----------
+export const projectFileApi = {
+  get:    (id: number) => get<Record<string, any>>(`/projects/${id}/file`),
+  import: (data: unknown) => post<{ project: Project }>('/projects/import', data),
+};
+/** Завантажити файл проекту на комп'ютер */
+export async function downloadProjectFile(id: number, name?: string) {
+  const data = await projectFileApi.get(id);
+  const safe = (name || data?.project?.name || `project-${id}`).replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || `project-${id}`;
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `${safe}.roofkit`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+/** Відкрити файл проекту: створює новий розрахунок у кабінеті */
+export async function openProjectFile(file: File) {
+  let data: unknown;
+  try { data = JSON.parse(await file.text()); } catch { throw new Error('Файл пошкоджений або це не файл проекту ROOFKIT (.roofkit)'); }
+  return projectFileApi.import(data);
+}

@@ -4,7 +4,7 @@
 // ============================================
 
 import React, { useEffect, useState } from 'react';
-import { Project, projectsApi } from '../api/client';
+import { Project, projectsApi, openProjectFile, downloadProjectFile } from '../api/client';
 import { calcTypeInfo } from '../components/roof/calcTypes';
 
 interface Props { onOpenProject: (id: number) => void; }
@@ -51,6 +51,15 @@ export default function ProjectsPage({ onOpenProject }: Props) {
   };
 
   // «Файл → Новий» у КП: одразу відкривається вікно реквізитів замовлення і вибору типу розрахунку
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const openFile = async (f?: File) => {
+    if (!f) return;
+    setCreating(true); setError('');
+    try { const r = await openProjectFile(f); onOpenProject(r.project.id); }
+    catch (e: any) { setError(e.message); }
+    finally { setCreating(false); if (fileRef.current) fileRef.current.value = ''; }
+  };
+
   const createProject = async () => {
     setCreating(true); setError('');
     try {
@@ -78,9 +87,13 @@ export default function ProjectsPage({ onOpenProject }: Props) {
           <h1 className="page-title">Мої проекти</h1>
           <div className="page-subtitle">Всього: {total} проектів</div>
         </div>
-        <button className="btn btn-primary btn-lg" onClick={createProject} disabled={creating}>
-          {creating ? 'Створення…' : '+ Створити розрахунок'}
-        </button>
+        <div className="proj-head-btns">
+          <button className="btn btn-secondary btn-lg" onClick={() => fileRef.current?.click()} disabled={creating} title="Відкрити файл проекту (.roofkit), збережений на комп'ютері">📂 Відкрити файл</button>
+          <input ref={fileRef} type="file" accept=".roofkit,.json" hidden onChange={e => openFile(e.target.files?.[0])} />
+          <button className="btn btn-primary btn-lg" onClick={createProject} disabled={creating}>
+            {creating ? 'Створення…' : '+ Створити розрахунок'}
+          </button>
+        </div>
       </div>
 
       {error && <div className="alert alert-error mb-4" style={{marginBottom:'16px'}}>⚠ {error}</div>}
@@ -139,6 +152,8 @@ export default function ProjectsPage({ onOpenProject }: Props) {
                     <td><span className={`badge ${statusClass}`}>{statusLabel}</span></td>
                     <td className="text-muted text-xs">{fmt(p.updated_at)}</td>
                     <td>
+                      <button className="btn btn-ghost btn-sm btn-icon" title="Зберегти файл проекту на комп'ютер"
+                        onClick={e => { e.stopPropagation(); downloadProjectFile(p.id, p.name).catch(err => setError(err.message)); }}>⭳</button>
                       <button
                         className="btn btn-ghost btn-sm btn-icon"
                         style={{color:'var(--clr-error)'}}

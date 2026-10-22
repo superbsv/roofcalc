@@ -297,6 +297,139 @@ class ProjectsController
 
     // ---- Helpers ----
 
+    // ============================================
+    // Файл проекту (.roofkit): збереження на комп'ютер і відкриття в будь-якому кабінеті
+    // ============================================
+    private const FILE_SLOPE_FIELDS = ['name', 'sort_order', 'polygon_points', 'holes', 'slope_angle', 'eave_side', 'ridge_side',
+        'laying_direction', 'eave_overhang', 'ridge_gap', 'material_color', 'material_coating', 'material_thickness', 'edge_types',
+        'element_kind', 'calc_mode', 'joint_y', 'round_step', 'layout_shift', 'split_forced', 'v_shift', 'rows_count', 'sheet_edits'];
+    private const FILE_MAT_SKIP = ['id', 'tenant_id', 'published', 'deleted', 'source_id', 'section_id', 'sort_order'];
+
+    // GET /projects/{id}/file
+    public function fileExport(int $id): void
+    {
+        $user = $this->requireAuth();
+        $p = $this->findProject($id, $user);
+        $slopes = Database::fetchAll('SELECT * FROM slopes WHERE project_id = ? ORDER BY sort_order, id', [$id]);
+        $matIds = [];
+        $st = json_decode($p['settings'] ?? 'null', true) ?: [];
+        if (!empty($st['material_id'])) $matIds[(int)$st['material_id']] = true;
+        $outSlopes = [];
+        foreach ($slopes as $s) {
+            $o = [];
+            foreach (self::FILE_SLOPE_FIELDS as $f) {
+                $v = $s[$f] ?? null;
+                if (in_array($f, ['polygon_points', 'holes', 'edge_types', 'sheet_edits'], true)) $v = json_decode($v ?? 'null', true);
+                $o[$f] = $v;
+            }
+            $o['material_ref'] = $s['material_profile_id'] ? (int)$s['material_profile_id'] : null;
+            if ($s['material_profile_id']) $matIds[(int)$s['material_profile_id']] = true;
+            $outSlopes[] = $o;
+        }
+        $materials = [];
+        foreach (array_keys($matIds) as $mid) {
+            $m = Database::fetchOne('SELECT m.*, s.name AS section_name FROM material_profiles m LEFT JOIN catalog_sections s ON s.id = m.section_id WHERE m.id = ?', [$mid]);
+            if (!$m) continue;
+            foreach (self::FILE_MAT_SKIP as $k) if ($k !== 'id') unset($m[$k]);
+            foreach (['forbidden_lengths', 'stock_lengths', 'color_options', 'coating_options', 'thickness_options'] as $k) $m[$k] = json_decode($m[$k] ?? 'null', true);
+            $materials[] = $m;
+        }
+        $this->json(['roofkit_project' => 1, 'saved_at' => date('c'), 'project' => [
+            'name' => $p['name'], 'client_name' => $p['client_name'], 'client_phone' => $p['client_phone'], 'client_email' => $p['client_email'],
+            'object_address' => $p['object_address'], 'roof_type' => $p['roof_type'], 'notes' => $p['notes'],
+            'discount_pct' => $p['discount_pct'], 'vat_pct' => $p['vat_pct'], 'settings' => $st,
+        ], 'materials' => $materials, 'slopes' => $outSlopes]);
+    }
+
+    // POST /projects/import — відкрити файл проекту: новий розрахунок у кабінеті, матеріали — у свій каталог
+    public function fileImport(): void
+    {
+        $user = $this->requireAuth();
+        if (($user['role'] ?? '') === 'viewer') $this->error('Недостатньо прав', 403);
+        $b = $this->body();
+        if (empty($b['roofkit_project']) || !is_array($b['project'] ?? null) || !is_array($b['slopes'] ?? null)) $this->error('Це не файл проекту ROOFKIT');
+        \RoofCalc\Core\Catalog::ensureSchema();
+        $tid = (int)$user['tid'];
+        $tn = Database::fetchOne('SELECT * FROM tenants WHERE id = ?', [$tid]);
+        $lim = $tn ? Plans::limits($tn) : ['projects_month' => null];
+        if (!empty($lim['projects_month'])) {
+            $cnt = (int)Database::fetchOne("SELECT COUNT(*) c FROM projects WHERE tenant_id = ? AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')", [$tid])['c'];
+            if ($cnt >= (int)$lim['projects_month']) $this->error('Вичерпано ліміт тарифу: ' . $lim['projects_month'] . ' розрахунків на місяць. Змініть тариф або зверніться в підтримку ROOFKIT', 402);
+        }
+
+        // 1. Матеріали: знаходимо такий самий у своєму каталозі або додаємо
+        $map = [];
+        foreach ((array)($b['materials'] ?? []) as $m) {
+            if (!is_array($m) || empty($m['id']) || empty($m['name']) || empty($m['type'])) continue;
+            $fid = (int)$m['id'];
+            $same = Database::fetchOne(
+                'SELECT id FROM material_profiles WHERE tenant_id = ? AND deleted = 0 AND type = ? AND name = ? AND COALESCE(manufacturer, \'\') = ? AND full_width = ? AND useful_width = ? LIMIT 1',
+                [$tid, $m['type'], $m['name'], (string)($m['manufacturer'] ?? ''), (int)($m['full_width'] ?? 0), (int)($m['useful_width'] ?? 0)]
+            );
+            if ($same) { $map[$fid] = (int)$same['id']; continue; }
+            $sec = \RoofCalc\Core\Catalog::sectionFor(null, (string)$m['type']);
+            if (!empty($m['section_name'])) {
+                $byName = Database::fetchOne('SELECT * FROM catalog_sections WHERE name = ? AND calc_type = ?', [$m['section_name'], $m['type']]);
+                if ($byName) $sec = $byName;
+            }
+            $cols = Database::fetchAll('SHOW COLUMNS FROM material_profiles');
+            $allowed = array_diff(array_column($cols, 'Field'), self::FILE_MAT_SKIP);
+            $vals = [];
+            foreach ($allowed as $c) {
+                if (!array_key_exists($c, $m)) continue;
+                $v = $m[$c];
+                $vals[$c] = is_array($v) ? json_encode($v) : $v;
+            }
+            $vals['manufacturer'] = \RoofCalc\Core\Catalog::canonicalManufacturer($m['manufacturer'] ?? '', $tid);
+            $vals['tenant_id'] = $tid; $vals['section_id'] = $sec['id'] ?? null; $vals['is_active'] = 1;
+            $map[$fid] = Database::insert('INSERT INTO material_profiles (' . implode(',', array_keys($vals)) . ') VALUES (' . implode(',', array_fill(0, count($vals), '?')) . ')', array_values($vals));
+        }
+
+        // 2. Проект (з новим номером замовлення кабінету)
+        $pr = $b['project'];
+        $st = is_array($pr['settings'] ?? null) ? $pr['settings'] : [];
+        if (!empty($st['material_id'])) $st['material_id'] = $map[(int)$st['material_id']] ?? null;
+        $tenant = Database::fetchOne('SELECT * FROM tenants WHERE id = ?', [$tid]);
+        if ($tenant) {
+            $st['order_no'] = (string)(int)$tenant['next_order_no'];
+            Database::query('UPDATE tenants SET next_order_no = next_order_no + 1 WHERE id = ?', [$tid]);
+            $st['company'] = $tenant['doc_company'] ?: $tenant['name'];
+        }
+        $name = trim((string)($pr['name'] ?? '')) ?: 'Розрахунок з файлу';
+        $pid = Database::insert(
+            'INSERT INTO projects (user_id, name, client_name, client_phone, client_email, object_address, roof_type, notes, discount_pct, vat_pct, status, settings, tenant_id)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            [$user['sub'], mb_substr($name, 0, 190), $pr['client_name'] ?? null, $pr['client_phone'] ?? null, $pr['client_email'] ?? null,
+             $pr['object_address'] ?? null, $pr['roof_type'] ?? null, $pr['notes'] ?? null, $pr['discount_pct'] ?? 0, $pr['vat_pct'] ?? 20,
+             'draft', self::cleanSettings($st), $tid]
+        );
+
+        // 3. Скати
+        $slopeCols = array_column(Database::fetchAll('SHOW COLUMNS FROM slopes'), 'Field');
+        foreach (array_slice($b['slopes'], 0, 200) as $i => $s) {
+            if (!is_array($s)) continue;
+            $vals = ['project_id' => $pid];
+            foreach (self::FILE_SLOPE_FIELDS as $f) {
+                if (!array_key_exists($f, $s) || !in_array($f, $slopeCols, true)) continue;
+                $v = $s[$f];
+                $vals[$f] = in_array($f, ['polygon_points', 'holes', 'edge_types', 'sheet_edits'], true) ? ($v === null ? null : json_encode($v)) : $v;
+            }
+            if (empty($vals['name'])) $vals['name'] = 'Скат ' . ($i + 1);
+            if (!isset($vals['polygon_points'])) $vals['polygon_points'] = '[]';
+            $vals['material_profile_id'] = !empty($s['material_ref']) ? ($map[(int)$s['material_ref']] ?? null) : null;
+            Database::insert('INSERT INTO slopes (' . implode(',', array_keys($vals)) . ') VALUES (' . implode(',', array_fill(0, count($vals), '?')) . ')', array_values($vals));
+        }
+
+        \RoofCalc\Api\Clients\ClientsController::linkProject($pid, $user, $pr);
+        // одразу перераховуємо скати, щоб були укладка і специфікація
+        $sc = new \RoofCalc\Api\Slopes\SlopesController();
+        foreach (Database::fetchAll('SELECT id FROM slopes WHERE project_id = ? AND material_profile_id IS NOT NULL', [$pid]) as $sl) {
+            try { $sc->calculateById((int)$sl['id']); } catch (\Throwable $e) { /* скат без контуру — пропускаємо */ }
+        }
+        $this->log($user['sub'], 'project.import', 'project', $pid);
+        $this->json(['project' => self::decodeProject(Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$pid]))], 201);
+    }
+
     private function findProject(int $id, array $user): array
     {
         $project = Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$id]);
