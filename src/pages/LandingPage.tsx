@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { authApi, PlanDef } from '../api/client';
 import { BrandLogo, BrandLogoFull } from '../components/brand/BrandMark';
 import { ThemeToggle } from '../components/theme/theme';
+import LangSwitch from '../i18n/LangSwitch';
 import { PlanCards } from './RegisterPage';
 
 const FEATURES: { t: string; d: string; i: React.ReactNode }[] = [
@@ -103,6 +104,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
           <a href="#faq">Питання</a>
         </nav>
         <div className="land-actions">
+          <LangSwitch />
           <ThemeToggle />
           <button type="button" className="btn btn-secondary btn-sm" onClick={onLogin}>Увійти</button>
           <button type="button" className="btn btn-primary btn-sm land-hide-sm" onClick={onRegister}>Створити розрахунок</button>

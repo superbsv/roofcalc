@@ -1505,3 +1505,11 @@ tr:hover td { background: var(--clr-surface-2); }
 .cl-row { cursor: pointer; } .cl-row:hover td { background: var(--clr-surface-2); }
 .cl-form { display: flex; flex-direction: column; gap: 10px; }
 @media (max-width: 860px) { .cl-grid { grid-template-columns: 1fr; } .cl-list { max-height: 50vh; } }
+/* ===== Перемикач мови ===== */
+.lang-switch { display: inline-flex; border: 1px solid var(--clr-border-dark, rgba(255,255,255,.25)); border-radius: 18px; overflow: hidden; flex: none; }
+.lang-switch button { padding: 5px 9px; border: 0; background: transparent; color: inherit; opacity: .7; font: 700 .72rem var(--font-display, inherit); letter-spacing: .04em; cursor: pointer; }
+.lang-switch button.on { background: var(--clr-brand); color: #fff; opacity: 1; }
+.lang-switch button:hover:not(.on) { opacity: 1; }
+.auth-tools-floating { position: fixed; top: 16px; right: 16px; z-index: 10; display: flex; gap: 8px; align-items: center; }
+@media (max-width: 640px) { .app-header .lang-switch button { padding: 4px 6px; font-size: .66rem; } }
+.auth-tools-floating .theme-toggle-floating { position: static; } .auth-tools-floating .lang-switch { background: var(--clr-surface); color: var(--clr-text); }

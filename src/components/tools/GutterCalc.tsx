@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { KINDS, RoofKind, COLORS, calculate, Params } from './gutter';
 import RoofPic from './RoofPics';
+import { t, translateTree } from '../../i18n/i18n';
 
 const STEPS = ['1. Тип покрівлі', '2. Параметри покрівлі', '3. Підбір кольору', '4. Результат'];
 const num = (s: string | undefined) => { const v = parseFloat(String(s ?? '').replace(',', '.')); return Number.isFinite(v) ? v : 0; };
@@ -41,14 +42,14 @@ export default function GutterCalc({ onClose }: { onClose: () => void }) {
     `Тип покрівлі №${kindNo}; ${sides}; висота будинку ${num(height)} м`,
     ...res.lines.map(l => `${l.name} — ${l.qty} ${l.unit}`),
   ].join('\n');
-  const copy = async () => { try { await navigator.clipboard.writeText(text()); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ } };
+  const copy = async () => { try { await navigator.clipboard.writeText(text().split('\n').map(t).join('\n')); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ } };
   const print = () => {
     const w = window.open('', '_blank', 'width=720,height=900'); if (!w) return;
     const rows = res.lines.map((l, i) => `<tr><td>${i + 1}</td><td>${l.name}</td><td style="text-align:right">${l.qty}</td><td>${l.unit}</td></tr>`).join('');
     w.document.write(`<!doctype html><meta charset="utf-8"><title>Водостік — ROOFKIT</title><style>body{font:14px/1.4 Arial,sans-serif;margin:24px;color:#111}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:5px 8px;text-align:left}th{background:#EEF2F7}</style>
       <h2>Розрахунок водостічної системи</h2><p>Система ${system} мм · колір ${col.name} (RAL ${col.id})<br>Тип покрівлі №${kindNo}: ${sides}; висота будинку ${num(height)} м<br>Жолоб: ${res.gutterLen.toFixed(2)} м · водостоків: ${res.pipes}</p>
       <table><tr><th>№</th><th>Найменування</th><th>К-сть</th><th>Од.</th></tr>${rows}</table><p style="color:#777;font-size:12px">Розраховано в ROOFKIT · roofkit.com.ua</p>`);
-    w.document.close(); w.focus(); w.print();
+    w.document.close(); translateTree(w.document.body); w.document.title = t(w.document.title); w.focus(); w.print();
   };
 
   const field = (key: string, label: string, value: string, onChange: (s: string) => void) => (

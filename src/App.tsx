@@ -13,6 +13,7 @@ import ClientsPage from './pages/ClientsPage';
 import LeadsPage from './pages/LeadsPage';
 import BrandMark, { BrandWordmark } from './components/brand/BrandMark';
 import { ThemeToggle } from './components/theme/theme';
+import LangSwitch from './i18n/LangSwitch';
 import TrigCalc from './components/tools/TrigCalc';
 import GutterCalc from './components/tools/GutterCalc';
 import CatalogNav from './components/catalog/CatalogNav';
@@ -122,6 +123,7 @@ function Shell() {
         {gutOpen && <GutterCalc onClose={() => setGutOpen(false)} />}
 
         <div className="header-right">
+          <LangSwitch />
           <ThemeToggle />
           <div className="header-user">
             <div className="header-avatar">{initials}</div>

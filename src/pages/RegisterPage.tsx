@@ -7,6 +7,7 @@ import { authApi, PlanDef } from '../api/client';
 import { useAuth } from '../components/auth/AuthContext';
 import { BrandLogo } from '../components/brand/BrandMark';
 import { ThemeToggle } from '../components/theme/theme';
+import LangSwitch from '../i18n/LangSwitch';
 
 const limitText = (v: number | null | undefined, one: string, many: string) => (v ? `${v} ${v === 1 ? one : many}` : `без ліміту ${many}`);
 
@@ -56,6 +57,7 @@ export default function RegisterPage({ onLogin }: { onLogin: () => void }) {
       <header className="reg-head">
         <a className="reg-brand" href="/" style={{ color: 'inherit', textDecoration: 'none' }}><BrandLogo size={52} text={1.15} /></a>
         <div className="flex gap-3" style={{ alignItems: 'center' }}>
+          <LangSwitch />
           <ThemeToggle />
           <button type="button" className="btn btn-secondary btn-sm" onClick={onLogin}>Увійти</button>
         </div>

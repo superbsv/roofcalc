@@ -7,6 +7,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { User, authApi, superApi } from '../../api/client';
 import { BrandLogoFull } from '../brand/BrandMark';
 import { ThemeToggle } from '../theme/theme';
+import LangSwitch from '../../i18n/LangSwitch';
 import RegisterPage from '../../pages/RegisterPage';
 import LandingPage from '../../pages/LandingPage';
 
@@ -147,7 +148,7 @@ function LoginForm({ onRegister, onHome }: { onRegister: () => void; onHome: () 
 
   return (
     <div className="login-page">
-      <ThemeToggle className="theme-toggle-floating" />
+      <div className="auth-tools-floating"><LangSwitch /><ThemeToggle className="theme-toggle-floating" /></div>
       <div className="login-card">
         <div className="login-logo">
           <div className="login-logo-mark"><BrandLogoFull width={240} /></div>
