@@ -16,6 +16,7 @@ import { ThemeToggle } from './components/theme/theme';
 import LangSwitch from './i18n/LangSwitch';
 import TrigCalc from './components/tools/TrigCalc';
 import GutterCalc from './components/tools/GutterCalc';
+import HouseModal from './components/tools/HouseModal';
 import CatalogNav from './components/catalog/CatalogNav';
 
 type Page =
@@ -37,6 +38,9 @@ function Shell() {
   const [productsOpen, setProductsOpen] = useState(false);
   const [trigOpen, setTrigOpen] = useState(false);
   const [gutOpen, setGutOpen] = useState(false);
+  const [houseOpen, setHouseOpen] = useState(false);
+  const [houseUsed, setHouseUsed] = useState(false);
+  const openHouse = () => { setHouseUsed(true); setHouseOpen(true); };
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Закриваємо сайдбар при зміні сторінки
@@ -114,6 +118,9 @@ function Shell() {
           <a href="/" onClick={e=>{e.preventDefault();setGutOpen(true);}} title="Калькулятор водостоку: жолоби, труби, кронштейни">
             Водостік
           </a>
+          <a href="/" onClick={e=>{e.preventDefault();openHouse();}} title="Візуалізатор будинку: показати клієнту покрівлю, фасад і водостік у різних кольорах">
+            Візуалізатор
+          </a>
           </>}
           {view.type==='project' && (
             <a href="/" className="active" onClick={e=>e.preventDefault()}>← Поточний проект</a>
@@ -121,6 +128,7 @@ function Shell() {
         </nav>
         {trigOpen && <TrigCalc onClose={() => setTrigOpen(false)} />}
         {gutOpen && <GutterCalc onClose={() => setGutOpen(false)} />}
+        {houseUsed && <HouseModal open={houseOpen} onClose={() => setHouseOpen(false)} />}
 
         <div className="header-right">
           <LangSwitch />
@@ -176,6 +184,13 @@ function Shell() {
             </svg>,
             gutOpen,
             () => { setGutOpen(true); setSidebarOpen(false); }
+          )}
+          {navItem('Візуалізатор будинку',
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 11.5L12 4l9 7.5M5 10v10h14V10M9.5 20v-5.5h5V20"/>
+            </svg>,
+            houseOpen,
+            () => { openHouse(); setSidebarOpen(false); }
           )}
           {navItem('Заявки з сайту',
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>

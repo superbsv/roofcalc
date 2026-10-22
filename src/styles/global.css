@@ -1533,7 +1533,13 @@ tr:hover td { background: var(--clr-surface-2); }
 @media (max-width: 640px) { .lib-tools { flex-direction: column; } .lib-tools select { max-width: none; } .lib-meta { display: none; } }
 .proj-head-btns { display: flex; gap: 8px; flex-wrap: wrap; }
 /* ===== 3D-будинок на лендингу (з сайту-каталогу ABT) ===== */
-.land-house { flex: 1 1 520px; min-width: 0; max-width: 640px; --signal: var(--clr-brand); --r-l: 14px; }
+.land-house { width: 100%; min-width: 0; --signal: var(--clr-brand); --r-l: 14px; }
+.house-box { width: min(980px, 100%); background: #0B1119; color: #F5F7FA; border-color: #273241; }
+.house-box .kp-modal-head { background: #0B1119; color: #F5F7FA; border-color: #273241; }
+.house-box .kp-x { color: #F5F7FA; }
+.house-body { padding: 8px 18px 18px; }
+.land-house .swatch__link { cursor: default; }
+.land-house .swatch__link:hover { color: #fff; }
 .swatch { margin-top: 10px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); border-radius: var(--r-l); padding: 14px 16px; }
 .swatch__label { margin: 0 0 10px; font-weight: 700; font-size: 14px; }
 .swatch__list { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -1627,10 +1633,8 @@ tr:hover td { background: var(--clr-surface-2); }
   .house3d__hint { font-size: 10px; }
 }
 @media (max-width: 560px) { .house3d__hint { display: none; } }
-.land-house .swatch__link { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; font-family: inherit; }
 .land-house .swatch__chip { cursor: pointer; padding: 0; }
 .land-house .house3d__poster { filter: drop-shadow(0 24px 30px rgba(0,0,0,.45)); }
-.land-howto { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: center; }
-.land-howto .land-scheme { max-width: none; }
-@media (max-width: 900px) { .land-howto { grid-template-columns: 1fr; } .land-house { flex-basis: 100%; } }
+@media (max-width: 640px) { .house-body { padding: 4px 8px 12px; } }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.house-box .house3d { width: min(100%, calc(60vh * 4 / 3)); margin: 0 auto; }

@@ -1,13 +1,13 @@
 // ============================================
-// 3D-будинок на лендингу (three.js, як на сайті-каталозі ABT): дах, фасад, підшива, водостік, паркан —
-// відвідувач приміряє продукт і колір, а кнопка веде до розрахунку в ROOFKIT.
-// Сам рушій — public/house3d/house3d.js (window.ABTHouse3D.mount), вантажиться лише на лендингу.
+// Візуалізатор будинку (three.js, як на сайті-каталозі ABT): дах, фасад, підшива, водостік, паркан.
+// Відкривається в кабінеті поруч із калькуляторами — показати клієнту продукт і колір (лише інформативно).
+// Сам рушій — public/house3d/house3d.js (window.ABTHouse3D.mount), вантажиться лише при першому відкритті.
 // ============================================
 import React, { useEffect, useRef, useState } from 'react';
 
 type Part = 'roof' | 'facade' | 'soffit' | 'gutter' | 'fence';
 interface Color { code: string; name: string; hex: string; wood?: boolean }
-interface Mode { label: string; colors: string[]; def: string; cta: string }
+interface Mode { label: string; colors: string[]; def: string }
 
 const RAL: Record<string, [string, string]> = {
   '9003': ['RAL 9003 білий', '#F1F0EA'], '9010': ['RAL 9010 чисто-білий', '#F1ECE1'], '1015': ['RAL 1015 слонова кістка', '#E6D2B5'],
@@ -30,22 +30,22 @@ const ROOF_RAL = ['7016', 'RR23', '7024', 'RR33', '9005', '8017', '8019', 'RR32'
 
 const PARTS: { key: Part; label: string; mode: string; modes: Record<string, Mode> }[] = [
   { key: 'roof', label: 'Дах', mode: 'falz', modes: {
-    falz: { label: 'Клік-фальц', colors: ROOF_RAL, def: '7016', cta: 'розрахувати клік-фальц' },
-    tile: { label: 'Металочерепиця', colors: ROOF_RAL.filter(c => c !== '9006'), def: '7016', cta: 'розрахувати металочерепицю' },
-    prof: { label: 'Профнастил', colors: [...ROOF_RAL, '9003', 'zinc'], def: '7016', cta: 'розрахувати профнастил' },
+    falz: { label: 'Клік-фальц', colors: ROOF_RAL, def: '7016' },
+    tile: { label: 'Металочерепиця', colors: ROOF_RAL.filter(c => c !== '9006'), def: '7016' },
+    prof: { label: 'Профнастил', colors: [...ROOF_RAL, '9003', 'zinc'], def: '7016' },
   } },
   { key: 'facade', label: 'Фасад', mode: 'plain', modes: {
-    plain: { label: 'Однотонний', colors: ['9003', '9010', '9001', '1013', '1015', '1014', '7047', '7035', '7044', '7004', '1019', '7024', '7016', '9005', '8017', '1018'], def: '9003', cta: 'розрахувати сайдинг або сендвіч-панелі' },
-    brick: { label: 'Під цеглу', colors: ['b-white', 'b-beige', 'b-straw', 'b-ginger', 'b-terra', 'b-red', 'b-brown', 'b-graph'], def: 'b-ginger', cta: 'розрахувати фасад' },
+    plain: { label: 'Однотонний', colors: ['9003', '9010', '9001', '1013', '1015', '1014', '7047', '7035', '7044', '7004', '1019', '7024', '7016', '9005', '8017', '1018'], def: '9003' },
+    brick: { label: 'Під цеглу', colors: ['b-white', 'b-beige', 'b-straw', 'b-ginger', 'b-terra', 'b-red', 'b-brown', 'b-graph'], def: 'b-ginger' },
   } },
   { key: 'soffit', label: 'Підшива', mode: 'base', modes: {
-    base: { label: '', colors: ['9003', '1015', '9001', '7047', '9006', '7024', '7016', '9005', '8017', '8019', 'w-nut', 'w-oak'], def: '9003', cta: 'розрахувати покрівлю в ROOFKIT' },
+    base: { label: '', colors: ['9003', '1015', '9001', '7047', '9006', '7024', '7016', '9005', '8017', '8019', 'w-nut', 'w-oak'], def: '9003' },
   } },
   { key: 'gutter', label: 'Водостік', mode: 'base', modes: {
-    base: { label: '', colors: ['9003', '9006', '7024', '7016', 'RR33', '9005', '8017', '8019', 'RR32', '8004', '3005', '3009', '6005'], def: '7016', cta: 'розрахувати водостік' },
+    base: { label: '', colors: ['9003', '9006', '7024', '7016', 'RR33', '9005', '8017', '8019', 'RR32', '8004', '3005', '3009', '6005'], def: '7016' },
   } },
   { key: 'fence', label: 'Паркан', mode: 'base', modes: {
-    base: { label: '', colors: ['7016', '7024', '9005', '8017', '8019', '3005', '6005', '5005', '9006', '9003', '1015'], def: '7024', cta: 'розрахувати покрівлю в ROOFKIT' },
+    base: { label: '', colors: ['7016', '7024', '9005', '8017', '8019', '3005', '6005', '5005', '9006', '9003', '1015'], def: '7024' },
   } },
 ];
 
@@ -62,7 +62,7 @@ const loadEngine = () => {
   return loading;
 };
 
-export default function House3D({ onCta }: { onCta: () => void }) {
+export default function House3D() {
   const box = useRef<HTMLDivElement>(null);
   const api = useRef<any>(null);
   const [tab, setTab] = useState<Part>('roof');
@@ -139,10 +139,9 @@ export default function House3D({ onCta }: { onCta: () => void }) {
             );
           })}
         </div>
-        <button type="button" className="swatch__link" onClick={onCta}>
-          <span><b>{part.label}{m.label ? <> · {m.label}</> : null}:</b> {cur.name} — {m.cta}</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
-        </button>
+        <div className="swatch__link">
+          <span><b>{part.label}{m.label ? <> · {m.label}</> : null}:</b> {cur.name}</span>
+        </div>
       </div>
     </div>
   );

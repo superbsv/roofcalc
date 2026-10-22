@@ -6,7 +6,6 @@ import React, { useEffect, useState } from 'react';
 import { authApi, PlanDef } from '../api/client';
 import { BrandLogo, BrandLogoFull } from '../components/brand/BrandMark';
 import { ThemeToggle } from '../components/theme/theme';
-import House3D from '../components/landing/House3D';
 import LangSwitch from '../i18n/LangSwitch';
 import { PlanCards } from './RegisterPage';
 
@@ -124,7 +123,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
             </div>
             <div className="land-note">{trialDays} днів безкоштовно, без картки. Після пробного періоду розрахунки зберігаються.</div>
           </div>
-          <House3D onCta={onRegister} />
+          <HeroScheme />
         </div>
       </section>
 
@@ -153,10 +152,7 @@ export default function LandingPage({ onLogin, onRegister }: { onLogin: () => vo
         <ol className="land-steps">
           {STEPS.map((s, i) => <li key={s}><span>{i + 1}</span>{s}</li>)}
         </ol>
-        <div className="land-howto">
-          <p className="land-steps-note">Реквізити замовлення → вибір матеріалу і його параметрів → скати за шаблонами або вручну → схема укладки з лінією стику → специфікація, PDF і Excel.</p>
-          <HeroScheme />
-        </div>
+        <p className="land-steps-note">Реквізити замовлення → вибір матеріалу і його параметрів → скати за шаблонами або вручну → схема укладки з лінією стику → специфікація, PDF і Excel.</p>
       </section>
 
       {Object.keys(plans).length > 1 && (
