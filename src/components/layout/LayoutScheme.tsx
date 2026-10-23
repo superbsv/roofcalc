@@ -10,7 +10,6 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Point as ApiPoint } from '../../api/client';
-import { interiorAngles, fmtAngle } from '../roof/edges';
 
 interface SheetPlacement {
   sheet_number: number;
@@ -845,20 +844,21 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           </g>
 
           <path d={polyPath} fill="none" stroke={COLORS.polygon} strokeWidth="2"/>
-          {/* Внутрішні кути площини */}
-          {polygonPoints.length >= 3 && interiorAngles(polygonPoints).map((a, i) => {
-            if (Math.abs(a.deg - 180) < 0.05) return null;
-            const cx = tx(polygonPoints[i][0]), cy = ty(polygonPoints[i][1]);
-            const r = 18, e = a.start + a.sweep;
-            const x1 = cx + Math.cos(a.start) * r, y1 = cy - Math.sin(a.start) * r;
-            const x2 = cx + Math.cos(e) * r, y2 = cy - Math.sin(e) * r;
-            const b = a.start + a.sweep / 2;
-            const lx = cx + Math.cos(b) * 38, ly = cy - Math.sin(b) * 38;
+          {/* Вирізи (труби, вікна): поверх листів — листи обходять виріз, накладка вирізається при монтажі */}
+          <defs>
+            <pattern id="ls-hole-hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2="8" stroke="#DC2626" strokeOpacity="0.45" strokeWidth="2"/>
+            </pattern>
+          </defs>
+          {holes.filter(h => h.length >= 3).map((h, i) => {
+            const d = h.map((q, k) => `${k ? 'L' : 'M'} ${tx(q[0])} ${ty(q[1])}`).join(' ') + ' Z';
+            const cx = h.reduce((a, q) => a + q[0], 0) / h.length, cy = h.reduce((a, q) => a + q[1], 0) / h.length;
             return (
-              <g key={`ang${i}`} pointerEvents="none">
-                <path d={`M ${x1} ${y1} A ${r} ${r} 0 ${a.sweep > Math.PI ? 1 : 0} 1 ${x2} ${y2}`} fill="none" stroke="var(--clr-brand)" strokeWidth="1.2" />
-                <text x={lx} y={ly + 4.5} textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--clr-brand)"
-                  stroke="var(--clr-canvas)" strokeWidth="3" style={{ paintOrder: 'stroke' }}>{fmtAngle(a.deg)}</text>
+              <g key={`hole${i}`} pointerEvents="none">
+                <path d={d} fill={COLORS.bg} />
+                <path d={d} fill="url(#ls-hole-hatch)" stroke="#DC2626" strokeWidth="1.5" />
+                <text x={tx(cx)} y={ty(cy) + 4} textAnchor="middle" fontSize="11" fontWeight="700" fill="#DC2626"
+                  stroke={COLORS.bg} strokeWidth="3" style={{ paintOrder: 'stroke' }}>{`Виріз №${i + 1}`}</text>
               </g>
             );
           })}
