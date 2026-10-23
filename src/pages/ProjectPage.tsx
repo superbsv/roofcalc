@@ -26,6 +26,7 @@ import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter, tem
 import { materialLabel } from '../components/roof/materials';
 import TemplateSketch from '../components/roof/TemplateSketch';
 import { useAuth } from '../components/auth/AuthContext';
+import type { SlopeForImage } from '../components/layout/slopeImage';
 
 interface Props { projectId: number; }
 
@@ -100,6 +101,14 @@ export default function ProjectPage({ projectId }: Props) {
   const [clip, setClip] = useState<Slope | null>(null);
   const [libOpen, setLibOpen] = useState(false);
   const [shiftHost, setShiftHost] = useState<HTMLDivElement | null>(null);
+  // Схема ската → PNG / JPG
+  const [imgBusy, setImgBusy] = useState<'' | 'png' | 'jpg'>('');
+  const saveImg = async (list: SlopeForImage[], fmt: 'png' | 'jpg', name: string) => {
+    setImgBusy(fmt);
+    try { const { saveSlopesImage } = await import('../components/layout/slopeImage'); await saveSlopesImage(list, fmt, name); }
+    catch (e: any) { alert(e.message || String(e)); }
+    finally { setImgBusy(''); }
+  };
   // Бічна панель скатів / укладки — зліва або справа (кому як зручно), запам'ятовується в браузері
   const [panelRight, setPanelRight] = useState<boolean>(() => { try { return localStorage.getItem('rk_panel_side') === 'right'; } catch { return false; } });
   const togglePanel = () => setPanelRight(v => { const n = !v; try { localStorage.setItem('rk_panel_side', n ? 'right' : 'left'); } catch { /* ignore */ } return n; });
@@ -858,6 +867,8 @@ export default function ProjectPage({ projectId }: Props) {
             <div className="kp-tools">
               <button className="btn btn-secondary btn-sm" onClick={() => duplicateSlope(active)} disabled={!!busy} title="Копіювати скат (з розкладкою) і вставити одразу після нього">Копіювати скат</button>
               <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>Друк</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => saveImg([active], 'png', `${project?.name || 'ROOFKIT'} - ${active.name}`)} disabled={!!imgBusy || !active.calc_result} title="Зберегти схему цього ската як зображення PNG">{imgBusy === 'png' ? '…' : 'PNG'}</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => saveImg([active], 'jpg', `${project?.name || 'ROOFKIT'} - ${active.name}`)} disabled={!!imgBusy || !active.calc_result} title="Зберегти схему цього ската як зображення JPG">{imgBusy === 'jpg' ? '…' : 'JPG'}</button>
               {!showExplorer && <button className="btn btn-secondary btn-sm" onClick={() => setShowExplorer(true)}>Провідник</button>}
             </div>
             <div className="kp-btnpair">
@@ -1198,7 +1209,17 @@ function Specification({ project, settings, slopes, material, items, projectId, 
   items: SpecItem[]; projectId: number; onBack: () => void; onMaterial: () => void;
 }) {
   const paperRef = useRef<HTMLElement>(null);
-  const [saving, setSaving] = useState<'' | 'pdf' | 'xlsx'>('');
+  const [saving, setSaving] = useState<'' | 'pdf' | 'xlsx' | 'png' | 'jpg'>('');
+  // Схеми всіх скатів — одним зображенням (один під одним)
+  const saveAllImg = async (fmt: 'png' | 'jpg') => {
+    setSaving(fmt);
+    try {
+      const { saveSlopesImage } = await import('../components/layout/slopeImage');
+      const list = slopes.filter(s => s.calc_result && !s.calc_result.errors?.length);
+      await saveSlopesImage(list, fmt, `${project?.name || 'ROOFKIT'} - ${t('скати')}`, project?.name || '');
+    } catch (e: any) { alert(e.message || String(e)); }
+    finally { setSaving(''); }
+  };
   const save = async (kind: 'pdf' | 'xlsx') => {
     if (!paperRef.current) return;
     setSaving(kind);
@@ -1245,6 +1266,8 @@ function Specification({ project, settings, slopes, material, items, projectId, 
           <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>🖨 Друк</button>
           <button className="btn btn-primary btn-sm" disabled={!!saving} onClick={() => save('pdf')}>{saving === 'pdf' ? 'Створення PDF…' : 'Зберегти PDF'}</button>
           <button className="btn btn-secondary btn-sm" disabled={!!saving} onClick={() => save('xlsx')}>{saving === 'xlsx' ? 'Створення…' : 'Зберегти Excel'}</button>
+          <button className="btn btn-secondary btn-sm" disabled={!!saving} onClick={() => saveAllImg('png')} title="Схеми всіх скатів одним зображенням PNG">{saving === 'png' ? 'Створення…' : 'Скати PNG'}</button>
+          <button className="btn btn-secondary btn-sm" disabled={!!saving} onClick={() => saveAllImg('jpg')} title="Схеми всіх скатів одним зображенням JPG">{saving === 'jpg' ? 'Створення…' : 'Скати JPG'}</button>
           <button className="btn btn-secondary btn-sm" onClick={() => downloadProjectFile(projectId, project?.name).catch(e => alert(e.message))} title="Файл проекту (.roofkit) — його можна відкрити в будь-якому кабінеті ROOFKIT: «Мої проекти» → «Відкрити файл»">⭳ Файл проекту</button>
         </div>
       </div>

@@ -1147,8 +1147,12 @@ tr:hover td { background: var(--clr-surface-2); }
   .kp-canvas .editor-canvas-wrap { height: 360px; max-height: none; }
 }
 @media print {
-  .app-header, .sidebar, .kp-steps, .kp-toolbar, .kp-explorer, .kp-left { display: none !important; }
+  .app-header, .header, .imp-banner, .burger-btn, .sidebar-overlay, .sidebar, .kp-steps, .kp-toolbar, .kp-explorer, .kp-left { display: none !important; }
+  .app-shell { display: block !important; min-height: 0 !important; }
+  .main-content { margin: 0 !important; padding: 0 !important; max-width: none !important; }
+  body { background: #fff !important; }
   .kp-paper { box-shadow: none; border: 0; max-width: none; padding: 0; }
+  .kp-paper-params { grid-template-columns: repeat(3, auto 60px) !important; align-items: baseline; }
 }
 .kp-lens-col { width: auto; min-width: 240px; }
 .kp-lens-col td { text-align: right; font-variant-numeric: tabular-nums; }
