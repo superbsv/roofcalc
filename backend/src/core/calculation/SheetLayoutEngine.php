@@ -90,7 +90,7 @@ class SheetLayoutEngine
         if ($this->type === 'tile' && $this->wave > 0 && $this->wave < MetalTileProfile::MIN_STEP_MM) {
             $this->warnings[] = sprintf('У картці матеріалу «Крок хвилі» = %d мм — це не крок штампа (зазвичай 350 мм). Перевірка різу біля штампа не виконується: виправте крок хвилі в каталозі', $this->wave);
         }
-        $this->snap = empty($slope['snap_off']);
+        $this->snap = true; // підгонка довжин під зони різу — завжди (перемикач прибрано на вимогу користувача)
 
         $std = (int)($profile['max_std_length'] ?? 0);
         if ($this->wave > 0) {

@@ -66,7 +66,6 @@ class SlopesController
     {
         if (!$edits || empty($r['placements'])) return $r;
         $fw = (int)($r['sheet_full_width'] ?? ($r['placements'][0]['full_width'] ?? 0));
-        $uw = (int)($r['sheet_useful_width'] ?? ($r['placements'][0]['useful_width'] ?? 0));
         $out = [];
         foreach ($r['placements'] as $p) {
             $k = ($p['col_index'] ?? 0) . ':' . ($p['row_index'] ?? 0);
@@ -80,6 +79,16 @@ class SlopesController
             }
             $out[] = $p;
         }
+        $r = self::recalcTotals($r, $out);
+        $r['sheet_edits_count'] = count($edits);
+        return $r;
+    }
+
+    // Підсумки ската (довжини, погонні метри, площі, відхід) за фактичними листами
+    private static function recalcTotals(array $r, array $out): array
+    {
+        $fw = (int)($r['sheet_full_width'] ?? ($out[0]['full_width'] ?? 0));
+        $uw = (int)($r['sheet_useful_width'] ?? ($out[0]['useful_width'] ?? 0));
         $lens = array_map(function ($p) { return (int)$p['length']; }, $out);
         $sUsefulOld = (float)($r['useful_area_m2'] ?? 0);
         $net = $sUsefulOld > 0 ? $sUsefulOld * (1 - (float)($r['waste_pct'] ?? 0) / 100) : (float)($r['slope_area_m2'] ?? 0);
@@ -97,7 +106,6 @@ class SlopesController
         $r['total_full_area_m2'] = round($sFull, 3);
         $r['order_area_m2'] = round($sFull, 3);
         $r['waste_pct'] = round($sUseful > 0 ? max(0, ($sUseful - $net) * 100 / $sUseful) : 0, 1);
-        $r['sheet_edits_count'] = count($edits);
         return $r;
     }
 
@@ -465,16 +473,29 @@ class SlopesController
             $snapped = $this->snapJoint($id, (int)$calcResult['joint_y_mm'], $calcResult['joint_range_mm'] ?? null, $tech->moduleStepMm, max(5, $tech->lengthIncrementMm));
             if ($snapped) {
                 $snapped['snap_from_mm'] = (int)$calcResult['joint_y_mm'];
-                $snapped['warnings'][] = sprintf('Snap: лінію стику притягнуто з %.3f до %.3f м — у заданому положенні листи не виготовити', $snapped['snap_from_mm'] / 1000, $snapped['joint_y_mm'] / 1000);
+                $snapped['warnings'][] = sprintf('Лінію стику зміщено з %.3f до %.3f м — у заданому положенні листи не виготовити', $snapped['snap_from_mm'] / 1000, $snapped['joint_y_mm'] / 1000);
                 $calcResult = $snapped;
             } else {
-                $calcResult['warnings'][] = 'Snap: допустимого положення лінії стику не знайдено — див. технологічні помилки';
+                $calcResult['warnings'][] = 'Допустимого положення лінії стику не знайдено — див. технологічні помилки';
             }
         }
 
         // Ручні правки листів з «Укладки» (довжина / положення / видалення)
         $calcResult = self::applySheetEdits($calcResult, self::cleanSheetEdits(json_decode($slope['sheet_edits'] ?? 'null', true)));
-        if ($tech) $calcResult = $tech->annotate($calcResult);   // правлені вручну листи теж проходять перевірку
+        if ($tech) {
+            // правлені вручну листи теж автоматично подовжуються до найближчої допустимої заводської довжини
+            $changed = false;
+            foreach ($calcResult['placements'] ?? [] as $i => $pl) {
+                if (empty($pl['edited']) || $tech->isValid((int)$pl['length'])) continue;
+                $L = $tech->ceilValid((int)$pl['length']);
+                if ($L === null) continue;
+                $calcResult['placements'][$i]['length'] = $L;
+                $calcResult['placements'][$i]['full_area_m2'] = round(($pl['full_width'] ?? 0) * $L / 1e6, 4);
+                $changed = true;
+            }
+            if ($changed) $calcResult = self::recalcTotals($calcResult, $calcResult['placements']);
+            $calcResult = $tech->annotate($calcResult);
+        }
 
         // Вирізи (труби, вікна): віднімаємо їх площу від площі ската
         if (!empty($slope['holes'])) {

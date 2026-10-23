@@ -81,7 +81,7 @@ $covered = function (array $r) use ($poly) {
     return null;
 };
 
-echo "Діагональний скат, Snap увімкнено\n";
+echo "Діагональний скат\n";
 $r = $calc();
 ok(!empty($r['tech_ok']), 'усі заводські заготовки проходять перевірку');
 $bad = array_filter($r['placements'], function ($q) { return !empty($q['tech_err']); });
@@ -89,13 +89,16 @@ eq(count($bad), 0, 'немає листів з технологічною пом
 eq($covered($r), null, 'скат покритий без зазорів');
 ok($r['joint_y_mm'] !== null, 'скат довший за лист — є лінія стику (горизонтальний нахлест рядів)');
 
-echo "Snap вимкнено — помилки показуються, довжини не підганяються\n";
-$off = $calc(['snap_off' => 1, 'joint_y' => 2060]);
-$on  = $calc(['joint_y' => 2060]);
-ok(!empty($on['tech_ok']), 'Snap увімкнено: лінія 2.060 — верхні листи подовжено до допустимих');
-ok(empty($off['tech_ok']) && count($off['tech_errors']) > 0, 'Snap вимкнено: є технологічні помилки з причиною');
-ok(strpos($off['tech_errors'][0] ?? '', 'від лінії штампа') !== false, 'причина: «рез за N мм від лінії штампа»');
-eq($covered($off), null, 'без Snap геометрія та сама — покриття без зазорів');
+echo "Автоматичне подовження — завжди (перемикача немає)\n";
+$on  = $calc(['joint_y' => 2060]);   // без підгонки верхні листи були б 2090 / 2100 мм — на штампі
+ok(!empty($on['tech_ok']), 'лінія 2.060 — верхні листи подовжено до допустимих');
+$tops = array_values(array_filter($on['placements'], function ($q) { return $q['row_index'] === 1; }));
+ok($tops && !array_filter($tops, function ($q) { return in_array($q['length'], [2090, 2100], true); }), 'жодного листа 2090 / 2100 мм (різ на штампі)');
+$old = $calc(['snap_off' => 1, 'joint_y' => 2060]);   // старе збережене «Snap вимкнено» ігнорується
+ok(!empty($old['tech_ok']), 'збережене раніше snap_off не вимикає подовження');
+eq($covered($on), null, 'покриття без зазорів');
+$v = $p->validateFactoryLength(2100);
+ok(!$v['valid'] && strpos($p->reason($v), 'від лінії штампа') !== false, 'причина для недопустимої довжини: «рез за N мм від лінії штампа»');
 
 echo "Переміщення лінії стику в обидва боки, сусідні листи\n";
 foreach ([1800, 1950, 2400, 2600] as $j) {

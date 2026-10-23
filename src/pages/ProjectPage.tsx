@@ -456,11 +456,6 @@ export default function ProjectPage({ projectId }: Props) {
     await calcSlope(active.id);
   });
 
-  const setSnap = (on: boolean) => active && run('calc', async () => {
-    await patchSlope(active.id, { snap_off: !on }, true);
-    await calcSlope(active.id);
-  });
-
   const setVShift = (mm: number) => active && run('calc', async () => {
     await patchSlope(active.id, { v_shift: mm }, true); // схема не зникає під час перерахунку
     await calcSlope(active.id);
@@ -877,12 +872,6 @@ export default function ProjectPage({ projectId }: Props) {
             <aside className="kp-left">
               <div className="kp-left-head"><div className="kp-h3">{active.name} · {slopeNo}</div>{sideBtn}</div>
               <div ref={setShiftHost} className="kp-shift-host" />
-              {res?.tech && (
-                <label className="kp-snap" title="Snap: довжини листів автоматично підганяються під дозволені зони заводського різу (не ближче ± до лінії штампа); лінія стику притягується до допустимого положення">
-                  <input type="checkbox" checked={res.snap !== false} onChange={e => setSnap(e.target.checked)} disabled={!!busy} />
-                  <span><b>Snap</b> {`— різ поза зоною штампа (±${res.tech.gap_mm} мм)`}</span>{/* i18n-ignore: tpl */}
-                </label>
-              )}
             </aside>
 
             <div className="kp-layout-main">
@@ -899,7 +888,6 @@ export default function ProjectPage({ projectId }: Props) {
                     <div className="alert alert-error kp-tech-err">
                       <b>Технологічні помилки розкрою — такі листи завод не виготовить:</b>
                       {res.tech_errors.map((e, i) => <div key={i}>{e}</div>)}
-                      {res.snap === false && <div className="kp-tech-hint">Увімкніть Snap у бічній панелі — довжини підберуться автоматично.</div>}
                     </div>
                   )}
                   <LayoutScheme calcResult={res as any} polygonPoints={pts} holes={holes} slopeName={active.name}

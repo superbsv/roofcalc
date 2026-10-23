@@ -1698,9 +1698,5 @@ tr:hover td { background: var(--clr-surface-2); }
 @media (max-width: 1200px) { .kp-slope.side-right.with-explorer { grid-template-columns: minmax(0, 1fr) 220px; } .kp-slope.side-right.with-explorer .kp-explorer { grid-column: 1 / -1; order: 4; } }
 @media (max-width: 860px) { .kp-slope.side-right, .kp-slope.side-right.with-explorer { grid-template-columns: 1fr; } .kp-side-toggle { display: none; } }
 /* Технологічний рівень: Snap, помилки розкрою */
-.kp-snap { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; padding: 8px 10px; border: 1px solid var(--clr-border); border-radius: 8px; background: var(--clr-surface); font-size: .78rem; line-height: 1.3; color: var(--clr-text-2); cursor: pointer; }
-.kp-snap input { margin-top: 2px; accent-color: var(--clr-brand); }
-.kp-snap b { color: var(--clr-text); }
 .kp-tech-err { display: grid; gap: 3px; font-size: .85rem; }
-.kp-tech-hint { margin-top: 4px; font-style: italic; }
 .kp-paper-warn { margin: 6px 0 10px; padding: 8px 10px; border: 2px solid #DC2626; color: #B91C1C; font-weight: 700; font-size: .85rem; }
