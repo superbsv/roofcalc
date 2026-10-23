@@ -355,7 +355,6 @@ class SheetLayoutEngine
             $rowLen = max($this->lmin, min($maxLower, $this->stdLen((int)ceil(($maxLower - $this->pz) / $div) + $this->pz, $maxLower)));
             foreach ($columns as $i => $col) if (!in_array($i, $split, true) && $col['need'] > $rowLen) $split[] = $i;
         }
-        $byRequest = $div >= 2;
 
         $out = [];
         if (!$split) {
@@ -370,7 +369,7 @@ class SheetLayoutEngine
                 $out[] = $lens;
             }
             if ($this->mode === 'sheetcut' && array_filter($out, function ($l) { return count($l) > 1; })) {
-                $this->warnings[] = sprintf('Скат довший за лист — укладка в кілька рядів, нахлест %d мм', $this->pz);
+                // (повідомлення про кілька рядів прибрано)
             }
             return $out;
         }
@@ -450,9 +449,7 @@ class SheetLayoutEngine
         $this->jointRange = [$lo, $hi];
         $this->rowsCount = $rows;
         $this->rowLen = $rowLen;
-        $this->warnings[] = $byRequest
-            ? sprintf('Висота ряду %.3f м — укладка у %d ряди, перша лінія стику на висоті %.3f м, нахлест %d мм', $rowLen / 1000, $rows, $joint / 1000, $this->pz)
-            : sprintf('Скат довший за лист — укладка у %d ряди, лінія стику на висоті %.3f м, нахлест %d мм', $rows, $joint / 1000, $this->pz);
+        // (інформаційне повідомлення про ряди / лінію стику прибрано — ці дані є в заголовку схеми)
         return $out;
     }
 
@@ -485,11 +482,9 @@ class SheetLayoutEngine
         if ($len < $this->lmin) $len = $this->lmin;
         $r = $this->forbiddenRange($len);
         if ($r) {
-            $orig = $len;
             // як у КП: беремо нижню межу діапазону, якщо вона ще покриває потрібну довжину, інакше — верхню
             if ($r[0] >= $need && $r[0] >= $this->lmin) $len = $r[0];
             else $len = $r[1] <= $max ? $r[1] : max($this->lmin, $r[0]);
-            $this->warnings[] = sprintf('Довжина %d мм у діапазоні невиконуваних розмірів %d–%d мм — взято %d мм', $orig, $r[0], $r[1], $len);
         }
         return $this->techLen(min($len, $max), $max);
     }
