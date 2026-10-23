@@ -258,7 +258,8 @@ class CatalogController
                 $vals['side_overlap'] = max(0, $vals['full_width'] - $vals['useful_width']);
                 $vals['type'] = $sec['calc_type']; $vals['section_id'] = $sec['id']; $vals['tenant_id'] = $tid;
                 $vals['sort_order'] = (int)(Database::fetchOne('SELECT MAX(sort_order) m FROM material_profiles WHERE section_id = ?', [$sec['id']])['m'] ?? 0) + 10;
-                Database::insert('INSERT INTO material_profiles (' . implode(',', array_keys($vals)) . ') VALUES (' . implode(',', array_fill(0, count($vals), '?')) . ')', array_values($vals));
+                $newId = Database::insert('INSERT INTO material_profiles (' . implode(',', array_keys($vals)) . ') VALUES (' . implode(',', array_fill(0, count($vals), '?')) . ')', array_values($vals));
+                if ($tid === null) Catalog::propagateNew((int)$newId);   // імпорт у каталог ROOFKIT — копії всім кабінетам
                 $created++;
             }
         }

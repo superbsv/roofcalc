@@ -125,6 +125,7 @@ class SuperController
                 trim($b['notes'] ?? '') ?: null,
             ]
         );
+        try { \RoofCalc\Core\Catalog::ensureSchema(); \RoofCalc\Core\Catalog::seedTenant((int)$id); } catch (\Throwable $e) { error_log('seed: ' . $e->getMessage()); }
         $this->insertUser($id, [
             'name' => trim($b['owner_name'] ?? '') ?: $name, 'login' => $ownerLogin ?: $ownerEmail,
             'email' => $ownerEmail ?: null, 'password' => $ownerPass, 'role' => 'admin',

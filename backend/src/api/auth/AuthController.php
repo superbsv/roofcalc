@@ -116,6 +116,8 @@ class AuthController
             'INSERT INTO activity_log (user_id, tenant_id, action, ip_address) VALUES (?, ?, ?, ?)',
             [$uid, $tid, 'auth.register', $ip]
         );
+        // новий кабінет одразу отримує каталог ROOFKIT як особистий
+        try { \RoofCalc\Core\Catalog::ensureSchema(); \RoofCalc\Core\Catalog::seedTenant((int)$tid); } catch (\Throwable $e) { error_log('seed: ' . $e->getMessage()); }
 
         $cfg = require __DIR__ . '/../../config/app.php';
         $hours = $cfg['jwt']['expires_hours'];

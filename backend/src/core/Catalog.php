@@ -23,6 +23,46 @@ class Catalog
         Database::ensureColumn('material_profiles', 'source_id', 'INT NULL'); // з якої позиції каталогу ROOFKIT скопійовано
         self::ensureSections();
         self::migratePersonal();
+        Database::ensureColumn('tenants', 'catalog_seeded', 'TINYINT NOT NULL DEFAULT 0');
+        self::seedAll();
+    }
+
+    // ---------- Особистий каталог кабінету = копія каталогу ROOFKIT ----------
+    // Кожен кабінет одразу має весь каталог ROOFKIT як свій (окремі копії: правки клієнта не зачіпають
+    // каталог ROOFKIT і навпаки). Позицію, яку клієнт уже має (навіть видалену ним), повторно не додаємо.
+    public static function seedTenant(int $tid): int
+    {
+        $rows = Database::fetchAll(
+            'SELECT id FROM material_profiles WHERE tenant_id IS NULL AND deleted = 0
+               AND id NOT IN (SELECT source_id FROM material_profiles WHERE tenant_id = ? AND source_id IS NOT NULL)
+             ORDER BY id', [$tid]
+        );
+        foreach ($rows as $r) self::copyMaterial((int)$r['id'], $tid);
+        Database::query('UPDATE tenants SET catalog_seeded = 1 WHERE id = ?', [$tid]);
+        return count($rows);
+    }
+
+    // Разово для наявних кабінетів (і для тих, що створені до цієї версії)
+    private static function seedAll(): void
+    {
+        try {
+            foreach (Database::fetchAll('SELECT id FROM tenants WHERE catalog_seeded = 0') as $t) self::seedTenant((int)$t['id']);
+        } catch (\Throwable $e) {
+            error_log('ROOFKIT catalog seed: ' . $e->getMessage());
+        }
+    }
+
+    // Нова позиція в каталозі ROOFKIT (адмін платформи) — одразу з'являється в каталогах усіх кабінетів
+    public static function propagateNew(int $materialId): void
+    {
+        try {
+            foreach (Database::fetchAll('SELECT id FROM tenants') as $t) {
+                $tid = (int)$t['id'];
+                if (!Database::fetchOne('SELECT id FROM material_profiles WHERE tenant_id = ? AND source_id = ?', [$tid, $materialId])) self::copyMaterial($materialId, $tid);
+            }
+        } catch (\Throwable $e) {
+            error_log('ROOFKIT catalog propagate: ' . $e->getMessage());
+        }
     }
 
     public const CALC_TYPES = ['tile', 'profile', 'falts', 'siding', 'sandwich'];

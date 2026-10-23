@@ -204,6 +204,8 @@ class AdminController
         // Супер-адмін у своєму кабінеті поповнює загальний каталог; решта — каталог свого кабінету
         $extra[] = 'tenant_id = ?'; $vals[] = (!empty($me['sa']) && empty($me['imp'])) ? null : $me['tid'];
         $vals[] = $id; Database::query('UPDATE material_profiles SET ' . implode(', ', $extra) . ' WHERE id = ?', $vals);
+        // нова позиція каталогу ROOFKIT — одразу в особистих каталогах усіх кабінетів
+        if (!empty($me['sa']) && empty($me['imp'])) \RoofCalc\Core\Catalog::propagateNew((int)$id);
 
         $this->log('admin.material.create', 'material', $id);
         $this->json(['id' => $id, 'message' => 'Профіль створено'], 201);
