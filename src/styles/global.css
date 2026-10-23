@@ -1647,6 +1647,7 @@ tr:hover td { background: var(--clr-surface-2); }
 .ls-arr { height: 34px; padding: 0 2px; border: 1px solid var(--clr-border-dark); border-radius: 6px; background: var(--clr-surface-2); color: var(--clr-text); font-size: .62rem; letter-spacing: -2px; cursor: pointer; white-space: nowrap; }
 .ls-arr:hover { border-color: var(--clr-brand); color: var(--clr-brand); background: var(--clr-brand-pale); }
 .ls-arr:active { transform: translateY(1px); }
+.ls-arr { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .ls-row-btn { padding: 7px 8px; border: 1px solid var(--clr-border-dark); border-radius: 6px; background: var(--clr-surface-2); color: var(--clr-text); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
 .ls-row-btn:hover { border-color: var(--clr-brand); color: var(--clr-brand); }
 .ls-shift-legend { font-size: .7rem; color: var(--clr-text-3); }

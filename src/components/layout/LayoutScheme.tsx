@@ -108,6 +108,42 @@ const STEPS = [
   { label: '0.001м', mm: 1   },
 ];
 
+// Кнопка-стрілка: разове натискання — один крок; затиснута — кроки повторюються (з прискоренням), поки не відпустиш.
+// onEnd — після відпускання (сервер перераховує один раз за все утримання).
+function HoldBtn({ onTick, onEnd, disabled, title, children }: { onTick: () => void; onEnd?: () => void; disabled?: boolean; title: string; children: React.ReactNode }) {
+  const st = useRef<{ timer?: number; n: number; on: boolean }>({ n: 0, on: false });
+  const tickRef = useRef(onTick); tickRef.current = onTick;
+  const endRef = useRef(onEnd); endRef.current = onEnd;
+  const stop = () => {
+    if (!st.current.on) return;
+    st.current.on = false; window.clearTimeout(st.current.timer);
+    endRef.current?.();
+  };
+  const loop = () => {
+    st.current.timer = window.setTimeout(() => {
+      if (!st.current.on) return;
+      tickRef.current(); st.current.n++; loop();
+    }, st.current.n < 8 ? 120 : st.current.n < 30 ? 60 : 30);
+  };
+  useEffect(() => () => window.clearTimeout(st.current.timer), []);
+  return (
+    <button type="button" className="ls-arr" title={title} aria-label={title} disabled={disabled}
+      onPointerDown={e => {
+        if (disabled || e.button !== 0) return;
+        e.preventDefault();
+        try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+        st.current.on = true; st.current.n = 0;
+        tickRef.current();
+        st.current.timer = window.setTimeout(loop, 400);
+      }}
+      onPointerUp={stop} onPointerCancel={stop} onLostPointerCapture={stop}
+      onClick={e => { if (e.detail === 0 && !disabled) { tickRef.current(); endRef.current?.(); } }}   // клавіатура (Enter / пробіл)
+      onContextMenu={e => e.preventDefault()}>
+      {children}
+    </button>
+  );
+}
+
 // ============================================
 // Діапазон [minY, maxY] полігону в точці X (мм)
 // Повертає null якщо x поза полігоном
@@ -385,6 +421,28 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   const getLen = (p: SheetPlacement) => p.manual_length ?? p.length;
   const getY   = (p: SheetPlacement) => p.y + (p.offset_y ?? 0);
   const getX   = (p: SheetPlacement) => p.x + (p.offset_x ?? 0);
+
+  // Утримання стрілок зсуву: кроки накопичуються (схема одразу показує зсув), сервер рахує один раз після відпускання
+  const [pend, setPend] = useState<{ k: 'h' | 'v'; mm: number } | null>(null);
+  const pendRef = useRef<{ k: 'h' | 'v'; mm: number } | null>(null);
+  const pendClear = useRef<number | undefined>(undefined);
+  useEffect(() => { pendRef.current = null; setPend(null); }, [calcResult]);   // прийшов новий розрахунок — попередній перегляд не потрібен
+  const tickPend = (k: 'h' | 'v', mm: number) => {
+    const cur = pendRef.current && pendRef.current.k === k ? pendRef.current.mm : 0;
+    let next = cur + mm;
+    if (k === 'v' && !(onJointChange && jointY != null) && onVShift) next = Math.min(next, vShift);   // вище карниза не піднімаємо
+    if (k === 'v' && onJointChange && jointY != null && jointRange) next = Math.max(jointRange[0] - jointY, Math.min(jointRange[1] - jointY, next));   // лінія — у допустимих межах
+    pendRef.current = { k, mm: next }; setPend({ k, mm: next });
+  };
+  const endPend = () => {
+    const p = pendRef.current;
+    if (!p || !p.mm) { pendRef.current = null; setPend(null); return; }
+    if (p.k === 'h') shiftLayout(p.mm); else shiftVerticalLayout(p.mm);
+    window.clearTimeout(pendClear.current);
+    pendClear.current = window.setTimeout(() => { pendRef.current = null; setPend(null); }, 4000);   // якщо сервер нічого не змінив
+  };
+  const pendH = pend?.k === 'h' ? pend.mm : 0;
+  const pendV = pend?.k === 'v' ? pend.mm : 0;
 
   // ============================================
   // Горизонтальний зсув — повна перегенерація
@@ -713,9 +771,9 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           <h3 style={{ margin:0, fontSize:'1rem' }}>Схема розкладки — {slopeName}</h3>
           <div style={{ fontSize:'.8rem', color:'var(--clr-text-3)', marginTop:'2px' }}>
             {calcResult.profile_name} · {visiblePlacements.length} листів · {calcResult.slope_area_m2.toFixed(2)} м²
-            {jointY != null && <span> · Перша лінія стику: <b style={{ color:'var(--clr-text)' }}>{(jointY/1000).toFixed(3)} м</b>{rowLen ? ` · висота ряду ${(rowLen/1000).toFixed(3)} м` : ''}{jointRange ? ` (лінія ${(jointRange[0]/1000).toFixed(3)}–${(jointRange[1]/1000).toFixed(3)})` : ''}</span>}
-            {jointY == null && vShift !== 0 && <span style={{ color:'var(--clr-brand)' }}> · По вертикалі: ↓{vShift} мм</span>}
-            {(onShiftX ? shiftX : layoutOffset) !== 0 && <span style={{ color:'var(--clr-brand)' }}> · Зсув: {(onShiftX ? shiftX : layoutOffset)>0?'+':''}{onShiftX ? shiftX : layoutOffset} мм</span>}
+            {jointY != null && <span> · Перша лінія стику: <b style={{ color: pendV ? 'var(--clr-brand)' : 'var(--clr-text)' }}>{((jointY + pendV)/1000).toFixed(3)} м</b>{rowLen ? ` · висота ряду ${(rowLen/1000).toFixed(3)} м` : ''}{jointRange ? ` (лінія ${(jointRange[0]/1000).toFixed(3)}–${(jointRange[1]/1000).toFixed(3)})` : ''}</span>}
+            {jointY == null && vShift - pendV !== 0 && <span style={{ color:'var(--clr-brand)' }}> · По вертикалі: ↓{vShift - pendV} мм</span>}
+            {(() => { const sx = (onShiftX ? shiftX : layoutOffset) + pendH; return sx !== 0 && <span style={{ color:'var(--clr-brand)' }}> · Зсув: {sx>0?'+':''}{sx} мм</span>; })()}
             {hasSelection && <span style={{ color:COLORS.selected, fontWeight:600 }}> · Виділено: {selected.size} шт</span>}
           </div>
         </div>
@@ -745,10 +803,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
             <div className="ls-shift-h">По горизонталі</div>
             <div className="ls-shift-row">
               {[...STEPS].reverse().map((st, i) => (
-                <button key={'l' + st.mm} type="button" className="ls-arr" title={`← ${st.label}`} aria-label={`← ${st.label}`} onClick={() => shiftLayout(-st.mm)}>{arrows('◀', 3 - i)}</button>
+                <HoldBtn key={'l' + st.mm} title={`← ${st.label}`} onTick={() => tickPend('h', -st.mm)} onEnd={endPend}>{arrows('◀', 3 - i)}</HoldBtn>
               ))}
               {STEPS.map((st, i) => (
-                <button key={'r' + st.mm} type="button" className="ls-arr" title={`→ ${st.label}`} aria-label={`→ ${st.label}`} onClick={() => shiftLayout(+st.mm)}>{arrows('▶', i + 1)}</button>
+                <HoldBtn key={'r' + st.mm} title={`→ ${st.label}`} onTick={() => tickPend('h', +st.mm)} onEnd={endPend}>{arrows('▶', i + 1)}</HoldBtn>
               ))}
             </div>
             <div className="ls-shift-h" title={onJointChange ? 'Рухає лінію стику рядів — усі листи ската діляться по ній' : undefined}>
@@ -757,12 +815,12 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
               <div className="ls-shift-col">
                 <div className="ls-shift-row">
                   {STEPS.map((st, i) => (
-                    <button key={'u' + st.mm} type="button" className="ls-arr" title={`↑ ${st.label}`} aria-label={`↑ ${st.label}`} disabled={!(onJointChange && jointY != null) && !!onVShift && vShift <= 0} onClick={() => shiftVerticalLayout(+st.mm)}>{arrows('▲', i + 1)}</button>
+                    <HoldBtn key={'u' + st.mm} title={`↑ ${st.label}`} disabled={!(onJointChange && jointY != null) && !!onVShift && vShift - pendV <= 0} onTick={() => tickPend('v', +st.mm)} onEnd={endPend}>{arrows('▲', i + 1)}</HoldBtn>
                   ))}
                 </div>
                 <div className="ls-shift-row">
                   {STEPS.map((st, i) => (
-                    <button key={'d' + st.mm} type="button" className="ls-arr" title={`↓ ${st.label}`} aria-label={`↓ ${st.label}`} onClick={() => shiftVerticalLayout(-st.mm)}>{arrows('▼', i + 1)}</button>
+                    <HoldBtn key={'d' + st.mm} title={`↓ ${st.label}`} onTick={() => tickPend('v', -st.mm)} onEnd={endPend}>{arrows('▼', i + 1)}</HoldBtn>
                   ))}
                 </div>
               </div>
@@ -797,7 +855,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
             </marker>
           </defs>
 
-          <g>
+          <g transform={pendH ? `translate(${pendH * scale},0)` : (pendV && jointY == null && onVShift) ? `translate(0,${-pendV * scale})` : undefined}>
             {visiblePlacements.map(p => {
               const length = getLen(p);
               const py     = getY(p);
@@ -948,10 +1006,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
                 ⬆ Довжина зверху (верхній край):
               </div>
               <div className="ls-shift-row">
-                {STEPS.map((st, i) => <button key={'tu' + st.mm} type="button" className="ls-arr" title={`↑ ${st.label}`} aria-label={`↑ ${st.label}`} onClick={() => changeLengthTop(+st.mm)}>{'▲'.repeat(i + 1)}</button>)}
+                {STEPS.map((st, i) => <HoldBtn key={'tu' + st.mm} title={`↑ ${st.label}`} onTick={() => changeLengthTop(+st.mm)}>{'▲'.repeat(i + 1)}</HoldBtn>)}
               </div>
               <div className="ls-shift-row" style={{ marginTop: 4 }}>
-                {STEPS.map((st, i) => <button key={'td' + st.mm} type="button" className="ls-arr" title={`↓ ${st.label}`} aria-label={`↓ ${st.label}`} onClick={() => changeLengthTop(-st.mm)}>{'▼'.repeat(i + 1)}</button>)}
+                {STEPS.map((st, i) => <HoldBtn key={'td' + st.mm} title={`↓ ${st.label}`} onTick={() => changeLengthTop(-st.mm)}>{'▼'.repeat(i + 1)}</HoldBtn>)}
               </div>
             </div>
 
@@ -961,10 +1019,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
                 ⬇ Довжина знизу (нижній край):
               </div>
               <div className="ls-shift-row">
-                {STEPS.map((st, i) => <button key={'bu' + st.mm} type="button" className="ls-arr" title={`↑ ${st.label}`} aria-label={`↑ ${st.label}`} onClick={() => changeLengthBottom(-st.mm)}>{'▲'.repeat(i + 1)}</button>)}
+                {STEPS.map((st, i) => <HoldBtn key={'bu' + st.mm} title={`↑ ${st.label}`} onTick={() => changeLengthBottom(-st.mm)}>{'▲'.repeat(i + 1)}</HoldBtn>)}
               </div>
               <div className="ls-shift-row" style={{ marginTop: 4 }}>
-                {STEPS.map((st, i) => <button key={'bd' + st.mm} type="button" className="ls-arr" title={`↓ ${st.label}`} aria-label={`↓ ${st.label}`} onClick={() => changeLengthBottom(+st.mm)}>{'▼'.repeat(i + 1)}</button>)}
+                {STEPS.map((st, i) => <HoldBtn key={'bd' + st.mm} title={`↓ ${st.label}`} onTick={() => changeLengthBottom(+st.mm)}>{'▼'.repeat(i + 1)}</HoldBtn>)}
               </div>
               <div style={{ fontSize:'.68rem', color:'var(--clr-text-3)', marginTop:'4px' }}>
                 ▲ / ▼ — 0.1 м · ▲▲ — 0.01 м · ▲▲▲ — 0.001 м. Сусідній лист компенсує зміну (стик рухається)
