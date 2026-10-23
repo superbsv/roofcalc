@@ -17,6 +17,7 @@ final class MetalTileProfile
     public const ERR_TOO_LONG   = 'TOO_LONG';
     public const ERR_INCREMENT  = 'INCREMENT';
     public const ERR_STAMP_ZONE = 'STAMP_ZONE';
+    public const MIN_STEP_MM    = 150;
 
     public int $moduleStepMm;
     public int $moduleOriginMm;
@@ -63,13 +64,15 @@ final class MetalTileProfile
     {
         if (($p['type'] ?? '') !== 'tile') return null;
         $step = (int)($p['wave_step'] ?? 0);
-        if ($step <= 0) return null;
+        // Крок штампа реальної металочерепиці — сотні мм (350, 400…). Менший крок у картці — це не штамп
+        // (помилка даних): правило не застосовуємо, інакше кожна довжина «потрапляє на штамп».
+        if ($step < self::MIN_STEP_MM) return null;
         $gap = $p['stamp_gap'] ?? null;
         $gap = ($gap === null || $gap === '') ? 50 : (int)$gap;
         $zones = $p['cut_zones'] ?? null;
         if (is_string($zones)) $zones = json_decode($zones, true);
         if ($gap <= 0 && !$zones) return null;
-        return new self([
+        $p0 = new self([
             'moduleStepMm'       => $step,
             'moduleOriginMm'     => (int)($p['module_origin'] ?? 0),
             'cutZonesMm'         => is_array($zones) ? $zones : [],
@@ -81,6 +84,7 @@ final class MetalTileProfile
             'workingWidthMm'     => (int)($p['useful_width'] ?? 0),
             'totalWidthMm'       => (int)($p['full_width'] ?? 0),
         ]);
+        return $p0->cutZonesMm ? $p0 : null;   // зону різу не побудувати (відступ ≥ половини кроку) — правило не діє
     }
 
     // Невідʼємний залишок (на відміну від %, коректний для відʼємних чисел)

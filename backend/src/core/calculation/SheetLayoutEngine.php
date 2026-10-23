@@ -87,6 +87,9 @@ class SheetLayoutEngine
         $this->direction   = (string)($slope['laying_direction'] ?? 'right_left');
 
         $this->tech = MetalTileProfile::fromMaterial($profile, $this->round);
+        if ($this->type === 'tile' && $this->wave > 0 && $this->wave < MetalTileProfile::MIN_STEP_MM) {
+            $this->warnings[] = sprintf('У картці матеріалу «Крок хвилі» = %d мм — це не крок штампа (зазвичай 350 мм). Перевірка різу біля штампа не виконується: виправте крок хвилі в каталозі', $this->wave);
+        }
         $this->snap = empty($slope['snap_off']);
 
         $std = (int)($profile['max_std_length'] ?? 0);

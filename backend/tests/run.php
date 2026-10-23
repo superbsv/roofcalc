@@ -120,6 +120,12 @@ echo "Правило вимкнено в картці (0) — розрахуно
 $plain = $calc(['joint_y' => 2190], ['stamp_gap' => 0]);
 ok(!isset($plain['tech']), 'без правила штампа результат без технологічного блоку');
 
+echo "Хибний крок хвилі в картці (10 мм) — правило не застосовується, є попередження\n";
+$w10 = $calc(['joint_y' => 2880], ['wave_step' => 10, 'length_overlap' => 70]);
+ok(!isset($w10['tech']) && empty($w10['tech_errors']), 'крок 10 мм: немає хибних «рез за 0 мм від лінії штампа»');
+ok((bool)array_filter($w10['warnings'], function ($w) { return strpos($w, 'Крок хвилі') !== false; }), 'попередження про невірний крок хвилі');
+ok(\RoofCalc\Core\Calculation\MetalTileProfile::fromMaterial(['type' => 'tile', 'wave_step' => 350, 'stamp_gap' => 200]) === null, 'відступ ≥ половини кроку — зону не побудувати, правило не діє');
+
 echo "Немає допустимого рішення\n";
 $tight = $calc([], ['max_length' => 440, 'min_length' => 400]);   // допустимі лише 400…440 (r 50…90)
 ok(isset($tight['tech_ok']), 'розрахунок не падає');
