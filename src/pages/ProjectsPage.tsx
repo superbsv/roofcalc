@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { Project, projectsApi, openProjectFile, downloadProjectFile } from '../api/client';
 import { calcTypeInfo } from '../components/roof/calcTypes';
+import { openKprFile } from '../api/kpr';
 
 interface Props { onOpenProject: (id: number) => void; }
 
@@ -55,7 +56,7 @@ export default function ProjectsPage({ onOpenProject }: Props) {
   const openFile = async (f?: File) => {
     if (!f) return;
     setCreating(true); setError('');
-    try { const r = await openProjectFile(f); onOpenProject(r.project.id); }
+    try { const r = /\.kpr$/i.test(f.name) ? await openKprFile(f) : await openProjectFile(f); onOpenProject(r.project.id); }   // .kpr — файл «Кровля Профи»
     catch (e: any) { setError(e.message); }
     finally { setCreating(false); if (fileRef.current) fileRef.current.value = ''; }
   };
@@ -88,8 +89,8 @@ export default function ProjectsPage({ onOpenProject }: Props) {
           <div className="page-subtitle">Всього: {total} проектів</div>
         </div>
         <div className="proj-head-btns">
-          <button className="btn btn-secondary btn-lg" onClick={() => fileRef.current?.click()} disabled={creating} title="Відкрити файл проекту (.roofkit), збережений на комп'ютері">📂 Відкрити файл</button>
-          <input ref={fileRef} type="file" accept=".roofkit,.json" hidden onChange={e => openFile(e.target.files?.[0])} />
+          <button className="btn btn-secondary btn-lg" onClick={() => fileRef.current?.click()} disabled={creating} title="Відкрити файл проекту ROOFKIT (.roofkit) або файл «Кровля Профи» (.kpr)">📂 Відкрити файл</button>
+          <input ref={fileRef} type="file" accept=".roofkit,.json,.kpr" hidden onChange={e => openFile(e.target.files?.[0])} />
           <button className="btn btn-primary btn-lg" onClick={createProject} disabled={creating}>
             {creating ? 'Створення…' : '+ Створити розрахунок'}
           </button>

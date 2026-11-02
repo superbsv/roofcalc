@@ -1,0 +1,102 @@
+// ============================================
+// Імпорт файлу «Кровля Профи» (.kpr) → проект ROOFKIT (той самий формат, що й .roofkit).
+// .kpr — текст у кодуванні Windows-1251, одне значення на рядок (десятковий роздільник — кома).
+// Шапка: 1 версія · 2 № замовлення · 3 дата · 4 постачальник · 5 замовник · 6 матеріал · 8 покриття · 9 колір ·
+// 12 точність округлення, м · 13 ПЗ, м · 14 К, м · 15 корисна ширина · 16 повна ширина · 17 Lmax станд. · 18 Lmax реальна.
+// Скат: [True/False, False, 0, напрям «зліва направо» True/False, False, id, n] + n пар (тип сторони, довжина) + n+1 точок (x, y) ·
+// службові поля (площа тощо) · кількість вирізів і вирізи в тому самому форматі · 10 службових полів.
+// Геометрія — у метрах, y від карниза вгору (як у ROOFKIT).
+// ============================================
+import { projectFileApi, Point } from './client';
+
+const num = (s: string | undefined) => { const v = parseFloat(String(s ?? '').replace(',', '.')); return Number.isFinite(v) ? v : 0; };
+const mm = (s: string | undefined) => Math.round(num(s) * 1000);
+
+function guessType(name: string): 'tile' | 'profile' | 'falts' | 'siding' | 'sandwich' {
+  const n = name.toLowerCase();
+  if (/черепиц/.test(n)) return 'tile';
+  if (/фальц/.test(n)) return 'falts';
+  if (/сайдинг/.test(n)) return 'siding';
+  if (/сендв|сэндв/.test(n)) return 'sandwich';
+  return 'profile';
+}
+
+export interface KprSlope { pts: Point[]; holes: Point[][]; leftRight: boolean }
+
+export function parseKpr(text: string) {
+  const L = text.split(/\r?\n/);
+  if (!/^\d+\.\d+/.test(L[0] || '')) throw new Error('Це не файл «Кровля Профи» (.kpr)');
+  // перший скат: True|False, False, 0, True|False, False, id, n
+  const isStart = (k: number) => (L[k] === 'True' || L[k] === 'False') && (L[k + 1] === 'True' || L[k + 1] === 'False')
+    && /^\d+$/.test(L[k + 2] || '') && (L[k + 3] === 'True' || L[k + 3] === 'False') && (L[k + 4] === 'True' || L[k + 4] === 'False')
+    && /^\d+$/.test(L[k + 5] || '') && /^\d+$/.test(L[k + 6] || '') && +L[k + 6] >= 3 && +L[k + 6] < 200;
+  let i = 25;
+  while (i < L.length && !isStart(i)) i++;
+  const slopes: KprSlope[] = [];
+  const readPoly = (j: number, n: number): [Point[], number] => {
+    j += 2 * n;                                     // пари (тип сторони, довжина) — довжини перераховуються з точок
+    const pts: Point[] = [];
+    for (let k = 0; k <= n; k++) pts.push([mm(L[j + 2 * k]), mm(L[j + 2 * k + 1])]);
+    return [pts.slice(0, n), j + 2 * (n + 1)];
+  };
+  while (i < L.length && isStart(i) && slopes.length < 200) {
+    const leftRight = L[i + 3] === 'True';   // «Укладка зліва направо» (False — справа наліво)
+    const n = parseInt(L[i + 6], 10);
+    let [pts, j] = readPoly(i + 7, n);
+    j += 8;                                         // висота, площі, відходи, площа вирізів
+    const nh = parseInt(L[j] || '0', 10) || 0; j++;
+    const holes: Point[][] = [];
+    for (let h = 0; h < nh && h < 50; h++) {
+      const hn = parseInt(L[j] || '0', 10); j++;
+      if (!(hn >= 3)) break;
+      const [hp, nj] = readPoly(j, hn); holes.push(hp); j = nj;
+    }
+    j += 10;
+    slopes.push({ pts, holes, leftRight });
+    i = j;
+  }
+  if (!slopes.length) throw new Error('У файлі «Кровля Профи» не знайдено скатів');
+
+  const matName = (L[5] || '').replace(/(\s*\(Copy\))+/gi, '').trim() || 'Матеріал з «Кровля Профи»';
+  const type = guessType(matName);
+  const useful = mm(L[14]) || 1100, full = mm(L[15]) || useful;
+  const pz = mm(L[12]);
+  const round = mm(L[11]);
+  const k = mm(L[13]);
+  const lmaxReal = mm(L[17]) || 6000, lmaxStd = mm(L[16]) || lmaxReal;
+  const date = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(L[2] || '');
+  const material = {
+    id: 1, name: matName, type, manufacturer: '', match_by_size: true,
+    full_width: full, useful_width: useful, side_overlap: Math.max(0, full - useful),
+    length_overlap: type === 'falts' ? 0 : pz, join_overlap: type === 'falts' ? pz : null,
+    wave_step: type === 'tile' ? 350 : 0, min_length: 300, max_length: lmaxReal, max_std_length: lmaxStd,
+    round_step: round || 10, min_slope_angle: 0,
+  };
+  return {
+    roofkit_project: 1,
+    source: 'krovlya-profi',
+    project: {
+      name: `Замовлення №${L[1] || ''} від ${L[2] || ''} (Кровля Профи)`,
+      client_name: (L[4] || '').trim() || null,
+      notes: (L[3] || '').trim() ? `Постачальник у «Кровля Профи»: ${L[3].trim()}` : null,
+      settings: {
+        calc_type: type, material_id: 1,
+        order_date: date ? `${date[3]}-${date[2]}-${date[1]}` : undefined,
+        k, pk: 0, round_step: round || null,
+        coating: (L[7] || '').trim() || undefined, color: (L[8] || '').trim() || undefined,
+      },
+    },
+    materials: [material],
+    slopes: slopes.map((s, n) => ({
+      name: `Скат ${n + 1}`, sort_order: n + 1, // i18n-ignore (дані: назва ската) polygon_points: s.pts, holes: s.holes,
+      laying_direction: s.leftRight ? 'left_right' : 'right_left', eave_overhang: k, ridge_gap: 0, material_ref: 1,
+    })),
+  };
+}
+
+/** Відкрити файл «Кровля Профи» в кабінеті: розбір у браузері, далі — звичайний імпорт проекту */
+export async function openKprFile(file: File) {
+  const buf = await file.arrayBuffer();
+  const text = new TextDecoder('windows-1251').decode(buf);
+  return projectFileApi.import(parseKpr(text));
+}

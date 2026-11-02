@@ -367,6 +367,15 @@ class ProjectsController
                 [$tid, $m['type'], $m['name'], (string)($m['manufacturer'] ?? ''), (int)($m['full_width'] ?? 0), (int)($m['useful_width'] ?? 0)]
             );
             if ($same) { $map[$fid] = (int)$same['id']; continue; }
+            // файл «Кровля Профи»: беремо матеріал свого каталогу того самого типу і ширин, якщо такий є
+            if (!empty($m['match_by_size'])) {
+                $bySize = Database::fetchOne(
+                    'SELECT id FROM material_profiles WHERE tenant_id = ? AND deleted = 0 AND is_active = 1 AND type = ? AND full_width = ? AND useful_width = ? ORDER BY sort_order, id LIMIT 1',
+                    [$tid, $m['type'], (int)($m['full_width'] ?? 0), (int)($m['useful_width'] ?? 0)]
+                );
+                if ($bySize) { $map[$fid] = (int)$bySize['id']; continue; }
+            }
+            unset($m['match_by_size']);
             $sec = \RoofCalc\Core\Catalog::sectionFor(null, (string)$m['type']);
             if (!empty($m['section_name'])) {
                 $byName = Database::fetchOne('SELECT * FROM catalog_sections WHERE name = ? AND calc_type = ?', [$m['section_name'], $m['type']]);
