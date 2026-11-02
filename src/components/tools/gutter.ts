@@ -58,25 +58,126 @@ export function contour(kind: RoofKind, v: Record<string, number>): Contour {
   return err('Невідомий тип');
 }
 
+// ---------- Виробники водостічних систем ----------
+// Типорозміри, довжини жолобів/труб, крок кронштейнів і кольори — за каталогами виробників.
+// Відтінки RAL орієнтовні (як у каталогах «~RAL»).
+
+export interface GColor { id: string; name: string; hex: string; ral?: string }
+export interface GSystem {
+  /** «жолоб/труба», мм */
+  id: string;
+  /** id кольорів виробника, доступних у цьому типорозмірі (порожньо — усі) */
+  colors?: string[];
+}
+export interface Maker {
+  id: string;
+  name: string;
+  material: 'ПВХ' | 'Сталь';
+  country: string;
+  /** Довжини жолоба, м */
+  gutterLens: number[];
+  /** Довжини труби, м */
+  pipeLens: number[];
+  /** Максимальний крок кронштейнів жолоба, м */
+  step: number;
+  systems: GSystem[];
+  colors: GColor[];
+}
+
+const C = (ral: string, name: string, hex: string): GColor => ({ id: ral, ral, name, hex });
+const WHITE = C('9010', 'Білий', '#F1EFE6'), BROWN = C('8017', 'Коричневий', '#45322E'), DBROWN = C('8019', 'Темно-коричневий', '#3F3A3A');
+const BLACK = C('9005', 'Чорний', '#121212'), BRICK = C('8004', 'Цегляний', '#8E402A');
+
+export const MAKERS: Maker[] = [
+  {
+    id: 'profil', name: 'Profil', material: 'ПВХ', country: 'Україна',
+    gutterLens: [3, 4], pipeLens: [3, 4], step: 0.5,
+    systems: [{ id: '90/75' }, { id: '130/100' }],
+    colors: [WHITE, BROWN, C('7024', 'Графіт', '#474A50'), BRICK, C('3011', 'Червоний', '#792423'), BLACK],
+  },
+  {
+    id: 'rainway', name: 'Rainway', material: 'ПВХ', country: 'Україна',
+    gutterLens: [3, 2], pipeLens: [3, 2], step: 0.6,
+    systems: [{ id: '90/75' }, { id: '130/100' }],
+    colors: [C('9003', 'Білий', '#F2F2EE'), BROWN, C('7024', 'Графіт', '#474A50'), C('7040', 'Сірий', '#9DA3A6'),
+      C('6005', 'Зелений', '#114232'), C('3005', 'Червоний', '#5E2129'), BRICK, BLACK],
+  },
+  {
+    id: 'bryza', name: 'Bryza', material: 'ПВХ', country: 'Польща',
+    gutterLens: [3, 4], pipeLens: [3, 4], step: 0.5,
+    systems: [{ id: '75/63' }, { id: '100/63' }, { id: '100/90' }, { id: '125/90' }, { id: '125/110' }, { id: '150/110' }],
+    colors: [WHITE, BROWN, C('3011', 'Червоний', '#792423'), C('7021', 'Графіт', '#2F3234'), C('6020', 'Зелений', '#37422F'),
+      BRICK, { id: 'cu', name: 'Мідний', hex: '#9A5A33' }, BLACK],
+  },
+  {
+    id: 'proaqua', name: 'ProAqua', material: 'ПВХ', country: 'Польща',
+    gutterLens: [3, 4], pipeLens: [3, 4], step: 0.5,
+    systems: [
+      { id: '75/63', colors: ['8017', '8019', '7016', '9005'] },
+      { id: '100/90', colors: ['8017', '8019', '7016', '9005'] },
+      { id: '125/90' }, { id: '125/110' }, { id: '150/110' },
+    ],
+    colors: [WHITE, BROWN, DBROWN, C('7016', 'Графіт', '#383E42'), BRICK, BLACK],
+  },
+  {
+    id: 'flamingo', name: 'Flamingo', material: 'Сталь', country: 'Польща',
+    gutterLens: [3, 4], pipeLens: [3, 1], step: 0.6,
+    systems: [
+      { id: '125/90' }, { id: '125/100' },
+      { id: '135/90', colors: ['8017', '8019', '7011', '7016', '9005'] },
+      { id: '135/100', colors: ['8017', '8019', '7011', '7016', '9005'] },
+      { id: '150/90' }, { id: '150/100' },
+    ],
+    colors: [C('9002', 'Білий', '#E7EBDA'), BROWN, DBROWN, C('7011', 'Графіт', '#434B4D'), C('7016', 'Антрацит', '#383E42'), BRICK,
+      C('3009', 'Вишневий', '#642424'), C('6020', 'Зелений', '#37422F'), C('8003', 'Мідний', '#734222'),
+      C('9006', 'Сріблястий', '#A5A8A6'), BLACK],
+  },
+  {
+    id: 'river', name: 'River', material: 'ПВХ', country: 'Польща',
+    gutterLens: [3], pipeLens: [3], step: 0.6,
+    systems: [{ id: '125/90' }],
+    colors: [C('9010', 'Білий', '#F1EFE6'), BROWN, C('7024', 'Графіт', '#474A50'), C('6005', 'Зелений', '#114232'),
+      C('3005', 'Червоний', '#5E2129'), BRICK, BLACK],
+  },
+];
+
+export const makerById = (id: string) => MAKERS.find(m => m.id === id) ?? MAKERS[0];
+export const systemColors = (m: Maker, sys: string): GColor[] => {
+  const s = m.systems.find(x => x.id === sys);
+  return s?.colors ? m.colors.filter(c => s.colors!.includes(c.id)) : m.colors;
+};
+
 export interface Params {
   height: number;       // висота будинку (від землі до карниза), м
   pipes?: number | null;
-  system: '130/100' | '90/75';
+  maker: Maker;
+  system: string;       // «жолоб/труба», мм
 }
 
 export interface Line { name: string; qty: number; unit: string; note?: string }
 export interface Result { lines: Line[]; gutterLen: number; pipes: number; pipeLen: number; error?: string }
 
-/** Мінімальний набір 3-м і 4-м жолобів для ділянки (менше відходу, потім менше штук) */
-export function gutterPieces(len: number): { n3: number; n4: number } {
-  let best = { n3: 0, n4: Math.ceil(len / 4), waste: Infinity, cnt: Infinity };
-  for (let n4 = 0; n4 <= Math.ceil(len / 4); n4++) {
-    const rest = Math.max(0, len - 4 * n4);
-    const n3 = Math.ceil(rest / 3 - 1e-9);
-    const waste = 4 * n4 + 3 * n3 - len, cnt = n3 + n4;
-    if (waste < best.waste - 1e-6 || (Math.abs(waste - best.waste) < 1e-6 && cnt < best.cnt)) best = { n3, n4, waste, cnt };
-  }
-  return { n3: best.n3, n4: best.n4 };
+const fmt = (n: number) => String(n).replace('.', ',');
+
+/** Набір відрізків заданих довжин для ділянки len: найменший відхід, потім найменше штук. Повертає кількість по кожній довжині. */
+export function pieces(len: number, lens: number[]): number[] {
+  const L = [...lens].sort((a, b) => b - a);
+  let best: { n: number[]; waste: number; cnt: number } = { n: L.map((_, i) => (i === 0 ? Math.ceil(len / L[0] - 1e-9) : 0)), waste: Infinity, cnt: Infinity };
+  const n = L.map(() => 0);
+  const rec = (i: number, rest: number) => {
+    if (i === L.length - 1) {
+      n[i] = Math.max(0, Math.ceil(rest / L[i] - 1e-9));
+      const total = L.reduce((s, l, k) => s + l * n[k], 0), waste = total - len, cnt = n.reduce((a, b) => a + b, 0);
+      if (waste < best.waste - 1e-6 || (Math.abs(waste - best.waste) < 1e-6 && cnt < best.cnt)) best = { n: [...n], waste, cnt };
+      return;
+    }
+    const max = Math.ceil(Math.max(0, rest) / L[i] - 1e-9);
+    for (let k = 0; k <= max; k++) { n[i] = k; rec(i + 1, rest - k * L[i]); }
+    n[i] = 0;
+  };
+  if (len > 0) rec(0, len); else best.n = L.map(() => 0);
+  // назад у порядку вхідного масиву
+  return lens.map(l => best.n[L.indexOf(l)]);
 }
 
 export const autoPipes = (kind: RoofKind, c: Contour, gutterLen: number) => {
@@ -89,59 +190,50 @@ export function calculate(kind: RoofKind, v: Record<string, number>, p: Params):
   const c = contour(kind, v);
   if (c.error) return { lines: [], gutterLen: 0, pipes: 0, pipeLen: 0, error: c.error };
   if (!(p.height > 0.5)) return { lines: [], gutterLen: 0, pipes: 0, pipeLen: 0, error: 'Вкажіть висоту будинку' };
+  const m = p.maker;
+  const sys = m.systems.some(s => s.id === p.system) ? p.system : m.systems[0].id;
 
   const gutterLen = c.runs.reduce((s, r) => s + r.len, 0);
-  let n3 = 0, n4 = 0, gJoin = 0, brackets = 0, caps = 0;
+  const gN = m.gutterLens.map(() => 0);
+  let gJoin = 0, brackets = 0, caps = 0;
   c.runs.forEach(r => {
-    const g = gutterPieces(r.len);
-    n3 += g.n3; n4 += g.n4;
-    gJoin += Math.max(0, g.n3 + g.n4 - 1);
-    brackets += Math.ceil(r.len / 0.6) + (r.caps ? 1 : 0);   // крок кронштейнів ≤ 60 см
+    const g = pieces(r.len, m.gutterLens);
+    g.forEach((k, i) => { gN[i] += k; });
+    gJoin += Math.max(0, g.reduce((a, b) => a + b, 0) - 1);
+    // Кронштейни рівномірно з кроком ≤ step; крайні — не далі 0,2 м від заглушки
+    brackets += r.caps ? Math.ceil(Math.max(0, r.len - 0.4) / m.step - 1e-9) + 1 : Math.ceil(r.len / m.step - 1e-9);
     caps += r.caps;
   });
+  brackets += c.extCorners + c.intCorners;   // біля кожного кута — додатковий кронштейн (≤ 0,2 м від повороту)
   const pipes = Math.max(1, Math.round(p.pipes ?? autoPipes(kind, c, gutterLen)));
 
   // Труба на один водостік: висота будинку мінус лійка/коліна (≈ 0,4 м) + обхід карниза (≈ 0,35 м)
   const pipeOne = Math.max(0.5, p.height - 0.4) + 0.35;
-  let t3 = 0, t1 = 0, muff = 0;
-  for (let i = 0; i < pipes; i++) {
-    let rest = pipeOne, k3 = Math.floor(rest / 3); rest -= k3 * 3;
-    let k1 = 0;
-    if (rest > 1e-6) { if (rest <= 1) k1 = 1; else k3 += 1; }   // залишок > 1 м — ріжемо 3-метрову
-    t3 += k3; t1 += k1; muff += Math.max(0, k3 + k1 - 1);
-  }
-  const holders = pipes * Math.max(2, Math.ceil((p.height - 0.4) / 1.8));
+  const one = pieces(pipeOne, m.pipeLens);
+  const pN = one.map(k => k * pipes);
+  const muff = pipes * Math.max(0, one.reduce((a, b) => a + b, 0) - 1);
+  // Тримачі труби: крок ≤ 2 м (будинок до 10 м), ≤ 1,5 м — вище 10 м
+  const hStep = p.height > 10 ? 1.5 : 2;
+  const holders = pipes * Math.max(2, Math.ceil((p.height - 0.4) / hStep - 1e-9));
   const elbows = pipes * 2;           // обхід карниза: 2 коліна
-  const [gd, pd] = p.system.split('/');
+  const [gd, pd] = sys.split('/');
+
+  const byLen = (lens: number[], qty: number[], mk: (l: number) => string) =>
+    lens.map((l, i) => ({ l, q: qty[i] })).sort((a, b) => b.l - a.l).map(x => ({ name: mk(x.l), qty: x.q, unit: 'шт' } as Line));
 
   const lines: Line[] = [
-    { name: `Жолоб ${gd} мм, 4 м`, qty: n4, unit: 'шт' },
-    { name: `Жолоб ${gd} мм, 3 м`, qty: n3, unit: 'шт' },
+    ...byLen(m.gutterLens, gN, l => `Жолоб ${gd} мм, ${fmt(l)} м`),
     { name: 'З’єднувач жолоба', qty: gJoin, unit: 'шт' },
-    { name: 'Кронштейн жолоба', qty: brackets, unit: 'шт', note: 'крок ≤ 60 см' },
+    { name: 'Кронштейн жолоба', qty: brackets, unit: 'шт', note: `крок ≤ ${Math.round(m.step * 100)} см` },
     { name: 'Заглушка жолоба', qty: caps, unit: 'шт', note: caps ? 'ліва + права' : undefined },
     { name: 'Кут жолоба зовнішній 90°', qty: c.extCorners, unit: 'шт' },
     { name: 'Кут жолоба внутрішній 90°', qty: c.intCorners, unit: 'шт' },
     { name: `Лійка ${gd}/${pd}`, qty: pipes, unit: 'шт' },
     { name: `Коліно труби ${pd} мм`, qty: elbows, unit: 'шт', note: 'обхід карниза' },
-    { name: `Труба ${pd} мм, 3 м`, qty: t3, unit: 'шт' },
-    { name: `Труба ${pd} мм, 1 м`, qty: t1, unit: 'шт' },
+    ...byLen(m.pipeLens, pN, l => `Труба ${pd} мм, ${fmt(l)} м`),
     { name: 'З’єднувач труби (муфта)', qty: muff, unit: 'шт' },
-    { name: 'Тримач труби', qty: holders, unit: 'шт', note: 'крок ≤ 1,8 м' },
+    { name: 'Тримач труби', qty: holders, unit: 'шт', note: `крок ≤ ${fmt(hStep)} м` },
     { name: `Коліно зливне ${pd} мм`, qty: pipes, unit: 'шт' },
   ].filter(l => l.qty > 0);
   return { lines, gutterLen, pipes, pipeLen: pipeOne * pipes };
 }
-
-export const COLORS: { id: string; name: string; hex: string }[] = [
-  { id: '9003', name: 'Білий', hex: '#F2F2EE' },
-  { id: '8017', name: 'Коричневий', hex: '#45322E' },
-  { id: '8019', name: 'Темно-коричневий', hex: '#3F3A3A' },
-  { id: '7024', name: 'Графіт', hex: '#474A50' },
-  { id: '9005', name: 'Чорний', hex: '#121212' },
-  { id: '3005', name: 'Вишневий', hex: '#5E2129' },
-  { id: '3011', name: 'Червоно-коричневий', hex: '#792423' },
-  { id: '6005', name: 'Зелений', hex: '#114232' },
-  { id: '8004', name: 'Цегляний', hex: '#8E402A' },
-  { id: '9006', name: 'Сріблястий', hex: '#A5A8A6' },
-];

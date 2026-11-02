@@ -1415,6 +1415,12 @@ tr:hover td { background: var(--clr-surface-2); }
 .gut-arrows-row .gut-next { height: 56px; flex: 0 0 300px; }
 .gut-back:hover { background: #BDBDBD; } .gut-next:hover { background: #DD6600; }
 .gut-bigpic { border: 3px solid #F07000; background: #fff; }
+.gut-makers { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 6px; }
+.gut-maker { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 12px 8px; border: 1px solid #D2D2D2; background: #fff; color: #222; font: 1.05rem Arial, sans-serif; cursor: pointer; }
+.gut-maker b { font-size: 1.1rem; letter-spacing: .02em; }
+.gut-maker small { color: #888; font-size: .78rem; }
+.gut-maker:hover, .gut-maker.on { outline: 3px solid #F07000; outline-offset: -1px; }
+.gut-sub { margin: 16px 0 8px; font: 700 .9rem Arial, sans-serif; color: #555; }
 .gut-colors { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
 .gut-color { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px; border: 1px solid #D2D2D2; background: #fff; color: #333; font: .9rem Arial, sans-serif; cursor: pointer; }
 .gut-color i { width: 54px; height: 54px; border-radius: 50%; border: 1px solid #bbb; }
@@ -1435,10 +1441,12 @@ tr:hover td { background: var(--clr-surface-2); }
 .gut-acts { display: flex; gap: 8px; }
 @media (max-width: 980px) {
   .gut-kinds { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .gut-makers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .gut-p2, .gut-res { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
   .gut-kinds { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gut-makers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .gut-bar button { font-size: .66rem; padding: 4px 12px 4px 16px; height: auto; min-height: 44px; line-height: 1.15; }
   .gut-bar li.on button { font-size: .78rem; }
   .gut-fields { grid-auto-flow: row; grid-template-rows: none; gap: 12px; }

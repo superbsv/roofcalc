@@ -3,11 +3,16 @@
 // 1. Тип покрівлі → 2. Параметри покрівлі → 3. Підбір кольору → 4. Результат.
 // ============================================
 import React, { useEffect, useMemo, useState } from 'react';
-import { KINDS, RoofKind, COLORS, calculate, Params } from './gutter';
+import { KINDS, RoofKind, MAKERS, Maker, makerById, systemColors, calculate } from './gutter';
 import RoofPic from './RoofPics';
 import { t, translateTree } from '../../i18n/i18n';
 
-const STEPS = ['1. Тип покрівлі', '2. Параметри покрівлі', '3. Підбір кольору', '4. Результат'];
+const STEPS = ['1. Тип покрівлі', '2. Параметри покрівлі', '3. Виробник і колір', '4. Результат'];
+const MAKER_KEY = 'rk_gutter_maker';
+const lens = (a: number[]) => a.slice().sort((x, y) => y - x).join(' / ');
+/** Типорозмір за замовчуванням — «середній» для приватного будинку (125–130 мм), інакше перший */
+const defSystem = (m: Maker) => (m.systems.find(s => /^1[23]\d\//.test(s.id)) ?? m.systems[0]).id;
+const fitColor = (m: Maker, sys: string, cur: string) => { const cs = systemColors(m, sys); return (cs.find(c => c.id === cur) ?? cs.find(c => c.id === '8017') ?? cs[0]).id; };
 const num = (s: string | undefined) => { const v = parseFloat(String(s ?? '').replace(',', '.')); return Number.isFinite(v) ? v : 0; };
 
 export default function GutterCalc({ onClose }: { onClose: () => void }) {
@@ -15,8 +20,10 @@ export default function GutterCalc({ onClose }: { onClose: () => void }) {
   const [kind, setKind] = useState<RoofKind>('r1');
   const [vals, setVals] = useState<Record<string, string>>({});
   const [height, setHeight] = useState('');
-  const [system, setSystem] = useState<Params['system']>('130/100');
-  const [color, setColor] = useState(COLORS[1].id);
+  const [makerId, setMakerId] = useState(() => { try { return makerById(localStorage.getItem(MAKER_KEY) || '').id; } catch { return MAKERS[0].id; } });
+  const maker = makerById(makerId);
+  const [system, setSystem] = useState(() => defSystem(maker));
+  const [color, setColor] = useState(() => fitColor(maker, defSystem(maker), '8017'));
   const [tried, setTried] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -28,8 +35,17 @@ export default function GutterCalc({ onClose }: { onClose: () => void }) {
 
   const def = KINDS.find(k => k.id === kind)!;
   const v = useMemo(() => Object.fromEntries(def.letters.map(l => [l, num(vals[l])])), [def, vals]);
-  const res = calculate(kind, v, { height: num(height), system });
-  const col = COLORS.find(c => c.id === color)!;
+  const res = calculate(kind, v, { height: num(height), maker, system });
+  const colors = systemColors(maker, system);
+  const col = colors.find(c => c.id === color) ?? colors[0];
+  const ral = col.ral ? ` (RAL ${col.ral})` : '';
+  const sysName = `${maker.name} ${system}`;
+  const pickMaker = (id: string) => {
+    const m = makerById(id), sys = m.systems.some(s => s.id === system) ? system : defSystem(m);
+    setMakerId(m.id); setSystem(sys); setColor(fitColor(m, sys, color));
+    try { localStorage.setItem(MAKER_KEY, m.id); } catch { /* ignore */ }
+  };
+  const pickSystem = (sys: string) => { setSystem(sys); setColor(fitColor(maker, sys, color)); };
   const kindNo = KINDS.indexOf(def) + 1;
 
   const pickKind = (k: RoofKind) => { if (k !== kind) { setVals({}); setTried(false); } setKind(k); setStep(1); };
@@ -38,7 +54,7 @@ export default function GutterCalc({ onClose }: { onClose: () => void }) {
 
   const sides = def.letters.filter(l => v[l] > 0).map(l => `${l} = ${v[l]} м`).join(', ');
   const text = () => [
-    `Водостічна система ${system} мм, колір ${col.name} (RAL ${col.id})`,
+    col.ral ? `Водостічна система ${sysName} мм, колір ${col.name} (RAL ${col.ral})` : `Водостічна система ${sysName} мм, колір ${col.name}`,
     `Тип покрівлі №${kindNo}; ${sides}; висота будинку ${num(height)} м`,
     ...res.lines.map(l => `${l.name} — ${l.qty} ${l.unit}`),
   ].join('\n');
@@ -47,7 +63,7 @@ export default function GutterCalc({ onClose }: { onClose: () => void }) {
     const w = window.open('', '_blank', 'width=720,height=900'); if (!w) return;
     const rows = res.lines.map((l, i) => `<tr><td>${i + 1}</td><td>${l.name}</td><td style="text-align:right">${l.qty}</td><td>${l.unit}</td></tr>`).join('');
     w.document.write(`<!doctype html><meta charset="utf-8"><title>Водостік — ROOFKIT</title><style>body{font:14px/1.4 Arial,sans-serif;margin:24px;color:#111}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:5px 8px;text-align:left}th{background:#EEF2F7}</style>
-      <h2>Розрахунок водостічної системи</h2><p>Система ${system} мм · колір ${col.name} (RAL ${col.id})<br>Тип покрівлі №${kindNo}: ${sides}; висота будинку ${num(height)} м<br>Жолоб: ${res.gutterLen.toFixed(2)} м · водостоків: ${res.pipes}</p>
+      <h2>Розрахунок водостічної системи</h2><p>Система ${sysName} мм (${maker.material}) · колір ${col.name}${ral}<br>Тип покрівлі №${kindNo}: ${sides}; висота будинку ${num(height)} м<br>Жолоб: ${res.gutterLen.toFixed(2)} м · водостоків: ${res.pipes}</p>
       <table><tr><th>№</th><th>Найменування</th><th>К-сть</th><th>Од.</th></tr>${rows}</table><p style="color:#777;font-size:12px">Розраховано в ROOFKIT · roofkit.com.ua</p>`);
     w.document.close(); translateTree(w.document.body); w.document.title = t(w.document.title); w.focus(); w.print();
   };
@@ -100,7 +116,7 @@ export default function GutterCalc({ onClose }: { onClose: () => void }) {
               <div className="gut-p2-right">
                 <div className="gut-arrows">
                   <button className="gut-back" onClick={() => setStep(0)}>Повернутися</button>
-                  <button className="gut-next" onClick={toColor}>3. Вибрати колір водостоку</button>
+                  <button className="gut-next" onClick={toColor}>3. Вибрати виробника і колір</button>
                 </div>
                 <div className="gut-bigpic"><RoofPic kind={kind} /></div>
               </div>
@@ -108,20 +124,29 @@ export default function GutterCalc({ onClose }: { onClose: () => void }) {
           </>}
 
           {step === 2 && <>
-            <div className="gut-h">Крок 3. Оберіть колір водостоку</div>
-            <div className="gut-colors">
-              {COLORS.map(c => (
-                <button key={c.id} className={`gut-color${c.id === color ? ' on' : ''}`} onClick={() => setColor(c.id)}>
-                  <i style={{ background: c.hex }} /><span>{c.name}</span><small>RAL {c.id}</small>
+            <div className="gut-h">Крок 3. Оберіть виробника, типорозмір і колір водостоку</div>
+            <div className="gut-makers">
+              {MAKERS.map(m => (
+                <button key={m.id} className={`gut-maker${m.id === maker.id ? ' on' : ''}`} onClick={() => pickMaker(m.id)} aria-pressed={m.id === maker.id}>
+                  <b data-no-i18n>{m.name}</b><small>{m.material} · {m.country}</small>
                 </button>
               ))}
             </div>
             <div className="gut-sys">
               <span>Система (жолоб / труба):</span>
-              {(['130/100', '90/75'] as const).map(s => (
-                <label key={s}><input type="radio" name="gut-sys" checked={system === s} onChange={() => setSystem(s)} /> {s} мм</label>
+              {maker.systems.map(s => (
+                <label key={s.id}><input type="radio" name="gut-sys" checked={system === s.id} onChange={() => pickSystem(s.id)} /> {s.id} мм</label>
               ))}
             </div>
+            <div className="gut-sub">Колір</div>
+            <div className="gut-colors">
+              {colors.map(c => (
+                <button key={c.id} className={`gut-color${c.id === col.id ? ' on' : ''}`} onClick={() => setColor(c.id)}>
+                  <i style={{ background: c.hex }} /><span>{c.name}</span>{c.ral && <small>RAL {c.ral}</small>}
+                </button>
+              ))}
+            </div>
+            <p className="gut-note">{`Довжини: жолоб ${lens(maker.gutterLens)} м, труба ${lens(maker.pipeLens)} м; кронштейни жолоба з кроком до ${Math.round(maker.step * 100)} см.`} Відтінки RAL орієнтовні — уточнюйте за каталогом виробника.</p>
             <div className="gut-arrows gut-arrows-row">
               <button className="gut-back" onClick={() => setStep(1)}>Повернутися</button>
               <button className="gut-next" onClick={() => setStep(3)}>4. Розрахувати</button>
@@ -135,7 +160,7 @@ export default function GutterCalc({ onClose }: { onClose: () => void }) {
               <div className="gut-res-main">
                 <div className="gut-res-head">
                   <i style={{ background: col.hex }} />
-                  <div><b>Система {system} мм · {col.name} (RAL {col.id})</b>
+                  <div><b>Система {sysName} мм · {col.name}{ral}</b>
                     <div>{sides}; висота {num(height)} м · жолоб {res.gutterLen.toFixed(2)} м · водостоків {res.pipes}</div></div>
                 </div>
                 <table className="gut-table">
