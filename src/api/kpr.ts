@@ -88,7 +88,8 @@ export function parseKpr(text: string) {
     },
     materials: [material],
     slopes: slopes.map((s, n) => ({
-      name: `Скат ${n + 1}`, sort_order: n + 1, // i18n-ignore (дані: назва ската) polygon_points: s.pts, holes: s.holes,
+      name: `Скат ${n + 1}`, // i18n-ignore (дані: назва ската)
+      sort_order: n + 1, polygon_points: s.pts, holes: s.holes,
       laying_direction: s.leftRight ? 'left_right' : 'right_left', eave_overhang: k, ridge_gap: 0, material_ref: 1,
     })),
   };
