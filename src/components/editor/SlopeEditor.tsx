@@ -22,20 +22,20 @@ interface Props {
 
 // Палітри полотна ABT для темної і світлої теми (canvas не читає CSS-змінні, тому hex)
 type Palette = {
-  grid: string; axis: string; polygon: string; polygonFill: string; point: string; pointFirst: string;
+  grid: string; gridMinor: string; gridMicro: string; axis: string; polygon: string; polygonFill: string; point: string; pointFirst: string;
   sheet: string[]; sheetBorder: string[]; dim: string; tooltip: string; cursorLen: string;
   label: string; tooltipBg: string; tooltipText: string; pointStroke: string;
 };
 const PALETTES: Record<Theme, Palette> = {
   dark: {
-    grid: '#1E1E1E', axis: '#344154', polygon: '#F5F7FA', polygonFill: 'rgba(255,122,0,0.10)',
+    grid: '#3A4658', gridMinor: '#263040', gridMicro: '#1A212C', axis: '#5B6B82', polygon: '#F5F7FA', polygonFill: 'rgba(255,122,0,0.10)',
     point: '#FF7A1A', pointFirst: '#FF5A5A',
     sheet: ['rgba(191,195,199,0.20)','rgba(191,195,199,0.34)'], sheetBorder: ['#C3CBD5','#7C8A9C'],
     dim: '#C3CBD5', tooltip: '#0B1119', cursorLen: '#FF7A1A',
     label: '#94A3B8', tooltipBg: 'rgba(13,13,13,0.92)', tooltipText: '#FFFFFF', pointStroke: '#0B1119',
   },
   light: {
-    grid: '#E8E8E4', axis: '#C2C4C6', polygon: '#151E29', polygonFill: 'rgba(255,122,0,0.10)',
+    grid: '#B9C2CE', gridMinor: '#D6DCE4', gridMicro: '#EBEEF2', axis: '#8A96A6', polygon: '#151E29', polygonFill: 'rgba(255,122,0,0.10)',
     point: '#FF7A1A', pointFirst: '#C8322F',
     sheet: ['rgba(78,82,88,0.14)','rgba(78,82,88,0.26)'], sheetBorder: ['#4E5258','#2E3135'],
     dim: '#4E5258', tooltip: '#151E29', cursorLen: '#C25E00',
@@ -155,19 +155,23 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     const step = scale * gridScale;
     ctx.save();
 
-    // Тонкі лінії сітки по всій площині
-    ctx.strokeStyle = COLORS.grid;
-    ctx.lineWidth = 0.5;
-    // Вертикальні лінії — від лівого краю до правого
-    const startX = ((offset[0] % step) + step) % step;
-    for (let x = startX; x < W; x += step) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-    }
-    // Горизонтальні лінії
-    const startY = (((H - offset[1]) % step) + step) % step;
-    for (let y = startY; y < H; y += step) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-    }
+    // Сітка як міліметрівка: мікро (0.01 / 0.1 м — залежно від масштабу), середня (0.5 м), основна (крок підписів).
+    // Рівень малюється, лише якщо лінії не зливаються (≥ 6 px між ними).
+    const line = (x0: number, y0: number, x1: number, y1: number) => { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); };
+    const level = (st: number, color: string, width: number) => {
+      if (st < 6) return false;
+      ctx.strokeStyle = color; ctx.lineWidth = width;
+      const sx = ((offset[0] % st) + st) % st;
+      for (let x = sx; x < W; x += st) { const px = Math.round(x) + 0.5; line(px, 0, px, H); }
+      const sy = (((H - offset[1]) % st) + st) % st;
+      for (let y = sy; y < H; y += st) { const py = Math.round(y) + 0.5; line(0, py, W, py); }
+      return true;
+    };
+    const unit = scale;                                   // 1 м у пікселях
+    if (!level(unit * 0.01, COLORS.gridMicro, 1)) level(unit * 0.1, COLORS.gridMicro, 1);
+    else level(unit * 0.1, COLORS.gridMinor, 1);
+    level(unit * 0.5, COLORS.gridMinor, 1);
+    level(step, COLORS.grid, 1);
 
     // Осі X та Y (жирніші)
     ctx.strokeStyle = COLORS.axis;
