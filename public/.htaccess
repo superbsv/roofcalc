@@ -2,6 +2,13 @@ Options -Indexes
 Options -MultiViews
 DirectoryIndex index.html
 
+# index.html не кешується — після оновлення сайту браузер одразу бере нову версію
+<IfModule mod_headers.c>
+  <FilesMatch "^(index\.html|widget\.html)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
 RewriteEngine On
 RewriteBase /
 

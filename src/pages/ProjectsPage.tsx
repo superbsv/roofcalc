@@ -56,7 +56,13 @@ export default function ProjectsPage({ onOpenProject }: Props) {
   const openFile = async (f?: File) => {
     if (!f) return;
     setCreating(true); setError('');
-    try { const r = /\.kpr$/i.test(f.name) ? await openKprFile(f) : await openProjectFile(f); onOpenProject(r.project.id); }   // .kpr — файл «Кровля Профи»
+    try {
+      // тип файлу — за вмістом, а не за розширенням: .roofkit — JSON, «Кровля Профи» (.kpr) — текст, що починається з номера версії
+      const head = new Uint8Array(await f.slice(0, 64).arrayBuffer());
+      const firstCh = String.fromCharCode(...Array.from(head).filter(b => b > 32).slice(0, 1));
+      const r = /\.kpr$/i.test(f.name) || (firstCh && firstCh !== '{' && /^\d/.test(firstCh)) ? await openKprFile(f) : await openProjectFile(f);
+      onOpenProject(r.project.id);
+    }
     catch (e: any) { setError(e.message); }
     finally { setCreating(false); if (fileRef.current) fileRef.current.value = ''; }
   };
@@ -90,7 +96,7 @@ export default function ProjectsPage({ onOpenProject }: Props) {
         </div>
         <div className="proj-head-btns">
           <button className="btn btn-secondary btn-lg" onClick={() => fileRef.current?.click()} disabled={creating} title="Відкрити файл проекту ROOFKIT (.roofkit) або файл «Кровля Профи» (.kpr)">📂 Відкрити файл</button>
-          <input ref={fileRef} type="file" accept=".roofkit,.json,.kpr" hidden onChange={e => openFile(e.target.files?.[0])} />
+          <input ref={fileRef} type="file" accept=".roofkit,.json,.kpr,.KPR" hidden onChange={e => openFile(e.target.files?.[0])} />
           <button className="btn btn-primary btn-lg" onClick={createProject} disabled={creating}>
             {creating ? 'Створення…' : '+ Створити розрахунок'}
           </button>

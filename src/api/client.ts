@@ -422,6 +422,6 @@ export async function downloadProjectFile(id: number, name?: string) {
 /** Відкрити файл проекту: створює новий розрахунок у кабінеті */
 export async function openProjectFile(file: File) {
   let data: unknown;
-  try { data = JSON.parse(await file.text()); } catch { throw new Error('Файл пошкоджений або це не файл проекту ROOFKIT (.roofkit)'); }
+  try { data = JSON.parse(await file.text()); } catch { throw new Error('Файл пошкоджений або це не файл проекту ROOFKIT (.roofkit) чи «Кровля Профи» (.kpr)'); }
   return projectFileApi.import(data);
 }
