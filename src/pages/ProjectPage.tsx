@@ -456,7 +456,9 @@ export default function ProjectPage({ projectId }: Props) {
   // Лінія стику рядів (одна на весь скат): null — посередині
   const jointStep = 1; // як у КП: лінія стику рухається точно на крок кнопки
   const setJoint = (mm: number | null) => active && run('calc', async () => {
-    await patchSlope(active.id, { joint_y: mm }, true); // схема не зникає під час перерахунку
+    // Рух лінії стику скидає вертикальний зсув (опускання всіх листів нижче карниза), інакше нижній ряд
+    // лишається звисати під карнизом, а в режимі лінії стику цей зсув не видно і не прибрати
+    await patchSlope(active.id, { joint_y: mm, v_shift: 0 }, true); // схема не зникає під час перерахунку
     await calcSlope(active.id);
   });
 

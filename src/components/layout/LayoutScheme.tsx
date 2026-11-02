@@ -859,7 +859,9 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           <div style={{ fontSize:'.8rem', color:'var(--clr-text-3)', marginTop:'2px' }}>
             {calcResult.profile_name} · {visiblePlacements.length} листів · {calcResult.slope_area_m2.toFixed(2)} м²
             {jointY != null && <span> · Перша лінія стику: <b style={{ color: pendV ? 'var(--clr-brand)' : 'var(--clr-text)' }}>{((jointY + pendV)/1000).toFixed(3)} м</b>{rowLen ? ` · висота ряду ${(rowLen/1000).toFixed(3)} м` : ''}{jointRange ? ` (лінія ${(jointRange[0]/1000).toFixed(3)}–${(jointRange[1]/1000).toFixed(3)})` : ''}</span>}
-            {jointY == null && vShift - pendV !== 0 && <span style={{ color:'var(--clr-brand)' }}> · По вертикалі: ↓{vShift - pendV} мм</span>}
+            {jointY == null && vShift - pendV !== 0 && <span style={{ color:'var(--clr-brand)' }}> · Випуск нижче карниза: ↓{vShift - pendV} мм</span>}
+            {jointY != null && vShift > 0 && <span style={{ color:'var(--clr-brand)' }}> · Випуск нижче карниза: ↓{vShift} мм
+              {onVShift && <button type="button" onClick={() => onVShift(0)} title="Прибрати випуск нижче карниза" style={{ marginLeft: 4, border: 'none', background: 'none', color: 'var(--clr-brand)', cursor: 'pointer', fontWeight: 700 }}>✕</button>}</span>}
             {(() => { const sx = (onShiftX ? shiftX : layoutOffset) + pendH; return sx !== 0 && <span style={{ color:'var(--clr-brand)' }}> · Зсув: {sx>0?'+':''}{sx} мм</span>; })()}
             {hasSelection && <span style={{ color:COLORS.selected, fontWeight:600 }}> · Виділено: {selected.size} шт</span>}
           </div>
