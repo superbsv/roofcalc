@@ -348,6 +348,43 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editsRef = useRef(sheetEdits); editsRef.current = sheetEdits;
   const markDirty = () => { dirty.current = true; };
+
+  // ---- Відміна ручних правок (до 9 кроків, як у КП). Утримання кнопки — один крок ----
+  const placementsRef = useRef(placements); placementsRef.current = placements;
+  const history = useRef<SheetPlacement[][]>([]);
+  const lastSnap = useRef(0);
+  const [histLen, setHistLen] = useState(0);
+  const snap = () => {
+    const now = Date.now();
+    if (now - lastSnap.current > 700) {
+      history.current.push(placementsRef.current.map(p => ({ ...p })));
+      if (history.current.length > 9) history.current.shift();
+      setHistLen(history.current.length);
+    }
+    lastSnap.current = now;
+  };
+  const undo = () => {
+    const prev = history.current.pop();
+    setHistLen(history.current.length);
+    if (!prev) return;
+    markDirty();
+    setManualMode(true);
+    setPlacements(prev);
+    onUpdate?.(prev.filter(p => !p.deleted));
+  };
+  useEffect(() => { history.current = []; setHistLen(0); }, [slopeName]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.code === 'KeyZ' || e.key.toLowerCase() === 'z')) {
+        const t = e.target as HTMLElement | null;
+        if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+        if (!history.current.length) return;
+        e.preventDefault(); undo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!dirty.current || !onEdits) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -534,6 +571,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   const changeLengthTop = useCallback((deltaMm: number) => {
     setManualMode(true);
     markDirty();
+    snap();
     setPlacements(prev => {
       const next = prev.map(p => ({ ...p }));
       selected.forEach(num => {
@@ -561,6 +599,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   const changeLengthBottom = useCallback((deltaMm: number) => {
     setManualMode(true);
     markDirty();
+    snap();
     setPlacements(prev => {
       const next = prev.map(p => ({ ...p }));
       selected.forEach(num => {
@@ -632,6 +671,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   }, [selected, onUpdate]);
 
   const deleteSelected = () => {
+    snap(); lastSnap.current = 0;
     markDirty();
     setPlacements(prev => {
       const updated = prev.map(p => selected.has(p.sheet_number) ? { ...p, deleted: true } : p);
@@ -641,7 +681,44 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
     setSelected(new Set());
   };
 
+  // Прибрати надлишкові перекриття (як у КП): два листи однієї колонки, що перекриваються, замінюються одним,
+  // якщо він не довший за максимальну довжину листа. Діє на виділені листи або (без виділення) на весь скат.
+  const maxLen = Number((calcResult as any).max_real_length_mm) || 0;
+  const mergeCandidates = (list: SheetPlacement[], only: Set<number> | null) => {
+    const byCol = new Map<number, SheetPlacement[]>();
+    list.forEach(p => { if (!p.deleted) { const a = byCol.get(p.col_index) || []; a.push(p); byCol.set(p.col_index, a); } });
+    let n = 0;
+    byCol.forEach(col => {
+      col.sort((a, b) => getY(a) - getY(b));
+      for (let i = 0; i + 1 < col.length; i++) {
+        const lo = col[i], up = col[i + 1];
+        if (only && !only.has(lo.sheet_number) && !only.has(up.sheet_number)) continue;
+        const loTop = getY(lo) + getLen(lo), upTop = getY(up) + getLen(up);
+        if (getY(up) > loTop) continue;                    // між листами зазор — не об'єднуємо
+        const merged = Math.max(loTop, upTop) - getY(lo);
+        if (maxLen > 0 && merged > maxLen) continue;
+        n++;
+        lo.manual_length = merged; up.deleted = true;
+        col.splice(i + 1, 1); i--;                          // об'єднаний лист може поглинути і наступний
+      }
+    });
+    return n;
+  };
+  const canMerge = mergeCandidates(placements.map(p => ({ ...p })), hasSel()) > 0;
+  function hasSel() { return selected.size ? selected : null; }
+  const mergeOverlaps = () => {
+    const next = placements.map(p => ({ ...p }));
+    if (!mergeCandidates(next, hasSel())) return;
+    snap(); lastSnap.current = 0;
+    markDirty();
+    setManualMode(true);
+    setPlacements(next);
+    onUpdate?.(next.filter(p => !p.deleted));
+    setSelected(new Set());
+  };
+
   const resetAll = () => {
+    history.current = []; setHistLen(0);
     onReset?.();
     setLayoutOffset(0);
     setVerticalOffset(0);
@@ -784,6 +861,9 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           <span style={{ fontSize:'.85rem', minWidth:'40px', textAlign:'center' }}>{Math.round(zoom*100)}%</span>
           <button onClick={()=>setZoom(z=>Math.min(3,z+0.1))} style={zoomBtn}>+</button>
           <button onClick={()=>{ savedZoom = null; const w = boxRef.current?.clientWidth || 900; setZoom(Math.max(0.3, Math.min(1, Math.floor(((window.innerHeight * 0.6) / (w * SVG_H / SVG_W)) * 20) / 20))); }} style={zoomBtn} title="Вписати в екран">⟳</button>
+          <button onClick={mergeOverlaps} disabled={!canMerge} style={{ ...zoomBtn, opacity: canMerge ? 1 : .45, cursor: canMerge ? 'pointer' : 'default' }}
+            title={maxLen ? `Замінити листи, що перекриваються, одним (до ${(maxLen / 1000).toFixed(3)} м). Діє на виділені листи або на весь скат` : 'Замінити листи, що перекриваються, одним'}>⇲ Прибрати зайві перекриття</button>{/* i18n-ignore: шаблон у tpl */}
+          <button onClick={undo} disabled={!histLen} style={{ ...zoomBtn, opacity: histLen ? 1 : .45, cursor: histLen ? 'pointer' : 'default' }} title="Відмінити останню правку листів (Ctrl+Z), до 9 кроків">↶ Відмінити{histLen ? ` (${histLen})` : ''}</button>
           <button onClick={resetAll} style={{ ...zoomBtn, color:'var(--clr-error)', borderColor:'var(--clr-error)' }}>↩ Скинути</button>
         </div>
       </div>
@@ -1035,9 +1115,9 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
                 style={{ flex:1, padding:'8px', border:'1px solid var(--clr-error)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-error-bg)', color:'var(--clr-error)', fontSize:'.82rem', fontWeight:500 }}>
                 🗑 Видалити
               </button>
-              <button onClick={resetAll}
-                style={{ flex:1, padding:'8px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', color:'var(--clr-text)', fontSize:'.82rem' }}>
-                ↩ Скинути все
+              <button onClick={undo} disabled={!histLen}
+                style={{ flex:1, padding:'8px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor: histLen ? 'pointer' : 'default', opacity: histLen ? 1 : .45, background:'var(--clr-surface-2)', color:'var(--clr-text)', fontSize:'.82rem' }}>
+                ↶ Відмінити
               </button>
             </div>
           </div>
