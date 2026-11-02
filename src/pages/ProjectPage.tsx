@@ -946,7 +946,8 @@ export default function ProjectPage({ projectId }: Props) {
       {/* ===================== 5. СПЕЦИФІКАЦІЯ ===================== */}
       {step === 'spec' && (
         <Specification project={project} settings={settings} slopes={slopes} material={material} items={specItems}
-          projectId={projectId} onBack={() => goStep('slope')} onMaterial={() => setStep('material')} />
+          projectId={projectId} onBack={() => goStep('slope')} onMaterial={() => setStep('material')}
+          onSaveSettings={patch => saveSettings(patch).then(() => undefined)} />
       )}
 
       {/* Вікно шаблону: схема + розміри, м */}
@@ -1204,9 +1205,10 @@ function MaterialSketch({ wave }: { wave: boolean }) {
 }
 
 // ---------- Специфікація (структура КП 8.15, розділ 13.10 ТЗ) ----------
-function Specification({ project, settings, slopes, material, items, projectId, onBack, onMaterial }: {
+function Specification({ project, settings, slopes, material, items, projectId, onBack, onMaterial, onSaveSettings }: {
   project: Project | null; settings: ProjectSettings; slopes: Slope[]; material?: MaterialProfile;
   items: SpecItem[]; projectId: number; onBack: () => void; onMaterial: () => void;
+  onSaveSettings: (patch: Partial<ProjectSettings>) => Promise<void>;
 }) {
   const paperRef = useRef<HTMLElement>(null);
   const [saving, setSaving] = useState<'' | 'pdf' | 'xlsx' | 'png' | 'jpg' | 'zip'>('');
@@ -1371,9 +1373,79 @@ function Specification({ project, settings, slopes, material, items, projectId, 
             ))}
           </tbody>
         </table>
+        {(settings.extra_items || []).length > 0 && (
+          <>
+            <h3 className="kp-paper-h">ДОДАТКОВІ ПОЗИЦІЇ</h3>
+            <table className="kp-table kp-paper-table">
+              <thead><tr><th>Найменування</th><th>Од.</th><th>Кількість</th></tr></thead>
+              <tbody data-no-i18n>
+                {(settings.extra_items || []).map((r, i) => (
+                  <tr key={i}><td>{r.name}</td><td>{r.unit}</td><td>{r.qty != null ? r.qty : ''}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+        {settings.spec_note && <div className="kp-paper-note"><b>Примітка:</b> <span data-no-i18n>{settings.spec_note}</span></div>}
         <div className="kp-paper-sign"><span>Менеджер:</span> {settings.responsible || project?.manager_name || '________________'}</div>
         {!items.length && <div className="alert alert-info">Специфікація порожня: розрахуйте хоча б один скат.</div>}
       </article>
+      <SpecExtras settings={settings} onSave={onSaveSettings} />
+    </div>
+  );
+}
+
+// Додаткові позиції і примітка до специфікації (як у КП: те, що програма не рахує — снігозатримувачі, водостік, фарба…)
+function SpecExtras({ settings, onSave }: { settings: ProjectSettings; onSave: (p: Partial<ProjectSettings>) => Promise<void> }) {
+  type Row = { name: string; unit: string; qty: string };
+  const toRows = () => (settings.extra_items || []).map(r => ({ name: r.name, unit: r.unit, qty: r.qty != null ? String(r.qty) : '' }));
+  const [rows, setRows] = useState<Row[]>(toRows);
+  const [note, setNote] = useState(settings.spec_note || '');
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  useEffect(() => { setRows(toRows()); setNote(settings.spec_note || ''); }, [settings.extra_items, settings.spec_note]); // eslint-disable-line react-hooks/exhaustive-deps
+  const set = (i: number, k: keyof Row, v: string) => setRows(rs => rs.map((r, j) => j === i ? { ...r, [k]: v } : r));
+  const save = async () => {
+    setBusy(true);
+    try {
+      await onSave({
+        extra_items: rows.filter(r => r.name.trim()).map(r => {
+          const q = parseFloat(r.qty.replace(',', '.'));
+          return { name: r.name.trim(), unit: r.unit.trim(), qty: Number.isFinite(q) ? q : null };
+        }),
+        spec_note: note.trim(),
+      });
+    } catch (e: any) { alert(e.message || String(e)); }
+    finally { setBusy(false); }
+  };
+  const count = (settings.extra_items || []).length + (settings.spec_note ? 1 : 0);
+  return (
+    <div className="kp-spec-extra no-print">
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => setOpen(o => !o)}>
+        {open ? '▾' : '▸'} Додаткові позиції і примітка{count ? ` (${count})` : ''}
+      </button>
+      {open && (
+        <div className="kp-spec-extra-body">
+          <table className="kp-table">
+            <thead><tr><th>Найменування</th><th>Од.</th><th>Кількість</th><th></th></tr></thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i}>
+                  <td><input className="form-control" value={r.name} maxLength={200} placeholder="Снігозатримувач трубчастий 3 м" onChange={e => set(i, 'name', e.target.value)} /></td>
+                  <td style={{ width: 90 }}><input className="form-control" value={r.unit} maxLength={20} placeholder="шт" onChange={e => set(i, 'unit', e.target.value)} /></td>
+                  <td style={{ width: 110 }}><input className="form-control" inputMode="decimal" value={r.qty} onChange={e => set(i, 'qty', e.target.value)} /></td>
+                  <td style={{ width: 40 }}><button type="button" className="btn btn-ghost btn-sm" onClick={() => setRows(rs => rs.filter((_, j) => j !== i))} aria-label="Видалити рядок">✕</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button type="button" className="btn btn-secondary btn-sm" disabled={rows.length >= 30} onClick={() => setRows(rs => [...rs, { name: '', unit: 'шт', qty: '' }])}>+ Додати позицію</button>
+          <label className="kp-spec-note">Примітка до специфікації
+            <textarea className="form-control" rows={3} maxLength={2000} value={note} onChange={e => setNote(e.target.value)} />
+          </label>
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={save}>{busy ? 'Збереження…' : 'Зберегти'}</button>
+        </div>
+      )}
     </div>
   );
 }

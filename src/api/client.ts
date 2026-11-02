@@ -157,6 +157,8 @@ export interface ProjectSettings {
   supply?: 'order' | 'stock'; stock_variant?: 1 | 2 | 3;
   k?: number; pk?: number;
   direction?: 'left_right' | 'right_left';
+  extra_items?: { name: string; unit: string; qty: number | null }[];   // додаткові позиції специфікації
+  spec_note?: string;                                                    // примітка до специфікації
   coating?: string; color?: string;
   round_step?: number | null;   // округлення довжин листів для всього розрахунку, мм (null — з матеріалу)
   step?: string;

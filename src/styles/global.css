@@ -1705,3 +1705,11 @@ tr:hover td { background: var(--clr-surface-2); }
 /* Технологічний рівень: Snap, помилки розкрою */
 .kp-tech-err { display: grid; gap: 3px; font-size: .85rem; }
 .kp-paper-warn { margin: 6px 0 10px; padding: 8px 10px; border: 2px solid #DC2626; color: #B91C1C; font-weight: 700; font-size: .85rem; }
+
+/* Додаткові позиції і примітка до специфікації */
+.kp-spec-extra { max-width: 980px; margin: 14px auto 24px; }
+.kp-spec-extra-body { margin-top: 10px; padding: 14px; border: 1px solid var(--clr-border); border-radius: 10px; background: var(--clr-surface); display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.kp-spec-extra-body .kp-table { width: 100%; }
+.kp-spec-note { display: flex; flex-direction: column; gap: 4px; width: 100%; font-size: .85rem; }
+.kp-paper-note { margin-top: 12px; font-size: .85rem; white-space: pre-wrap; }
+@media print { .no-print, .kp-spec-extra { display: none !important; } }

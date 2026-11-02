@@ -33,6 +33,20 @@ class ProjectsController
         $out = [];
         foreach ($raw as $k => $v) {
             if (!is_string($k) || strlen($k) > 40) continue;
+            // Додаткові позиції специфікації (як у КП: снігозатримувачі, водостік тощо) — до 30 рядків
+            if ($k === 'extra_items' && is_array($v)) {
+                $rows = [];
+                foreach (array_slice($v, 0, 30) as $it) {
+                    if (!is_array($it)) continue;
+                    $name = trim(mb_substr((string)($it['name'] ?? ''), 0, 200));
+                    if ($name === '') continue;
+                    $rows[] = ['name' => $name, 'unit' => trim(mb_substr((string)($it['unit'] ?? ''), 0, 20)),
+                               'qty' => is_numeric($it['qty'] ?? null) ? round((float)$it['qty'], 3) : null];
+                }
+                $out[$k] = $rows;
+                continue;
+            }
+            if ($k === 'spec_note') { $out[$k] = mb_substr((string)$v, 0, 2000); continue; }
             if (is_array($v) || is_object($v)) continue;
             $out[$k] = is_string($v) ? mb_substr($v, 0, 255) : $v;
         }

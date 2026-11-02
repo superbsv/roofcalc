@@ -349,6 +349,16 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   const editsRef = useRef(sheetEdits); editsRef.current = sheetEdits;
   const markDirty = () => { dirty.current = true; };
 
+  // Підписи довжин на схемі (як «Вид» у КП): горизонтально / вертикально / сховати — запам'ятовується в браузері
+  const [labels, setLabels] = useState<'h' | 'v' | 'off'>(() => {
+    try { const v = localStorage.getItem('rk_ls_labels'); return v === 'v' || v === 'off' ? v : 'h'; } catch { return 'h'; }
+  });
+  const cycleLabels = () => setLabels(l => {
+    const n = l === 'h' ? 'v' : l === 'v' ? 'off' : 'h';
+    try { localStorage.setItem('rk_ls_labels', n); } catch { /* приватний режим */ }
+    return n;
+  });
+
   // ---- Відміна ручних правок (до 9 кроків, як у КП). Утримання кнопки — один крок ----
   const placementsRef = useRef(placements); placementsRef.current = placements;
   const history = useRef<SheetPlacement[][]>([]);
@@ -861,6 +871,9 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           <span style={{ fontSize:'.85rem', minWidth:'40px', textAlign:'center' }}>{Math.round(zoom*100)}%</span>
           <button onClick={()=>setZoom(z=>Math.min(3,z+0.1))} style={zoomBtn}>+</button>
           <button onClick={()=>{ savedZoom = null; const w = boxRef.current?.clientWidth || 900; setZoom(Math.max(0.3, Math.min(1, Math.floor(((window.innerHeight * 0.6) / (w * SVG_H / SVG_W)) * 20) / 20))); }} style={zoomBtn} title="Вписати в екран">⟳</button>
+          <button onClick={cycleLabels} style={zoomBtn} title="Підписи довжин листів: горизонтально → вертикально → сховати">
+            {labels === 'h' ? 'Розміри: ↔' : labels === 'v' ? 'Розміри: ↕' : 'Розміри: —'}
+          </button>
           <button onClick={mergeOverlaps} disabled={!canMerge} style={{ ...zoomBtn, opacity: canMerge ? 1 : .45, cursor: canMerge ? 'pointer' : 'default' }}
             title={maxLen ? `Замінити листи, що перекриваються, одним (до ${(maxLen / 1000).toFixed(3)} м). Діє на виділені листи або на весь скат` : 'Замінити листи, що перекриваються, одним'}>⇲ Прибрати зайві перекриття</button>{/* i18n-ignore: шаблон у tpl */}
           <button onClick={undo} disabled={!histLen} style={{ ...zoomBtn, opacity: histLen ? 1 : .45, cursor: histLen ? 'pointer' : 'default' }} title="Відмінити останню правку листів (Ctrl+Z), до 9 кроків">↶ Відмінити{histLen ? ` (${histLen})` : ''}</button>
@@ -958,11 +971,16 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
                     <rect key={`z${a}`} x={x1} y={y1 - b * scale} width={w} height={(b - a) * scale}
                       fill="#16A34A" fillOpacity={0.22} stroke="#16A34A" strokeOpacity={0.6} strokeWidth={0.6} pointerEvents="none" />
                   ))}
-                  {h>20 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
+                  {labels === 'h' && h>20 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
                     fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(9,Math.min(13,h/4))} fontWeight="600">
                     {(length/1000).toFixed(3)}
                   </text>}
-                  {h>30 && w>20 && <text x={x1+w/2} y={y1-h/2+14} textAnchor="middle" dominantBaseline="middle"
+                  {labels === 'v' && h>30 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
+                    transform={`rotate(-90 ${x1+w/2} ${y1-h/2})`}
+                    fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(9,Math.min(14,w/2.2))} fontWeight="600">
+                    {(length/1000).toFixed(3)}
+                  </text>}
+                  {labels === 'h' && h>30 && w>20 && <text x={x1+w/2} y={y1-h/2+14} textAnchor="middle" dominantBaseline="middle"
                     fill={isSel?COLORS.selected:COLORS.text} fontSize={8} opacity={0.7}>
                     №{p.sheet_number}
                   </text>}
