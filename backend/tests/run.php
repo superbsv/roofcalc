@@ -129,6 +129,15 @@ ok(!isset($w10['tech']) && empty($w10['tech_errors']), 'крок 10 мм: нем
 ok((bool)array_filter($w10['warnings'], function ($w) { return strpos($w, 'Крок хвилі') !== false; }), 'попередження про невірний крок хвилі');
 ok(\RoofCalc\Core\Calculation\MetalTileProfile::fromMaterial(['type' => 'tile', 'wave_step' => 350, 'stamp_gap' => 200]) === null, 'відступ ≥ половини кроку — зону не побудувати, правило не діє');
 
+echo "Виріз біля карниза — листи над ним коротшають знизу (як у КП)\n";
+$hp = ['type' => 'falts', 'full_width' => 1100, 'useful_width' => 1050, 'length_overlap' => 0, 'min_length' => 300, 'max_length' => 7000, 'round_step' => 50];
+$hs = ['polygon_points' => [[0, 0], [6000, 0], [6000, 4000], [0, 4000]], 'holes' => [[[1000, 0], [5000, 0], [3000, 1000]]], 'eave_overhang' => 0, 'ridge_gap' => 0, 'laying_direction' => 'left_right'];
+$hr = (new E($hp, $hs))->calculate();
+$mid = array_values(array_filter($hr['placements'], function ($q) { return $q['x'] >= 2000 && $q['x'] + 1050 <= 4000; }));
+ok($mid && $mid[0]['y'] > 400 && $mid[0]['length'] < 3600, 'лист над вирізом починається над ним і коротший за повний');
+$edge = array_values(array_filter($hr['placements'], function ($q) { return $q['x'] < 1000; }));
+ok($edge && $edge[0]['y'] <= 0, 'лист поруч із вирізом — від карниза');
+
 echo "Немає допустимого рішення\n";
 $tight = $calc([], ['max_length' => 440, 'min_length' => 400]);   // допустимі лише 400…440 (r 50…90)
 ok(isset($tight['tech_ok']), 'розрахунок не падає');

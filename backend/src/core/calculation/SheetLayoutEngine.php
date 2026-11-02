@@ -199,6 +199,10 @@ class SheetLayoutEngine
             // Вирізи, що перекривають колонку на всю ширину, розривають її: лист знизу закінчується біля вирізу,
             // лист зверху починається над ним (економія матеріалу). Вирізи, що закривають колонку лише частково,
             // перекриваються листом — його вирізають при монтажі.
+            // Виріз біля карниза / гребеня, що закриває колонку на всю ширину: лист коротшає з того боку
+            // на висоту вирізу в цій колонці (як у КП); над вирізом біля карниза свіс К не додається.
+            [$r, $eaveCut] = $this->edgeHoleTrim($x, $x + $this->usefulWidth, $r);
+            if ($r === null) continue;
             $gaps = $this->blockingGaps($x, $x + $this->usefulWidth, $r[0], $r[1]);
             $segs = []; $from = $r[0];
             foreach ($gaps as [$g0, $g1]) { $segs[] = [$from, $g0]; $from = $g1; }
@@ -206,9 +210,10 @@ class SheetLayoutEngine
             $last = count($segs) - 1;
             foreach ($segs as $si => [$s0, $s1]) {
                 $isFirst = $si === 0; $isLast = $si === $last;
-                $need = ($s1 - $s0) + ($isFirst ? $this->k + $vshift : 0) - ($isLast ? $this->pk : 0);
+                $ext = $isFirst && !$eaveCut ? $this->k + $vshift : 0;
+                $need = ($s1 - $s0) + $ext - ($isLast ? $this->pk : 0);
                 if ($need <= 0) continue;
-                $columns[] = ['col' => $c, 'x' => $x, 'bottom' => $s0 - ($isFirst ? $this->k + $vshift : 0), 'need' => $need, 'seg' => $si];
+                $columns[] = ['col' => $c, 'x' => $x, 'bottom' => $s0 - $ext, 'need' => $need, 'seg' => $si];
             }
         }
 
@@ -751,6 +756,45 @@ class SheetLayoutEngine
         if (count($ys) < 2) return null;
         $lo = (int)floor(min($ys)); $hi = (int)ceil(max($ys));
         return $hi - $lo > 0 ? [$lo, $hi] : null;
+    }
+
+    // Межі вирізу в колонці по трьох пробних точках: [найвищий низ, найнижчий верх] або null
+    private function holeSpan(array $hole, float $x0, float $x1): ?array
+    {
+        $hx = array_column($hole, 0);
+        if (min($hx) > $x0 + 0.5 || max($hx) < $x1 - 0.5) return null;      // виріз не перекриває всю ширину колонки
+        $bot = -INF; $top = INF; $n = count($hole);
+        foreach ([$x0 + 0.5, ($x0 + $x1) / 2, $x1 - 0.5] as $x) {
+            $ys = [];
+            for ($i = 0; $i < $n; $i++) {
+                [$ax, $ay] = $hole[$i]; [$bx, $by] = $hole[($i + 1) % $n];
+                if ($ax == $bx || $x < min($ax, $bx) || $x > max($ax, $bx)) continue;
+                $ys[] = $ay + ($x - $ax) / ($bx - $ax) * ($by - $ay);
+            }
+            if (count($ys) < 2) return null;
+            $bot = max($bot, min($ys)); $top = min($top, max($ys));
+        }
+        return $top > $bot ? [$bot, $top] : null;
+    }
+
+    // Вирізи, що впритул до карниза (низу колонки) або гребеня (верху) і закривають колонку на всю ширину:
+    // колонка починається над вирізом / закінчується під ним. Повертає [[lo, hi] | null, чи підрізано низ].
+    private function edgeHoleTrim(float $x0, float $x1, array $r): array
+    {
+        [$lo, $hi] = $r; $eave = false; $tol = 20; $min = 50;
+        for ($pass = 0; $pass < 3; $pass++) {                                  // кілька вирізів один над одним
+            $changed = false;
+            foreach ($this->holes as $hole) {
+                if (!is_array($hole) || count($hole) < 3) continue;
+                $sp = $this->holeSpan($hole, $x0, $x1);
+                if (!$sp) continue;
+                [$b, $t] = $sp;
+                if ($b <= $lo + $tol && $t > $lo + $min) { $lo = (int)floor($t); $eave = true; $changed = true; }
+                elseif ($t >= $hi - $tol && $b < $hi - $min) { $hi = (int)ceil($b); $changed = true; }
+            }
+            if (!$changed) break;
+        }
+        return [$hi - $lo > 0 ? [$lo, $hi] : null, $eave];
     }
 
     // Ділянки по висоті, де виріз закриває колонку [x0, x1] на всю ширину (мм), лише ≥ 300 мм
