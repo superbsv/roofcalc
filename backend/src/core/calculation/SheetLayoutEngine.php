@@ -188,22 +188,41 @@ class SheetLayoutEngine
         $vshift = max(0, min(2000, (int)($this->slope['v_shift'] ?? 0)));
         $this->vShift = $vshift;
 
-        $columns = [];
+        $columns = []; $firstCol = true;
         for ($c = -$extra; $c <= $cols; $c++) {
             $x = $rtl
                 ? $bbox['maxX'] + $shift - ($c + 1) * $uw
                 : $bbox['minX'] + $shift + $c * $uw;
             if ($x >= $bbox['maxX'] || $x + $uw <= $bbox['minX']) continue;
-            $r = $this->columnRange($x, $x + $this->usefulWidth);
+            // Смуга бічного нахлесту (повна − корисна ширина) з боку попереднього листа закрита обома листами,
+            // тож лист має закрити лише свою частину колонки (як у КП). Перша колонка — повністю; якщо в смузі
+            // є вершина ската чи вирізу (пік / западина) — теж повністю, щоб не лишилось незакритого кута.
+            [$cx0, $cx1] = [$x, $x + $uw];
+            $ov = max(0, $this->fullWidth - $uw);
+            if ($ov > 0 && $ov < $uw / 2 && !$firstCol) {
+                $band = $rtl ? [$cx1 - $ov, $cx1] : [$cx0, $cx0 + $ov];
+                if (!$this->vertexIn($band[0], $band[1])) { if ($rtl) $cx1 -= $ov; else $cx0 += $ov; }
+            }
+            // Крихітний гострий кут ската за попереднім листом (вужчий за 100 мм і менший за 50 см²) —
+            // окремий лист на нього не кладуть (як у КП), його закриває підрізка / доборний елемент
+            if (!$firstCol) {
+                $sx0 = max($cx0, $bbox['minX']); $sx1 = min($cx1, $bbox['maxX']);
+                if ($sx1 - $sx0 < 10) continue;
+                if ($sx1 - $sx0 < 100 && $this->coveredArea($sx0, $bbox['minY'], (int)ceil($sx1 - $sx0), (int)ceil($bbox['maxY'] - $bbox['minY'])) < 5000) continue;
+            }
+            $r = $this->columnRange($cx0, $cx1);
             if ($r === null) continue;
+            $firstCol = false;
+            // ПК — лише для листів, що доходять до верху ската (конька / вершини), як у КП
+            $atRidge = $r[1] >= $bbox['maxY'] - 2;
             // Вирізи, що перекривають колонку на всю ширину, розривають її: лист знизу закінчується біля вирізу,
             // лист зверху починається над ним (економія матеріалу). Вирізи, що закривають колонку лише частково,
             // перекриваються листом — його вирізають при монтажі.
             // Виріз біля карниза / гребеня, що закриває колонку на всю ширину: лист коротшає з того боку
             // на висоту вирізу в цій колонці (як у КП); над вирізом біля карниза свіс К не додається.
-            [$r, $eaveCut] = $this->edgeHoleTrim($x, $x + $this->usefulWidth, $r);
+            [$r, $eaveCut] = $this->edgeHoleTrim($cx0, $cx1, $r);
             if ($r === null) continue;
-            $gaps = $this->blockingGaps($x, $x + $this->usefulWidth, $r[0], $r[1]);
+            $gaps = $this->blockingGaps($cx0, $cx1, $r[0], $r[1]);
             $segs = []; $from = $r[0];
             foreach ($gaps as [$g0, $g1]) { $segs[] = [$from, $g0]; $from = $g1; }
             $segs[] = [$from, $r[1]];
@@ -211,7 +230,8 @@ class SheetLayoutEngine
             foreach ($segs as $si => [$s0, $s1]) {
                 $isFirst = $si === 0; $isLast = $si === $last;
                 $ext = $isFirst && !$eaveCut ? $this->k + $vshift : 0;
-                $need = ($s1 - $s0) + $ext - ($isLast ? $this->pk : 0);
+                // ПК — лише для листів біля конька / вершини
+                $need = ($s1 - $s0) + $ext - ($isLast && $atRidge ? $this->pk : 0);
                 if ($need <= 0) continue;
                 $columns[] = ['col' => $c, 'x' => $x, 'bottom' => $s0 - $ext, 'need' => $need, 'seg' => $si];
             }
@@ -756,6 +776,14 @@ class SheetLayoutEngine
         if (count($ys) < 2) return null;
         $lo = (int)floor(min($ys)); $hi = (int)ceil(max($ys));
         return $hi - $lo > 0 ? [$lo, $hi] : null;
+    }
+
+    // Чи є вершина ската або вирізу строго всередині смуги [x0, x1]
+    private function vertexIn(float $x0, float $x1): bool
+    {
+        foreach ($this->polygon as [$px]) if ($px > $x0 + 0.5 && $px < $x1 - 0.5) return true;
+        foreach ($this->holes as $h) if (is_array($h)) foreach ($h as $p) if ($p[0] > $x0 + 0.5 && $p[0] < $x1 - 0.5) return true;
+        return false;
     }
 
     // Межі вирізу в колонці по трьох пробних точках: [найвищий низ, найнижчий верх] або null

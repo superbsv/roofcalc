@@ -2,7 +2,7 @@
 // Імпорт файлу «Кровля Профи» (.kpr) → проект ROOFKIT (той самий формат, що й .roofkit).
 // .kpr — текст у кодуванні Windows-1251, одне значення на рядок (десятковий роздільник — кома).
 // Шапка: 1 версія · 2 № замовлення · 3 дата · 4 постачальник · 5 замовник · 6 матеріал · 8 покриття · 9 колір ·
-// 12 точність округлення, м · 13 ПЗ, м · 14 К, м · 15 корисна ширина · 16 повна ширина · 17 Lmax станд. · 18 Lmax реальна.
+// 12 ПК, м · 13 ПЗ, м · 14 К, м · точність округлення — рядок перед першим скатом · 15 корисна ширина · 16 повна ширина · 17 Lmax станд. · 18 Lmax реальна.
 // Скат: [True/False, False, 0, напрям «зліва направо» True/False, False, id, n] + n пар (тип сторони, довжина) + n+1 точок (x, y) ·
 // службові поля (площа тощо) · кількість вирізів і вирізи в тому самому форматі · 10 службових полів.
 // Геометрія — у метрах, y від карниза вгору (як у ROOFKIT).
@@ -32,6 +32,7 @@ export function parseKpr(text: string) {
     && /^\d+$/.test(L[k + 5] || '') && /^\d+$/.test(L[k + 6] || '') && +L[k + 6] >= 3 && +L[k + 6] < 200;
   let i = 25;
   while (i < L.length && !isStart(i)) i++;
+  const roundLine = L[i - 1];                       // точність округлення — рядок перед першим скатом
   const slopes: KprSlope[] = [];
   const readPoly = (j: number, n: number): [Point[], number] => {
     j += 2 * n;                                     // пари (тип сторони, довжина) — довжини перераховуються з точок
@@ -60,9 +61,10 @@ export function parseKpr(text: string) {
   const matName = (L[5] || '').replace(/(\s*\(Copy\))+/gi, '').trim() || 'Матеріал з «Кровля Профи»';
   const type = guessType(matName);
   const useful = mm(L[14]) || 1100, full = mm(L[15]) || useful;
-  const pz = mm(L[12]);
-  const round = mm(L[11]);
-  const k = mm(L[13]);
+  const pk = mm(L[11]);                             // 12: ПК (перекриття конькове)
+  const pz = mm(L[12]);                             // 13: ПЗ
+  const k = mm(L[13]);                              // 14: К
+  const round = /^\d+([.,]\d+)?$/.test(roundLine || '') ? mm(roundLine) : 0;
   const lmaxReal = mm(L[17]) || 6000, lmaxStd = mm(L[16]) || lmaxReal;
   const date = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(L[2] || '');
   const material = {
@@ -82,7 +84,7 @@ export function parseKpr(text: string) {
       settings: {
         calc_type: type, material_id: 1,
         order_date: date ? `${date[3]}-${date[2]}-${date[1]}` : undefined,
-        k, pk: 0, round_step: round || null,
+        k, pk, round_step: round || null,
         coating: (L[7] || '').trim() || undefined, color: (L[8] || '').trim() || undefined,
       },
     },
@@ -90,7 +92,7 @@ export function parseKpr(text: string) {
     slopes: slopes.map((s, n) => ({
       name: `Скат ${n + 1}`, // i18n-ignore (дані: назва ската)
       sort_order: n + 1, polygon_points: s.pts, holes: s.holes,
-      laying_direction: s.leftRight ? 'left_right' : 'right_left', eave_overhang: k, ridge_gap: 0, material_ref: 1,
+      laying_direction: s.leftRight ? 'left_right' : 'right_left', eave_overhang: k, ridge_gap: pk, material_ref: 1,
     })),
   };
 }

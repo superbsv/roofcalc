@@ -65,18 +65,22 @@ $calc = function (array $slopeExtra = [], array $matExtra = []) use ($mat, $poly
     $s = array_merge(['polygon_points' => $poly, 'holes' => [], 'eave_overhang' => 50, 'ridge_gap' => 0, 'laying_direction' => 'right_left'], $slopeExtra);
     return (new E(array_merge($mat, $matExtra), $s))->calculate();
 };
-// Покриття без зазорів: у кожній колонці низ першого листа ≤ низу колонки, кожен наступний починається не вище
-// кінця попереднього, верх останнього ≥ верху ската в колонці.
+// Покриття без зазорів: у кожній точці ската (крок 10 мм) об'єднання листів, що фізично її закривають
+// (повна ширина з нахлестом у бік «lap»), суцільно закриває висоту від карниза до верху ската.
 $covered = function (array $r) use ($poly) {
-    $by = [];
-    foreach ($r['placements'] as $q) $by[$q['col_index']][] = $q;
-    foreach ($by as $col => $ps) {
-        usort($ps, function ($a, $b) { return $a['y'] <=> $b['y']; });
-        $x0 = max(0, $ps[0]['x']); $x1 = min(7000, $ps[0]['x'] + 1100);
-        $top = 0; for ($x = $x0; $x <= $x1; $x += 10) $top = max($top, $x <= 3000 ? 4000 : (int)floor(4000 * (7000 - $x) / 4000));
-        if ($ps[0]['y'] > -50) return "колонка $col: низ {$ps[0]['y']} вище карниза";
-        for ($i = 1; $i < count($ps); $i++) if ($ps[$i]['y'] > $ps[$i - 1]['y'] + $ps[$i - 1]['length']) return "колонка $col: зазор між рядами";
-        $end = end($ps); if ($end['y'] + $end['length'] < $top) return "колонка $col: верх " . ($end['y'] + $end['length']) . " < $top";
+    for ($x = 5; $x < 7000; $x += 10) {
+        $top = $x <= 3000 ? 4000 : (int)floor(4000 * (7000 - $x) / 4000);
+        $iv = [];
+        foreach ($r['placements'] as $q) {
+            $ov = $q['full_width'] - $q['useful_width'];
+            [$a, $b] = ($q['lap'] ?? 'right') === 'left' ? [$q['x'] - $ov, $q['x'] + $q['useful_width']] : [$q['x'], $q['x'] + $q['full_width']];
+            if ($x >= $a && $x <= $b) $iv[] = [$q['y'], $q['y'] + $q['length']];
+        }
+        usort($iv, function ($p, $q) { return $p[0] <=> $q[0]; });
+        $reach = 0;
+        if (!$iv || $iv[0][0] > 0) return "x=$x: низ не закритий";
+        foreach ($iv as [$y0, $y1]) { if ($y0 > $reach + 1) return "x=$x: зазор на висоті $reach"; $reach = max($reach, $y1); }
+        if ($reach < $top - 1) return "x=$x: верх $reach < $top";
     }
     return null;
 };
@@ -137,6 +141,17 @@ $mid = array_values(array_filter($hr['placements'], function ($q) { return $q['x
 ok($mid && $mid[0]['y'] > 400 && $mid[0]['length'] < 3600, 'лист над вирізом починається над ним і коротший за повний');
 $edge = array_values(array_filter($hr['placements'], function ($q) { return $q['x'] < 1000; }));
 ok($edge && $edge[0]['y'] <= 0, 'лист поруч із вирізом — від карниза');
+
+echo "Як у «Кровля Профи»: скат 3 із файлу замовлення (фальц, ПК 50, округлення 50)\n";
+$kpM = ['type' => 'falts', 'full_width' => 1100, 'useful_width' => 1065, 'length_overlap' => 0, 'join_overlap' => 200, 'min_length' => 300, 'max_length' => 7000, 'round_step' => 50];
+$kpS = ['polygon_points' => [[16950, 0], [0, 0], [5830, 6400], [11130, 6400]], 'holes' => [[[11350, 0], [5700, 0], [8530, 1100]]],
+        'eave_overhang' => 0, 'ridge_gap' => 50, 'laying_direction' => 'left_right'];
+$kr = (new E($kpM, $kpS))->calculate();
+usort($kr['placements'], function ($a, $b) { return $a['x'] <=> $b['x']; });
+eq(array_column($kr['placements'], 'length'), [1200, 2350, 3550, 4700, 5850, 6350, 6100, 5700, 5700, 6100, 6350, 5750, 4550, 3400, 2250, 1050],
+   'довжини листів збігаються з КП (ПК лише біля конька, смуга нахлесту, виріз біля карниза)');
+$kr7 = (new E($kpM, ['polygon_points' => [[0, 0], [1500, 0], [4334, 3100], [2834, 3100]], 'holes' => [], 'eave_overhang' => 0, 'ridge_gap' => 50, 'laying_direction' => 'right_left']))->calculate();
+eq(count($kr7['placements']), 4, 'скат-паралелограм: 4 листи, без зайвого листа на гострий кут 4 см');
 
 echo "Немає допустимого рішення\n";
 $tight = $calc([], ['max_length' => 440, 'min_length' => 400]);   // допустимі лише 400…440 (r 50…90)
