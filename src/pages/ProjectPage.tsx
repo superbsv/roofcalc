@@ -13,7 +13,7 @@ import SlopeEditor from '../components/editor/SlopeEditor';
 import LayoutScheme from '../components/layout/LayoutScheme';
 import {
   Project, ProjectSettings, Slope, MaterialProfile, Point, EdgeType, CalcMode, AccessoryType,
-  projectsApi, slopesApi, materialsApi, specApi, SpecItem, clientsApi, Client, downloadProjectFile,
+  projectsApi, slopesApi, materialsApi, specApi, SpecItem, clientsApi, Client, downloadProjectFile, projectFileBlob,
 } from '../api/client';
 import { EDGE_TYPES, autoEdgeTypes, edgeColor, sideLengthMm, mirrorElement, setSideLength, HOLE_SHAPES, HoleShape, holeShape, holeValid } from '../components/roof/edges';
 import { useTheme } from '../components/theme/theme';
@@ -1209,14 +1209,30 @@ function Specification({ project, settings, slopes, material, items, projectId, 
   items: SpecItem[]; projectId: number; onBack: () => void; onMaterial: () => void;
 }) {
   const paperRef = useRef<HTMLElement>(null);
-  const [saving, setSaving] = useState<'' | 'pdf' | 'xlsx' | 'png' | 'jpg'>('');
-  // Схеми всіх скатів — одним зображенням (один під одним)
+  const [saving, setSaving] = useState<'' | 'pdf' | 'xlsx' | 'png' | 'jpg' | 'zip'>('');
+  const calcSlopes = () => slopes.filter(s => s.calc_result && !s.calc_result.errors?.length);
+  // Схеми скатів — кожен скат окремим зображенням
   const saveAllImg = async (fmt: 'png' | 'jpg') => {
     setSaving(fmt);
     try {
-      const { saveSlopesImage } = await import('../components/layout/slopeImage');
-      const list = slopes.filter(s => s.calc_result && !s.calc_result.errors?.length);
-      await saveSlopesImage(list, fmt, `${project?.name || 'ROOFKIT'} - ${t('скати')}`, project?.name || '');
+      const { saveEachSlopeImage } = await import('../components/layout/slopeImage');
+      await saveEachSlopeImage(calcSlopes(), fmt, project?.name || 'ROOFKIT', project?.name || '');
+    } catch (e: any) { alert(e.message || String(e)); }
+    finally { setSaving(''); }
+  };
+  // Весь проект одним архівом: схеми скатів (PNG), специфікація PDF, файл проекту .roofkit
+  const saveZipAll = async () => {
+    if (!paperRef.current) return;
+    setSaving('zip');
+    try {
+      const { slopesImageBlob, saveZip, imageFileName, fileSafe } = await import('../components/layout/slopeImage');
+      const base = fileSafe(`${project?.name || 'ROOFKIT'} №${settings.order_no || projectId}`);
+      const files: Record<string, Blob> = {};
+      for (const sl of calcSlopes()) files[`${t('Скати')}/${imageFileName(sl.name, 'png')}`] = await slopesImageBlob([sl], 'png', project?.name || '');
+      const pdf = await specToPdf(paperRef.current, base, true);
+      if (pdf) files[`${base}.pdf`] = pdf;
+      files[`${base}.roofkit`] = await projectFileBlob(projectId);
+      await saveZip(files, base);
     } catch (e: any) { alert(e.message || String(e)); }
     finally { setSaving(''); }
   };
@@ -1251,8 +1267,8 @@ function Specification({ project, settings, slopes, material, items, projectId, 
     });
     return Object.values(map);
   };
-  const sheetItems = items.filter(i => i.type === 'sheet');
-  const accItems = group(items.filter(i => i.type !== 'sheet'));
+  // У специфікації з добірних елементів і комплектуючих — лише саморізи
+  const accItems = group(items.filter(i => i.type !== 'sheet' && /саморіз|саморез|самонаріз|шуруп|screw/i.test(i.name)));
   const ct = calcTypeInfo(settings.calc_type);
 
   return (
@@ -1266,9 +1282,10 @@ function Specification({ project, settings, slopes, material, items, projectId, 
           <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>🖨 Друк</button>
           <button className="btn btn-primary btn-sm" disabled={!!saving} onClick={() => save('pdf')}>{saving === 'pdf' ? 'Створення PDF…' : 'Зберегти PDF'}</button>
           <button className="btn btn-secondary btn-sm" disabled={!!saving} onClick={() => save('xlsx')}>{saving === 'xlsx' ? 'Створення…' : 'Зберегти Excel'}</button>
-          <button className="btn btn-secondary btn-sm" disabled={!!saving} onClick={() => saveAllImg('png')} title="Схеми всіх скатів одним зображенням PNG">{saving === 'png' ? 'Створення…' : 'Скати PNG'}</button>
-          <button className="btn btn-secondary btn-sm" disabled={!!saving} onClick={() => saveAllImg('jpg')} title="Схеми всіх скатів одним зображенням JPG">{saving === 'jpg' ? 'Створення…' : 'Скати JPG'}</button>
+          <button className="btn btn-secondary btn-sm" disabled={!!saving} onClick={() => saveAllImg('png')} title="Кожен скат окремим зображенням PNG">{saving === 'png' ? 'Створення…' : 'Скати PNG'}</button>
+          <button className="btn btn-secondary btn-sm" disabled={!!saving} onClick={() => saveAllImg('jpg')} title="Кожен скат окремим зображенням JPG">{saving === 'jpg' ? 'Створення…' : 'Скати JPG'}</button>
           <button className="btn btn-secondary btn-sm" onClick={() => downloadProjectFile(projectId, project?.name).catch(e => alert(e.message))} title="Файл проекту (.roofkit) — його можна відкрити в будь-якому кабінеті ROOFKIT: «Мої проекти» → «Відкрити файл»">⭳ Файл проекту</button>
+          <button className="btn btn-primary btn-sm" disabled={!!saving} onClick={saveZipAll} title="Один ZIP: схема кожного ската (PNG), специфікація PDF і файл проекту">{saving === 'zip' ? 'Створення архіву…' : '🗜 Весь проект в архіві'}</button>
         </div>
       </div>
 
@@ -1345,11 +1362,10 @@ function Specification({ project, settings, slopes, material, items, projectId, 
           </>
         )}
 
-        <h3 className="kp-paper-h">ДОБОРНІ ЕЛЕМЕНТИ, КОМПЛЕКТУЮЧІ — ЗАГАЛЬНА КІЛЬКІСТЬ</h3>
+        <h3 className="kp-paper-h">САМОРІЗИ — ЗАГАЛЬНА КІЛЬКІСТЬ</h3>
         <table className="kp-table kp-paper-table">
           <thead><tr><th>Найменування</th><th>Од.</th><th>Кількість</th></tr></thead>
           <tbody>
-            {sheetItems.length > 0 && <tr><td>{material?.name || 'Покрівельний матеріал'} — {sheetItems.reduce((a, i) => a + Number(i.quantity), 0)} листів</td><td>м²</td><td>{f2(tot.full, 3)}</td></tr>}
             {accItems.map(i => (
               <tr key={i.name + i.unit}><td>{i.name}</td><td>{i.unit}</td><td>{Number(i.quantity).toFixed(i.unit === 'шт' ? 0 : 2)}</td></tr>
             ))}

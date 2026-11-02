@@ -90,8 +90,8 @@ async function schemeImage(sl: SlopeForImage, pal: Record<string, string>): Prom
 
 interface Block { sl: SlopeForImage; img: HTMLImageElement | null; h: number; sides: string[] }
 
-/** Зображення скатів: один скат — окремий файл; кілька — одне зображення, скати один під одним */
-export async function saveSlopesImage(slopes: SlopeForImage[], fmt: 'png' | 'jpg', fileName: string, subtitle = '') {
+/** Зображення скатів (Blob): кілька скатів — один під одним */
+export async function slopesImageBlob(slopes: SlopeForImage[], fmt: 'png' | 'jpg', subtitle = ''): Promise<Blob> {
   const pal = lightPalette();
   const blocks: Block[] = [];
   for (const sl of slopes) {
@@ -148,10 +148,39 @@ export async function saveSlopesImage(slopes: SlopeForImage[], fmt: 'png' | 'jpg
     if (b !== blocks[blocks.length - 1]) { ctx.strokeStyle = '#CBD5E1'; ctx.beginPath(); ctx.moveTo(PAD, y - 10); ctx.lineTo(W - PAD, y - 10); ctx.stroke(); }
   }
   const mime = fmt === 'png' ? 'image/png' : 'image/jpeg';
-  const blob: Blob = await new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('canvas')), mime, 0.92));
+  return await new Promise<Blob>((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('canvas')), mime, 0.92));
+}
+
+export function downloadBlob(blob: Blob, name: string) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = fileSafe(fileName) + (fmt === 'png' ? '.png' : '.jpg');
+  a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
+
+export const imageFileName = (name: string, fmt: 'png' | 'jpg') => fileSafe(name) + (fmt === 'png' ? '.png' : '.jpg');
+
+/** Один файл зображення з усіма переданими скатами */
+export async function saveSlopesImage(slopes: SlopeForImage[], fmt: 'png' | 'jpg', fileName: string, subtitle = '') {
+  downloadBlob(await slopesImageBlob(slopes, fmt, subtitle), imageFileName(fileName, fmt));
+}
+
+/** Кожен скат — окремим файлом (стільки файлів, скільки скатів) */
+export async function saveEachSlopeImage(slopes: SlopeForImage[], fmt: 'png' | 'jpg', prefix: string, subtitle = '') {
+  if (!slopes.length) throw new Error(t('Немає розрахованих скатів'));
+  for (const sl of slopes) {
+    downloadBlob(await slopesImageBlob([sl], fmt, subtitle), imageFileName(`${prefix} - ${sl.name}`, fmt));
+    await new Promise(r => setTimeout(r, 350));   // браузер не відкидає завантаження, що йдуть підряд
+  }
+}
+
+/** Архів ZIP: { шлях у архіві: вміст } */
+export async function saveZip(files: Record<string, Blob>, name: string) {
+  const { zipSync } = await import('fflate');
+  const data: Record<string, Uint8Array> = {};
+  for (const [k, b] of Object.entries(files)) data[k] = new Uint8Array(await b.arrayBuffer());
+  const zip = zipSync(data, { level: 6 });
+  downloadBlob(new Blob([zip], { type: 'application/zip' }), fileSafe(name) + '.zip');
+}
+export { fileSafe };

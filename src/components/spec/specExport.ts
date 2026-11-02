@@ -7,7 +7,7 @@ import { t } from '../../i18n/i18n';
 const fileSafe = (s: string) => s.replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || 'specification';
 
 /** PDF: сторінки A4, розриви — між рядками таблиць і блоками (рядки не розрізаються) */
-export async function specToPdf(paper: HTMLElement, name: string) {
+export async function specToPdf(paper: HTMLElement, name: string, asBlob = false): Promise<Blob | void> {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
   const W = 900;
   const clone = paper.cloneNode(true) as HTMLElement;
@@ -44,6 +44,7 @@ export async function specToPdf(paper: HTMLElement, name: string) {
       pdf.addImage(part.toDataURL('image/jpeg', 0.92), 'JPEG', margin, margin, pw - margin * 2, sh / pxPerMm);
       first = false; y = end;
     }
+    if (asBlob) return pdf.output('blob');
     pdf.save(fileSafe(name) + '.pdf');
   } finally { clone.remove(); }
 }

@@ -410,6 +410,9 @@ export const projectFileApi = {
   import: (data: unknown) => post<{ project: Project }>('/projects/import', data),
 };
 /** Завантажити файл проекту на комп'ютер */
+export async function projectFileBlob(id: number): Promise<Blob> {
+  return new Blob([JSON.stringify(await projectFileApi.get(id))], { type: 'application/json' });
+}
 export async function downloadProjectFile(id: number, name?: string) {
   const data = await projectFileApi.get(id);
   const safe = (name || data?.project?.name || `project-${id}`).replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 80) || `project-${id}`;
