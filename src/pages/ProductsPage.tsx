@@ -421,14 +421,13 @@ export default function ProductsPage({ section, onSection }: { section?: number;
                 background: selected?.id===m.id ? 'var(--clr-brand-pale)' : 'transparent',
                 borderLeft: selected?.id===m.id ? '3px solid var(--clr-brand)' : '3px solid transparent' }}>
               <div style={{ fontWeight:500, fontSize:'.85rem' }}>{m.name}</div>
-              <div style={{ fontSize:'.75rem', color:'var(--clr-text-3)' }}>
-                {m.useful_width} / {m.full_width} мм
-              </div>
-              <div style={{ fontSize:'.7rem', marginTop:'2px', display:'flex', gap:'4px', flexWrap:'wrap' }}>
+              {/* розміри і статуси — одним рядком, щоб список був компактнішим */}
+              <div style={{ fontSize:'.7rem', marginTop:'2px', display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
+                <span style={{ fontSize:'.75rem', color:'var(--clr-text-3)', whiteSpace:'nowrap', marginRight:'2px' }}>{m.useful_width} / {m.full_width} мм</span>
                 {(() => { const src = materialSource(m, myTid); return src.kind !== 'own' && (
                   <span className={`badge ${src.kind === 'abt' ? 'badge-blue' : 'badge-orange'}`} style={{ fontSize:'.68rem' }}>{src.label}</span>); })()}
                 {m.published ? <span className="badge badge-green" style={{ fontSize:'.68rem' }}>У каталозі виробників</span> : null}
-                <span style={{ background: m.is_active ? 'var(--clr-success-bg)' : 'var(--clr-error-bg)', color: m.is_active ? 'var(--clr-success)' : 'var(--clr-error)', padding:'1px 6px', borderRadius:'10px' }}>
+                <span style={{ background: m.is_active ? 'var(--clr-success-bg)' : 'var(--clr-error-bg)', color: m.is_active ? 'var(--clr-success)' : 'var(--clr-error)', padding:'1px 6px', borderRadius:'10px', whiteSpace:'nowrap' }}>
                   {m.is_active ? 'Активний' : 'Неактивний'}
                 </span>
               </div>
