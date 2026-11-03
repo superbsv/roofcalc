@@ -287,11 +287,37 @@ export default function ProductsPage({ section, onSection }: { section?: number;
     return () => window.removeEventListener(CATALOG_EVENT, h);
   }, [secId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Перенести відкритий матеріал в інший розділ (вибір у картці). Інший тип розрахунку — з підтвердженням.
+  const reselect = React.useRef<number | null>(null);
+  const moveToSection = async (id: number) => {
+    if (!selected || id === secId) return;
+    const to = sections.find(x => x.id === id);
+    if (!to) return;
+    const retype = to.calc_type !== cat;
+    if (retype && !window.confirm(`Розділ «${to.name}» має інший тип розрахунку: ${CAT_LABEL[to.calc_type as Category] || to.calc_type}. Матеріал буде розраховуватись як ${CAT_LABEL[to.calc_type as Category] || to.calc_type} — перевірте його параметри після перенесення.`)) return; // i18n-ignore (шаблон у tpl)
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      await api('POST', '/catalog/move', { ids: [selected.id], section_id: id, change_type: retype });
+      reselect.current = selected.id;
+      catalogChanged();
+      onSection(id);
+      setSuccess(`Перенесено в розділ «${to.name}»`); // i18n-ignore (шаблон у tpl)
+    } catch (e: any) { setError(e.message); } finally { setLoading(false); }
+  };
+
+  const secRef = React.useRef(secId); secRef.current = secId;
   const loadMaterials = async () => {
     if (!secId) return;
+    const forSec = secId;
     try {
-      const d = await api('GET', `/materials/section/${secId}`);
+      const d = await api('GET', `/materials/section/${forSec}`);
+      if (secRef.current !== forSec) return;            // за цей час відкрили інший розділ — список застарів
       setMaterials(d.profiles || []);
+      if (reselect.current) {
+        // (може прийти ще список старого розділу — тоді чекаємо список нового)
+        const m = (d.profiles || []).find((x: Material) => x.id === reselect.current);
+        if (m) { reselect.current = null; selectMaterial(m); }
+      }
     } catch { setError('Помилка завантаження'); }
   };
 
@@ -483,7 +509,14 @@ export default function ProductsPage({ section, onSection }: { section?: number;
                   <ManufacturerSelect value={form.manufacturer || ''} onChange={v => f('manufacturer', v)} />
                 </Field>
                 <Field label="Розділ каталогу">
-                  <input className="form-control" value={`${sec?.name || ''} · розрахунок: ${CAT_LABEL[cat]}`} readOnly title="Щоб перенести матеріал, перетягніть його на розділ у бічному меню" />
+                  {selected && !isNew && isAdmin && canEdit(selected) ? (
+                    <select className="form-control" value={secId ?? ''} disabled={loading} onChange={e => moveToSection(Number(e.target.value))}
+                      title="Перенести матеріал в інший розділ каталогу">
+                      {sections.map(x => { const tl = CAT_LABEL[x.calc_type as Category] || x.calc_type; return <option key={x.id} value={x.id}>{x.name === tl ? x.name : `${x.name} · ${tl}`}</option>; })}
+                    </select>
+                  ) : (
+                    <input className="form-control" value={`${sec?.name || ''} · розрахунок: ${CAT_LABEL[cat]}`} readOnly />
+                  )}
                 </Field>
               </Row>
               <Row>

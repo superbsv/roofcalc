@@ -128,9 +128,12 @@ class CatalogController
         foreach ($ids as $id) {
             $m = Database::fetchOne('SELECT id, tenant_id, type FROM material_profiles WHERE id = ? AND deleted = 0', [$id]);
             if (!$m || !$this->canEdit($m)) { $skipped++; continue; }
-            if ($sec && $sec['calc_type'] !== $m['type']) { $wrongType++; continue; }
+            // Розділ іншого типу розрахунку — лише якщо явно дозволено змінити тип (вибір розділу в картці матеріалу)
+            $retype = $sec && $sec['calc_type'] !== $m['type'];
+            if ($retype && empty($b['change_type'])) { $wrongType++; continue; }
             $set = []; $vals = [];
             if ($sec) { $set[] = 'section_id = ?'; $vals[] = $sec['id']; }
+            if ($retype) { $set[] = 'type = ?'; $vals[] = $sec['calc_type']; }
             if ($mf !== null) { $set[] = 'manufacturer = ?'; $vals[] = $mf === '' ? null : mb_substr($mf, 0, 100); }
             if (!$set) continue;
             $vals[] = $id;
