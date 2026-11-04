@@ -257,20 +257,21 @@ class AccessoryCalc
             ];
         }
 
-        // Норма: 7–8 саморізів на лист металочерепиці / профнастилу
-        $norm    = 7;
-        $total   = (int)ceil($totalSheets * $norm);
-        $reserve = (int)ceil($total * 1.05);
+        // Норма: 8 саморізів на 1 м² повної площі матеріалу (повна ширина × погонні метри листів)
+        $norm  = 8;
+        $area  = (float)($this->calcResult['total_full_area_m2'] ?? $this->calcResult['order_area_m2'] ?? 0);
+        if ($area <= 0) return null;
+        $total = (int)ceil($area * $norm - 1e-9);
 
         return [
             'code'     => 'screw_4x35',
             'name'     => 'Саморіз 4.8×35 (для покриття)',
             'unit'     => 'шт',
-            'quantity' => $reserve,
+            'quantity' => $total,
             'price'    => 2.50,
-            'total'    => round($reserve * 2.50, 2),
+            'total'    => round($total * 2.50, 2),
             'calc_rule'=> 'area',
-            'note'     => "{$norm} шт/лист × {$totalSheets} листів + 5% запас",
+            'note'     => sprintf('%d шт/м² × %.3f м² повної площі матеріалу', $norm, $area),
         ];
     }
 }
