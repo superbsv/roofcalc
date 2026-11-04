@@ -1115,7 +1115,7 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
   return (
     <section className={`kp-pane kp-matpane${edit ? ' kp-editing' : ''}`}>
       <div className="kp-matgrid">
-        <MaterialSketch wave={ct === 'tile'} />
+        <MaterialSketch wave={ct === 'tile'} pz={m.length_overlap} step={m.wave_step} k={settings.k ?? 0} pk={settings.pk ?? 0} />
         <div className="kp-params">
           <label>Перекриття конькове ПК, мм{num('pk')}</label>
           <label>Перекриття замкове ПЗ, м{mf('length_overlap', m.length_overlap)}</label>
@@ -1183,25 +1183,82 @@ function MaterialPanel({ m, ct, settings, setSettings, edit, onChange }: {
   );
 }
 
-// Схема профілю з позначеннями ПК, ПЗ, хвиля, К (як у вікні матеріалу КП)
-function MaterialSketch({ wave }: { wave: boolean }) {
-  const steps = wave ? 7 : 4;
-  const d: string[] = [];
-  for (let i = 0; i < steps; i++) {
-    const x0 = 30 + i * 28, y0 = 150 - i * 16;
-    d.push(wave ? `M${x0},${y0} q10,-14 20,-10 l8,-6` : `M${x0},${y0} l28,-16`);
-  }
+// Схема укладки на скаті з розмірами ПК, ПЗ, хвиля, К (як у вікні матеріалу КП):
+// крокви й обрешітка, два листи з нахлестом, коньковий елемент, карнизний звис.
+// Креслення в координатах уздовж ската (x — угору по скату, y — від крокви), підписи — горизонтальні.
+function MaterialSketch({ wave, pz, step, k, pk }: { wave: boolean; pz?: number; step?: number; k?: number; pk?: number }) {
+  const A = 24 * Math.PI / 180, ca = Math.cos(A), sa = Math.sin(A), O = [44, 236];
+  const P = (x: number, y: number): [number, number] => [O[0] + x * ca - y * sa, O[1] - x * sa - y * ca];
+  const pt = (x: number, y: number) => P(x, y).map(v => v.toFixed(1)).join(',');
+  const L = 410;                                   // довжина ската на схемі
+  const W = wave ? 58 : 66;                        // крок хвилі / обрешітки
+  const K = 30, PZ = wave ? 42 : 54, PK = 40;       // візуальні розміри
+  const xs1 = 236;                                 // верх нижнього листа
+  const xs2 = L - PK;                              // верх верхнього листа (ПК до конька)
+  const battens: number[] = [];
+  for (let x = 6; x < L - 20; x += W) battens.push(x);
+  // Профіль листа: металочерепиця — сходинки на кожному кроці, інші — рівний лист
+  const sheet = (x0: number, x1: number, lift: (x: number) => number) => {
+    const out: string[] = [];
+    if (!wave) {
+      for (let x = x0; x <= x1; x += 6) out.push(pt(Math.min(x, x1), 11 + lift(x)));
+      out.push(pt(x1, 11 + lift(x1)));
+      return out.join(' ');
+    }
+    // сходинка штампа над кожною рейкою обрешітки, між ними — пологий «горб» хвилі
+    const firstStep = battens.find(b => b + W > x0) ?? x0;
+    out.push(pt(x0, 10 + lift(x0)));
+    for (let a = firstStep; a < x1; a += W) {
+      const b = Math.min(x1, a + W);
+      if (a > x0) { out.push(pt(a, 10 + lift(a))); out.push(pt(a + 3, 25 + lift(a))); }
+      const m = Math.min(b, a + W * 0.45);
+      out.push(pt(m, 22 + lift(m)));
+      out.push(pt(b, 10 + lift(b)));
+    }
+    return out.join(' ');
+  };
+  const up = (x: number) => (x < xs1 ? 5 : 0);          // верхній лист у зоні нахлесту лежить на нижньому
+  // Розмірна лінія вздовж ската на висоті y з винесеннями і підписом
+  // Розмірна лінія вздовж ската на відстані y від крокви, з винесеннями; підпис — горизонтально біля середини
+  const dim = (x0: number, x1: number, y: number, label: string, from: number, anchor: 'start' | 'middle' | 'end' = 'middle', dy = -14) => {
+    const [ax, ay] = P(x0, y), [bx, by] = P(x1, y);
+    const [mx, my] = P((x0 + x1) / 2, y);
+    const tx = anchor === 'end' ? Math.min(ax, bx) - 6 : anchor === 'start' ? Math.max(ax, bx) + 6 : mx;
+    return (
+      <g key={label}>
+        <polyline points={`${pt(x0, from)} ${pt(x0, y + Math.sign(y) * 6)}`} className="kp-sk-ext" />
+        <polyline points={`${pt(x1, from)} ${pt(x1, y + Math.sign(y) * 6)}`} className="kp-sk-ext" />
+        <line x1={ax} y1={ay} x2={bx} y2={by} className="kp-sk-dim" markerStart="url(#skA)" markerEnd="url(#skA)" />
+        <text x={tx} y={anchor === 'middle' ? my + dy : my} className="kp-sk-t" textAnchor={anchor} dominantBaseline="middle">{label}</text>
+      </g>
+    );
+  };
+  const v = (mm?: number) => (mm != null && Number.isFinite(mm) ? ` ${((mm || 0) / 1000).toFixed(3)} м` : '');
+  const [rx, ry] = P(L, 30);
   return (
-    <svg className="kp-sketch" viewBox="0 0 260 180" role="img" aria-label="Схема параметрів листа">
-      <path d="M20,165 L235,40" stroke="var(--clr-text-3)" strokeWidth="1" strokeDasharray="4 3" fill="none" />
-      <path d={d.join(' ')} stroke="var(--clr-brand)" strokeWidth="3" fill="none" />
-      <path d="M150,96 l60,-35" stroke="var(--clr-brand)" strokeWidth="3" fill="none" opacity=".55" />
-      <line x1="215" y1="58" x2="240" y2="40" stroke="var(--clr-text)" strokeWidth="2" />
-      <text x="196" y="30" className="kp-sk-t">ПК</text>
-      <text x="140" y="80" className="kp-sk-t">ПЗ</text>
-      {wave && <text x="70" y="105" className="kp-sk-t">хвиля</text>}
-      <text x="8" y="172" className="kp-sk-t">К</text>
-      <line x1="20" y1="165" x2="34" y2="157" stroke="var(--clr-text)" strokeWidth="2" />
+    <svg className="kp-sketch" viewBox="0 0 470 300" role="img" aria-label="Схема параметрів листа: ПК, ПЗ, хвиля, К">
+      <defs>
+        <marker id="skA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0 1 L10 5 L0 9 z" className="kp-sk-arrow" />
+        </marker>
+      </defs>
+      {/* кроква */}
+      <polygon points={`${pt(-4, 0)} ${pt(L, 0)} ${pt(L, -12)} ${pt(-4, -12)}`} className="kp-sk-wood" />
+      {/* обрешітка */}
+      {battens.map(x => <polygon key={x} points={`${pt(x, 0)} ${pt(x + 16, 0)} ${pt(x + 16, 9)} ${pt(x, 9)}`} className="kp-sk-wood" />)}
+      {/* нижній лист: від карнизного звису до нахлесту */}
+      <polyline points={sheet(-K, xs1, () => 0)} className="kp-sk-sheet" />
+      {/* верхній лист: з нахлестом ПЗ на нижній, закінчується за ПК до конька */}
+      <polyline points={sheet(xs1 - PZ, xs2, up)} className="kp-sk-sheet kp-sk-sheet2" />
+      {/* коньковий елемент */}
+      <polyline points={`${pt(xs2 - 18, 30)} ${pt(L, 40)} ${rx + 22},${ry + 14}`} className="kp-sk-ridge" />
+      {/* вісь конька */}
+      <line x1={rx} y1={ry - 26} x2={rx} y2={ry + 40} className="kp-sk-axis" />
+      {/* край обрешітки (від нього — карнизний звис) */}
+      {dim(-K, 0, -34, `К${v(k)}`, -14, 'start')}
+      {wave && dim(battens[3] + 8, battens[4] + 8, -36, `хвиля${v(step)}`, -14, 'start')}
+      {dim(xs1 - PZ, xs1, 50, `ПЗ${v(pz)}`, 32, 'end')}
+      {dim(xs2, L, 50, `ПК${v(pk)}`, 30, 'end')}
     </svg>
   );
 }
