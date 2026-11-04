@@ -3,7 +3,7 @@
 // (повторюють схеми калькулятора profil.com.ua: сірий дах, червоні — жолоби і труби, розміри A…J).
 // ============================================
 import React from 'react';
-import type { RoofKind } from './gutter';
+import { KINDS, RoofKind } from './gutter';
 
 type P = number[];                       // x1,y1,x2,y2,...
 type Dim = [number, number, number, number, string, number, number]; // лінія + підпис
@@ -101,6 +101,7 @@ const PICS: Record<RoofKind, Pic> = {
 
 export default function RoofPic({ kind, labels = true }: { kind: RoofKind; labels?: boolean }) {
   const p = PICS[kind];
+  const used = KINDS.find(x => x.id === kind)?.letters || [];   // лише сторони, що беруть участь у розрахунку
   const big = p.vb.endsWith('1085') || p.vb.endsWith('990');
   const k = big ? 1.75 : 1;              // товщина ліній у великих схемах
   const gid = `rg-${kind}`, aid = `ra-${kind}`;
@@ -120,7 +121,7 @@ export default function RoofPic({ kind, labels = true }: { kind: RoofKind; label
       {p.lines.map((l, i) => <polyline key={'l' + i} points={pts(l)} fill="none" stroke="#111" strokeWidth={2.4 * k} strokeLinejoin="round" />)}
       {p.red.map((l, i) => <polyline key={'e' + i} points={pts(l)} fill="none" stroke="#E3201B" strokeWidth={3.2 * k} strokeLinejoin="round" />)}
       {p.marks?.map((l, i) => <polyline key={'m' + i} points={pts(l)} fill="none" stroke="#666" strokeWidth={1.2 * k} markerEnd={`url(#${aid})`} />)}
-      {labels && p.dims.map(([x1, y1, x2, y2, t, lx, ly]) => (
+      {labels && p.dims.filter(d => used.includes(d[4] as string)).map(([x1, y1, x2, y2, t, lx, ly]) => (
         <g key={t}>
           {(x1 || x2) ? <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#222" strokeWidth={1.2 * k} markerStart={`url(#${aid})`} markerEnd={`url(#${aid})`} /> : null}
           <text x={lx} y={ly} textAnchor="middle" dominantBaseline="middle" fontSize={24 * k} fontStyle="italic" fontFamily="Arial, sans-serif" fill="#111"
