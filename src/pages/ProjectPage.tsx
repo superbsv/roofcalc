@@ -1233,7 +1233,7 @@ function MaterialSketch({ wave, pz, step, k, pk }: { wave: boolean; pz?: number;
       </g>
     );
   };
-  const v = (mm?: number) => (mm != null && Number.isFinite(mm) ? ` ${((mm || 0) / 1000).toFixed(3)} м` : '');
+  const v = (mm?: number) => (mm != null && Number.isFinite(mm) ? ` ${((mm || 0) / 1000).toFixed(3)} м` : '');   // i18n-ignore (число з одиницею)
   const [rx, ry] = P(L, 30);
   return (
     <svg className="kp-sketch" viewBox="0 0 470 300" role="img" aria-label="Схема параметрів листа: ПК, ПЗ, хвиля, К">
