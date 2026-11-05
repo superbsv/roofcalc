@@ -170,7 +170,8 @@ export default function ProductsPage({ section, onSection }: { section?: number;
   const [error, setError]       = useState('');
   const [success, setSuccess]   = useState('');
 
-  const [closedMf, setClosedMf] = useState<Set<string>>(new Set());
+  // Виробники при вході згорнуті; група з відкритим матеріалом — розгорнута
+  const [openMf, setOpenMf] = useState<Set<string>>(new Set());
   const platform = !!(user?.is_superadmin && !user?.impersonating);
   const canEdit = (m: Material) => { const k = materialSource(m, myTid).kind; return k === 'own' || (k === 'abt' && platform); };
   const isAdmin = user?.role === 'admin';
@@ -321,7 +322,10 @@ export default function ProductsPage({ section, onSection }: { section?: number;
     } catch { setError('Помилка завантаження'); }
   };
 
+  const mfOpen = (mf: string, _list?: Material[]) => openMf.has(mf);
   const selectMaterial = (m: Material) => {
+    const g = mfGroups.find(([, l]) => l.some(x => x.id === m.id));   // група відкритого матеріалу — розгорнута
+    if (g && !openMf.has(g[0])) setOpenMf(o => new Set(o).add(g[0]));
     setSelected(m);
     setIsNew(false);
     setForm({ ...m });
@@ -419,9 +423,9 @@ export default function ProductsPage({ section, onSection }: { section?: number;
                 onDragEnd={() => { setDrag(null); setDropAt(''); }}
                 onDragOver={e => { if (drag) { e.preventDefault(); setDropAt('g:' + mf); } }}
                 onDrop={e => onDropItem(e, null, mf)}>
-                <button type="button" className="prod-mf-head" onClick={() => setClosedMf(c => { const n = new Set(c); n.has(mf) ? n.delete(mf) : n.add(mf); return n; })}
-                  aria-expanded={!closedMf.has(mf)}>
-                  <span>{closedMf.has(mf) ? '▸' : '▾'} {mf}</span><em>{list.length}</em>
+                <button type="button" className="prod-mf-head" onClick={() => setOpenMf(c => { const n = new Set(c); mfOpen(mf, list) ? n.delete(mf) : n.add(mf); return n; })}
+                  aria-expanded={mfOpen(mf, list)}>
+                  <span>{mfOpen(mf, list) ? '▾' : '▸'} {mf}</span><em>{list.length}</em>
                 </button>
                 {isAdmin && list.some(canEdit) && (
                   <button type="button" className="prod-mf-del" title={`Перейменувати виробника «${mf}»`} aria-label={`Перейменувати виробника ${mf}`}
@@ -434,7 +438,7 @@ export default function ProductsPage({ section, onSection }: { section?: number;
                   </button>
                 )}
               </div>
-              {!closedMf.has(mf) && <div className="prod-mf-list">
+              {mfOpen(mf, list) && <div className="prod-mf-list">
               {list.map(m => (
             <div key={m.id} onClick={() => selectMaterial(m)}
               className={`prod-item${dropAt === 'm:' + m.id ? ' drop' : ''}${drag?.id === m.id ? ' dragging' : ''}`}
@@ -443,20 +447,18 @@ export default function ProductsPage({ section, onSection }: { section?: number;
               onDragEnd={() => { setDrag(null); setDropAt(''); }}
               onDragOver={e => { if (drag?.kind === 'mat') { e.preventDefault(); e.stopPropagation(); setDropAt('m:' + m.id); } }}
               onDrop={e => onDropItem(e, m, mf)}
-              style={{ padding:'10px 12px', cursor:'pointer', borderBottom:'1px solid var(--clr-border)',
+              style={{ padding:'7px 10px', cursor:'pointer', borderBottom:'1px solid var(--clr-border)', display:'flex', alignItems:'center', gap:'6px', minWidth:0,
                 background: selected?.id===m.id ? 'var(--clr-brand-pale)' : 'transparent',
                 borderLeft: selected?.id===m.id ? '3px solid var(--clr-brand)' : '3px solid transparent' }}>
-              <div style={{ fontWeight:500, fontSize:'.85rem' }}>{m.name}</div>
-              {/* розміри і статуси — одним рядком, щоб список був компактнішим */}
-              <div style={{ fontSize:'.7rem', marginTop:'2px', display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
-                <span style={{ fontSize:'.75rem', color:'var(--clr-text-3)', whiteSpace:'nowrap', marginRight:'2px' }}>{m.useful_width} / {m.full_width} мм</span>
-                {(() => { const src = materialSource(m, myTid); return src.kind !== 'own' && (
-                  <span className={`badge ${src.kind === 'abt' ? 'badge-blue' : 'badge-orange'}`} style={{ fontSize:'.68rem' }}>{src.label}</span>); })()}
-                {m.published ? <span className="badge badge-green" style={{ fontSize:'.68rem' }}>У каталозі виробників</span> : null}
-                <span style={{ background: m.is_active ? 'var(--clr-success-bg)' : 'var(--clr-error-bg)', color: m.is_active ? 'var(--clr-success)' : 'var(--clr-error)', padding:'1px 6px', borderRadius:'10px', whiteSpace:'nowrap' }}>
-                  {m.is_active ? 'Активний' : 'Неактивний'}
-                </span>
-              </div>
+              {/* усе про товар — одним рядком: статус, назва, ширини, джерело */}
+              <span title={m.is_active ? 'Активний' : 'Неактивний'} aria-label={m.is_active ? 'Активний' : 'Неактивний'}
+                style={{ width:8, height:8, borderRadius:'50%', flex:'none', background: m.is_active ? 'var(--clr-success)' : 'var(--clr-error)' }} />
+              <span style={{ fontWeight:500, fontSize:'.85rem', flex:'1 1 auto', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={m.name}>{m.name}</span>
+              <span style={{ fontSize:'.72rem', color:'var(--clr-text-3)', whiteSpace:'nowrap', flex:'none' }}>{m.useful_width}/{m.full_width}</span>
+              {(() => { const src = materialSource(m, myTid); return src.kind !== 'own' && (
+                <span className={`badge ${src.kind === 'abt' ? 'badge-blue' : 'badge-orange'}`} title={src.label}
+                  style={{ fontSize:'.64rem', padding:'1px 5px', flex:'none', maxWidth:70, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{src.kind === 'abt' ? 'ROOFKIT' : src.label}</span>); })()}
+              {m.published ? <span className="badge badge-green" title="У каталозі виробників" style={{ fontSize:'.64rem', padding:'1px 5px', flex:'none' }}>↗</span> : null}
             </div>
               ))}
               </div>}
