@@ -325,6 +325,7 @@ class SheetLayoutEngine
             'max_std_length_mm'  => $this->lmaxStd,
             'rounding_mm'        => $this->round,
             'joint_y_mm'         => $this->jointY,
+            'overlap_mm'         => $this->pz,      // нахлест між листами в колонці (ПЗ / стик фальцу)
             'joint_range_mm'     => $this->jointRange,
             'v_shift_mm'         => $this->vShift,
             'wave_step_mm'       => $this->wave,

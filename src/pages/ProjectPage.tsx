@@ -798,6 +798,8 @@ export default function ProjectPage({ projectId }: Props) {
                           {k.key === 'rect' && <rect x="8" y="5" width="24" height="20" />}
                           {k.key === 'circle' && <circle cx="20" cy="15" r="10" />}
                           {k.key === 'triangle' && <path d="M6 26 H34 L20 4 Z" />}
+                          {k.key === 'rtril' && <path d="M8 26 H32 L8 4 Z" />}
+                          {k.key === 'rtrir' && <path d="M8 26 H32 V4 Z" />}
                           {k.key === 'trapezoid' && <path d="M5 25 H35 L27 6 H13 Z" />}
                           {k.key === 'dormer' && <path d="M9 27 H31 V13 L20 4 L9 13 Z" />}
                         </svg>

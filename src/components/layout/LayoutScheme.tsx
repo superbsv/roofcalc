@@ -29,9 +29,11 @@ interface SheetPlacement {
   offset_y?: number;
   deleted?: boolean;
   tech_err?: string;
+  split_n?: number;            // лист, отриманий розділенням листа col:row (ключ «col:row+n»)
 }
 
 type Point = ApiPoint;
+const sheetKey = (p: { col_index: number; row_index: number; split_n?: number }) => `${p.col_index}:${p.row_index}${p.split_n ? `+${p.split_n}` : ''}`;
 type TechCfg = { step_mm: number; origin_mm: number; zones_mm: [number, number][]; gap_mm: number; tolerance_mm: number };
 
 interface CalcResult {
@@ -399,10 +401,10 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
     if (!dirty.current || !onEdits) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      const base = new Map(calcResult.placements.map(p => [`${p.col_index}:${p.row_index}`, p]));
+      const base = new Map(calcResult.placements.map(p => [sheetKey(p), p]));
       const map: Record<string, { len?: number; y?: number; del?: boolean }> = { ...(editsRef.current || {}) };
       placements.forEach(p => {
-        const k = `${p.col_index}:${p.row_index}`, b = base.get(k);
+        const k = sheetKey(p), b = base.get(k);
         if (p.deleted) { map[k] = { del: true }; return; }
         const len = Math.round(p.manual_length ?? p.length), y = Math.round(p.y + (p.offset_y ?? 0));
         if (!b || len !== Math.round(b.length) || y !== Math.round(b.y)) map[k] = { len, y };
@@ -578,6 +580,19 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   }, [selected, onUpdate]);
 
   // Змінити довжину виділених листів ЗВЕРХУ (верхній край рухається)
+  // Сусідній лист у тій самій колонці над (dir=+1) або під (dir=−1) листом — за положенням, а не за номером ряду
+  // (після розділення листа обидві частини мають той самий ряд)
+  const neighbour = (list: SheetPlacement[], p: SheetPlacement, dir: 1 | -1) => {
+    const y = p.y + (p.offset_y ?? 0);
+    let best: SheetPlacement | undefined;
+    list.forEach(q => {
+      if (q.deleted || q === p || q.sheet_number === p.sheet_number || q.col_index !== p.col_index) return;
+      const qy = q.y + (q.offset_y ?? 0);
+      if (dir > 0 ? qy <= y : qy >= y) return;
+      if (!best || (dir > 0 ? qy < best.y + (best.offset_y ?? 0) : qy > best.y + (best.offset_y ?? 0))) best = q;
+    });
+    return best;
+  };
   const changeLengthTop = useCallback((deltaMm: number) => {
     setManualMode(true);
     markDirty();
@@ -591,8 +606,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
         const newLen = Math.max(50, curLen + deltaMm);
         p.manual_length = newLen;
         // Сусід зверху компенсує (стик рухається)
-        const above = next.find(q => !q.deleted && q.sheet_number !== p.sheet_number &&
-          q.col_index === p.col_index && q.row_index === p.row_index + 1);
+        const above = neighbour(next, p, +1);
         if (above) {
           const aLen = above.manual_length ?? above.length;
           const naLen = aLen - (newLen - curLen);
@@ -621,8 +635,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
         p.manual_length = newLen;
         p.offset_y = (p.offset_y ?? 0) - actualDelta; // низ рухається вниз
         // Сусід знизу компенсує
-        const below = next.find(q => !q.deleted && q.sheet_number !== p.sheet_number &&
-          q.col_index === p.col_index && q.row_index === p.row_index - 1);
+        const below = neighbour(next, p, -1);
         if (below) {
           const bLen = below.manual_length ?? below.length;
           const nbLen = bLen - actualDelta;
@@ -679,6 +692,30 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       return next;
     });
   }, [selected, onUpdate]);
+
+  // Розділити виділений лист на два з нахлестом (для врізання вікна, димоходу): низ і верх — порівну,
+  // далі розміри коригуються стрілками «Довжина знизу / зверху» (сусідній лист компенсує зміну)
+  const ovMm = Math.max(0, Number((calcResult as any).overlap_mm) || 0);
+  const splitTarget = selected.size === 1 ? placements.find(p => !p.deleted && selected.has(p.sheet_number)) : undefined;
+  const canSplit = !!splitTarget && getLen(splitTarget) >= 2 * Math.max(300, ovMm + 100);
+  const splitSelected = () => {
+    const p = splitTarget;
+    if (!p || !canSplit) return;
+    snap(); lastSnap.current = 0;
+    markDirty();
+    setManualMode(true);
+    const L = getLen(p), y0 = getY(p);
+    const lower = Math.round((L + ovMm) / 2 / 10) * 10;
+    const upperY = y0 + lower - ovMm, upperLen = y0 + L - upperY;
+    const used = new Set(placements.filter(q => q.col_index === p.col_index && q.row_index === p.row_index).map(q => q.split_n || 0));
+    let n = 1; while (used.has(n)) n++;
+    const num = Math.max(0, ...placements.map(q => q.sheet_number)) + 1;
+    const next = placements.map(q => q === p ? { ...q, manual_length: lower } : q);
+    next.push({ ...p, split_n: n, sheet_number: num, y: upperY, offset_y: 0, manual_length: upperLen, length: upperLen, tech_err: undefined });
+    setPlacements(next);
+    onUpdate?.(next.filter(q => !q.deleted));
+    setSelected(new Set([num]));
+  };
 
   const deleteSelected = () => {
     snap(); lastSnap.current = 0;
@@ -1131,6 +1168,11 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
 
             {/* Дії */}
             <div style={{ display:'flex', gap:'6px', borderTop:'1px solid var(--clr-border)', paddingTop:'10px' }}>
+              <button onClick={splitSelected} disabled={!canSplit}
+                title={canSplit ? 'Розділити лист на два з нахлестом — для розриву під вікно чи димохід; далі підкоригуйте довжини стрілками' : 'Виділіть один лист (не коротший за 0.6 м)'}
+                style={{ flex:1, padding:'8px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor: canSplit ? 'pointer' : 'default', opacity: canSplit ? 1 : .45, background:'var(--clr-surface-2)', color:'var(--clr-text)', fontSize:'.82rem', fontWeight:500 }}>
+                ✂ Розділити
+              </button>
               <button onClick={deleteSelected}
                 style={{ flex:1, padding:'8px', border:'1px solid var(--clr-error)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-error-bg)', color:'var(--clr-error)', fontSize:'.82rem', fontWeight:500 }}>
                 🗑 Видалити

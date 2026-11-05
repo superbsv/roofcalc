@@ -50,7 +50,7 @@ class SlopesController
         if (!is_array($e)) return [];
         $out = [];
         foreach ($e as $k => $v) {
-            if (!preg_match('/^-?\d+:-?\d+$/', (string)$k) || !is_array($v)) continue;
+            if (!preg_match('/^-?\d+:-?\d+(\+\d{1,2})?$/', (string)$k) || !is_array($v)) continue;   // «c:r+n» — лист, отриманий розділенням
             $o = [];
             if (!empty($v['del'])) $o['del'] = true;
             if (isset($v['len']) && is_numeric($v['len'])) $o['len'] = max(50, min(100000, (int)round($v['len'])));
@@ -78,6 +78,25 @@ class SlopesController
                 $p['edited'] = true;
             }
             $out[] = $p;
+        }
+        // Листи, отримані розділенням листа «c:r» (ключ «c:r+n»): копія вихідного листа з власною довжиною і низом
+        $byKey = [];
+        foreach ($r['placements'] as $p) $byKey[($p['col_index'] ?? 0) . ':' . ($p['row_index'] ?? 0)] = $p;
+        $num = 0;
+        foreach ($r['placements'] as $p) $num = max($num, (int)($p['sheet_number'] ?? 0));
+        foreach ($edits as $k => $e) {
+            if (!preg_match('/^(-?\d+:-?\d+)\+(\d+)$/', (string)$k, $mm) || !empty($e['del']) || !isset($e['len'], $e['y'])) continue;
+            $base = $byKey[$mm[1]] ?? null;
+            if (!$base) continue;
+            $q = $base;
+            $q['split_n'] = (int)$mm[2];
+            $q['length'] = $e['len'];
+            $q['y'] = $e['y'];
+            $q['full_area_m2'] = round(($q['full_width'] ?? $fw) * $q['length'] / 1e6, 4);
+            $q['edited'] = true;
+            $q['sheet_number'] = ++$num;
+            unset($q['tech_err'], $q['module_pos']);
+            $out[] = $q;
         }
         $r = self::recalcTotals($r, $out);
         $r['sheet_edits_count'] = count($edits);

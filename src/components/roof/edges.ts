@@ -155,11 +155,13 @@ export function setVertexAngle(pts: Point[], i: number, deg: number): Point[] {
 }
 
 // ---------- Вирізи: типові фігури (мм, від лівого нижнього кута габариту) ----------
-export type HoleShape = 'rect' | 'circle' | 'triangle' | 'trapezoid' | 'dormer';
+export type HoleShape = 'rect' | 'circle' | 'triangle' | 'rtril' | 'rtrir' | 'trapezoid' | 'dormer';
 export const HOLE_SHAPES: { key: HoleShape; label: string; fields: { k: string; label: string; def: string }[] }[] = [
   { key: 'rect', label: 'Прямокутник', fields: [{ k: 'w', label: 'Ширина', def: '0.600' }, { k: 'h', label: 'Висота', def: '0.600' }] },
   { key: 'circle', label: 'Коло (труба)', fields: [{ k: 'd', label: 'Діаметр', def: '0.200' }] },
   { key: 'triangle', label: 'Трикутник', fields: [{ k: 'w', label: 'Основа', def: '2.000' }, { k: 'h', label: 'Висота', def: '1.200' }] },
+  { key: 'rtril', label: 'Прямокутний трикутник (кут зліва)', fields: [{ k: 'w', label: 'Основа', def: '1.000' }, { k: 'h', label: 'Висота', def: '1.000' }] },
+  { key: 'rtrir', label: 'Прямокутний трикутник (кут справа)', fields: [{ k: 'w', label: 'Основа', def: '1.000' }, { k: 'h', label: 'Висота', def: '1.000' }] },
   { key: 'trapezoid', label: 'Трапеція', fields: [{ k: 'w', label: 'Низ', def: '2.000' }, { k: 'w2', label: 'Верх', def: '1.000' }, { k: 'h', label: 'Висота', def: '1.000' }] },
   { key: 'dormer', label: "Слухове вікно (п'ятикутник)", fields: [{ k: 'w', label: 'Ширина', def: '1.500' }, { k: 'h', label: 'Висота стінки', def: '1.000' }, { k: 'h2', label: 'Висота до гребеня', def: '1.600' }] },
 ];
@@ -171,6 +173,8 @@ export function holeShape(shape: HoleShape, x: number, y: number, v: Record<stri
       return Array.from({ length: n }, (_, i) => [Math.round(cx + r * Math.cos(-Math.PI / 2 + i * 2 * Math.PI / n)), Math.round(cy + r * Math.sin(-Math.PI / 2 + i * 2 * Math.PI / n))] as Point);
     }
     case 'triangle': return [[x, y], [x + w, y], [Math.round(x + w / 2), y + h]];
+    case 'rtril': return [[x, y], [x + w, y], [x, y + h]];
+    case 'rtrir': return [[x, y], [x + w, y], [x + w, y + h]];
     case 'trapezoid': { const o = Math.round((w - w2) / 2); return [[x, y], [x + w, y], [x + w - o, y + h], [x + o, y + h]]; }
     case 'dormer': return [[x, y], [x + w, y], [x + w, y + h], [Math.round(x + w / 2), y + Math.max(h, h2)], [x, y + h]];
     default: return rectHole(x, y, w, h);
