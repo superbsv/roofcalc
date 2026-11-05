@@ -519,8 +519,67 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     notifyChange(rounded);
   }
 
+  // ---- Перегляд: тягни лівою кнопкою по порожньому місцю (або середньою — будь-де) — рухати креслення.
+  // У режимі малювання клік без руху ставить точку, з рухом — рухає креслення ----
+  const viewRef = useRef({ scale, offset }); viewRef.current = { scale, offset };
+  const [panning, setPanning] = useState(false);
+  const startPan = (e: React.MouseEvent, onClick?: () => void) => {
+    const x0 = e.clientX, y0 = e.clientY, o0 = viewRef.current.offset;
+    let moved = false;
+    const move = (ev: MouseEvent) => {
+      const dx = ev.clientX - x0, dy = ev.clientY - y0;
+      if (!moved && Math.abs(dx) + Math.abs(dy) > 4) { moved = true; setPanning(true); }
+      if (moved) setOffset([o0[0] + dx, o0[1] + dy]);
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up);
+      setPanning(false);
+      if (!moved) onClick?.();
+    };
+    window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+  };
+  // Колесо (без прокрутки сторінки) і дотик: 1 палець — рухати, 2 — масштаб
+  useEffect(() => {
+    const cv = canvasRef.current; if (!cv) return;
+    const zoomAt = (ns: number, sx: number, sy: number) => {
+      const { scale: sc, offset: of } = viewRef.current;
+      const n = Math.max(10, Math.min(2000, ns));
+      setScale(n);
+      setOffset([sx - (sx - of[0]) * (n / sc), sy - (sy - of[1]) * (n / sc)]);
+    };
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = cv.getBoundingClientRect();
+      zoomAt(viewRef.current.scale * (e.deltaY < 0 ? 1.12 : 1 / 1.12), e.clientX - r.left, e.clientY - r.top);
+    };
+    let t0: { x: number; y: number; o: Point } | null = null;
+    let p0: { d: number; s: number } | null = null;
+    const onTS = (e: TouchEvent) => {
+      if (e.touches.length === 1) { const t = e.touches[0]; t0 = { x: t.clientX, y: t.clientY, o: viewRef.current.offset }; p0 = null; }
+      else if (e.touches.length === 2) { const [a, b] = [e.touches[0], e.touches[1]]; p0 = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), s: viewRef.current.scale }; t0 = null; }
+    };
+    const onTM = (e: TouchEvent) => {
+      if (e.touches.length === 2 && p0) {
+        e.preventDefault();
+        const [a, b] = [e.touches[0], e.touches[1]], r = cv.getBoundingClientRect();
+        zoomAt(p0.s * Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) / Math.max(1, p0.d), (a.clientX + b.clientX) / 2 - r.left, (a.clientY + b.clientY) / 2 - r.top);
+      } else if (e.touches.length === 1 && t0) {
+        e.preventDefault();
+        const t = e.touches[0];
+        setOffset([t0.o[0] + t.clientX - t0.x, t0.o[1] + t.clientY - t0.y]);
+      }
+    };
+    const onTE = (e: TouchEvent) => { if (!e.touches.length) { t0 = null; p0 = null; } };
+    cv.addEventListener('wheel', onWheel, { passive: false });
+    cv.addEventListener('touchstart', onTS, { passive: true });
+    cv.addEventListener('touchmove', onTM, { passive: false });
+    cv.addEventListener('touchend', onTE);
+    return () => { cv.removeEventListener('wheel', onWheel); cv.removeEventListener('touchstart', onTS); cv.removeEventListener('touchmove', onTM); cv.removeEventListener('touchend', onTE); };
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+
   const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (readOnly) return;
+    if (e.button === 1) { e.preventDefault(); startPan(e); return; }   // середня кнопка — рухати завжди
+    if (readOnly) { if (e.button === 0) startPan(e); return; }
     const cv = canvasRef.current!;
     const rect = cv.getBoundingClientRect();
     const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
@@ -551,7 +610,9 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       if (ei >= 0) {
         const a = points[ei], b = points[(ei + 1) % points.length];
         setPrompt({ kind: 'side', idx: ei, x: sx, y: sy, value: Math.hypot(b[0] - a[0], b[1] - a[1]).toFixed(3) });
+        return;
       }
+      if (e.button === 0) startPan(e);           // порожнє місце — рухати креслення
       return;
     }
     if (mode === 'draw') {
@@ -561,8 +622,9 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
           setClosed(true); notifyChange(points); return;
         }
       }
-      const next = [...points, [Math.max(0, wx), Math.max(0, wy)] as Point];
-      setPoints(next);
+      // точка — лише якщо мишу не потягли (інакше це рух креслення)
+      const np = [Math.max(0, wx), Math.max(0, wy)] as Point;
+      if (e.button === 0) startPan(e, () => setPoints(pts => [...pts, np]));
     } else {
       // Режим редагування — хапаємо найближчу точку (зона 14px)
       let found = -1;
@@ -593,21 +655,6 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       if (!orig || Math.round(p[0] * 1000) !== orig[0] || Math.round(p[1] * 1000) !== orig[1]) notifyChange(points);
     }
     setDragIdx(-1);
-  };
-
-  // Колесо миші — масштабування
-  const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const cv = canvasRef.current!;
-    const rect = cv.getBoundingClientRect();
-    const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
-    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-    const newScale = Math.max(10, Math.min(2000, scale * factor));
-    // Zoom до точки під курсором
-    const newOffX = sx - (sx - offset[0]) * (newScale / scale);
-    const newOffY = sy - (sy - offset[1]) * (newScale / scale);
-    setScale(newScale);
-    setOffset([newOffX, newOffY]);
   };
 
   const onKeyDown = useCallback((e: KeyboardEvent) => {
@@ -711,7 +758,8 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
           <b style={{color:'var(--clr-text-2)'}}>Управління:</b><br/>
           ЛКМ — точка<br/>
           ПКМ / Enter — замкнути<br/>
-          Колесо — масштаб<br/>
+          Колесо / два пальці — масштаб<br/>
+          Тягни по порожньому місцю — рухати<br/>
           Ctrl+Z — відмінити<br/>
           Esc — скинути
         </div>
@@ -721,12 +769,11 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       <div className="editor-canvas-wrap" ref={wrapRef}>
         <canvas
           ref={canvasRef}
-          style={{display:'block',width:'100%',height:'100%',cursor:dragIdx>=0?'grabbing':(hoverIdx>=0?'grab':(hoverEdge>=0?'pointer':(mode==='draw'&&!closed?'crosshair':'default')))}}
+          style={{display:'block',width:'100%',height:'100%',touchAction:'none',cursor:panning?'grabbing':dragIdx>=0?'grabbing':(hoverIdx>=0?'grab':(hoverEdge>=0?'pointer':(mode==='draw'&&!closed?'crosshair':'default')))}}
           onMouseMove={onMouseMove}
           onMouseDown={onMouseDown}
           onMouseUp={onMouseUp}
           onMouseLeave={onMouseUp}
-          onWheel={onWheel}
           onContextMenu={e => e.preventDefault()}
         />
         <div className="editor-toolbar">
