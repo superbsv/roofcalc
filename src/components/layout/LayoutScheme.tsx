@@ -806,10 +806,88 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
     wy: vy1 - (svgY - PADDING) / scale,
   });
 
+  // ---- Перегляд: тягни лівою кнопкою — рухати схему, Shift+тягни — виділити область, коліщатко — масштаб;
+  // на телефоні — один палець рухає, два пальці — масштаб (щипок) ----
+  const zoomAnchor = useRef<{ cx: number; cy: number; sl: number; st: number; z0: number } | null>(null);
+  const zoomRef = useRef(zoom); zoomRef.current = zoom;
+  const zoomAt = (z1: number, cx: number, cy: number) => {
+    const box = boxRef.current; if (!box) return;
+    const z0 = zoomRef.current, nz = Math.max(0.3, Math.min(6, z1));
+    if (Math.abs(nz - z0) < 1e-4) return;
+    zoomAnchor.current = { cx, cy, sl: box.scrollLeft, st: box.scrollTop, z0 };
+    setZoom(nz);
+  };
+  useLayoutEffect(() => {                       // тримаємо точку під курсором / між пальцями на місці
+    const a = zoomAnchor.current, box = boxRef.current;
+    if (!a || !box) return;
+    zoomAnchor.current = null;
+    const k = zoom / a.z0;
+    box.scrollLeft = (a.sl + a.cx) * k - a.cx;
+    box.scrollTop = (a.st + a.cy) * k - a.cy;
+  }, [zoom]);
+  useEffect(() => {
+    const box = boxRef.current; if (!box) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = box.getBoundingClientRect();
+      zoomAt(zoomRef.current * Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015)), e.clientX - r.left, e.clientY - r.top);
+    };
+    // дотик: 1 палець — прокрутка схеми, 2 — масштаб
+    let t0: { x: number; y: number; sl: number; st: number } | null = null;
+    let p0: { d: number; z: number } | null = null;
+    const mid = (a: Touch, b: Touch) => { const r = box.getBoundingClientRect(); return [(a.clientX + b.clientX) / 2 - r.left, (a.clientY + b.clientY) / 2 - r.top]; };
+    const onTS = (e: TouchEvent) => {
+      if (e.touches.length === 1) { const t = e.touches[0]; t0 = { x: t.clientX, y: t.clientY, sl: box.scrollLeft, st: box.scrollTop }; p0 = null; }
+      else if (e.touches.length === 2) { const [a, b] = [e.touches[0], e.touches[1]]; p0 = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), z: zoomRef.current }; t0 = null; }
+    };
+    const onTM = (e: TouchEvent) => {
+      if (e.touches.length === 2 && p0) {
+        e.preventDefault();
+        const [a, b] = [e.touches[0], e.touches[1]];
+        const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+        const [cx, cy] = mid(a, b);
+        zoomAt(p0.z * d / Math.max(1, p0.d), cx, cy);
+      } else if (e.touches.length === 1 && t0) {
+        const t = e.touches[0];
+        const dx = t.clientX - t0.x, dy = t.clientY - t0.y;
+        if (Math.abs(dx) + Math.abs(dy) > 6) isDragging.current = true;
+        e.preventDefault();
+        box.scrollLeft = t0.sl - dx; box.scrollTop = t0.st - dy;
+      }
+    };
+    const onTE = (e: TouchEvent) => { if (!e.touches.length) { t0 = null; p0 = null; setTimeout(() => { isDragging.current = false; }, 0); } };
+    box.addEventListener('wheel', onWheel, { passive: false });
+    box.addEventListener('touchstart', onTS, { passive: true });
+    box.addEventListener('touchmove', onTM, { passive: false });
+    box.addEventListener('touchend', onTE);
+    box.addEventListener('touchcancel', onTE);
+    return () => {
+      box.removeEventListener('wheel', onWheel); box.removeEventListener('touchstart', onTS);
+      box.removeEventListener('touchmove', onTM); box.removeEventListener('touchend', onTE); box.removeEventListener('touchcancel', onTE);
+    };
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pan = useRef<{ x: number; y: number; sl: number; st: number } | null>(null);
+  const [panning, setPanning] = useState(false);
   const onSvgMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
-    dragStart.current = getSvgPoint(e);
     isDragging.current = false;
+    if (e.shiftKey) { dragStart.current = getSvgPoint(e); return; }   // Shift + тягни — виділити область
+    const box = boxRef.current; if (!box) return;
+    pan.current = { x: e.clientX, y: e.clientY, sl: box.scrollLeft, st: box.scrollTop };
+    const move = (ev: MouseEvent) => {
+      const p = pan.current; if (!p) return;
+      const dx = ev.clientX - p.x, dy = ev.clientY - p.y;
+      if (!isDragging.current && Math.abs(dx) + Math.abs(dy) > 4) { isDragging.current = true; setPanning(true); }
+      if (isDragging.current) { box.scrollLeft = p.sl - dx; box.scrollTop = p.st - dy; }
+    };
+    const up = () => {
+      pan.current = null; setPanning(false);
+      window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up);
+      setTimeout(() => { isDragging.current = false; }, 0);   // клік після перетягування не знімає виділення
+    };
+    window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+    e.preventDefault();
   };
 
   const onSvgMouseMove = (e: React.MouseEvent) => {
@@ -840,7 +918,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       }
     }
     dragStart.current = null;
-    isDragging.current = false;
+    setTimeout(() => { isDragging.current = false; }, 0);
     setRubberBand(null);
   };
 
@@ -908,7 +986,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           {hasSelection && <button onClick={()=>setSelected(new Set())} style={{ padding:'6px 12px', border:'1px solid var(--clr-border-dark)', borderRadius:'6px', cursor:'pointer', background:'var(--clr-surface-2)', color:'var(--clr-text)', fontSize:'.82rem' }}>✕ Зняти</button>}
           <button onClick={()=>setZoom(z=>Math.max(0.3,z-0.1))} style={zoomBtn}>−</button>
           <span style={{ fontSize:'.85rem', minWidth:'40px', textAlign:'center' }}>{Math.round(zoom*100)}%</span>
-          <button onClick={()=>setZoom(z=>Math.min(3,z+0.1))} style={zoomBtn}>+</button>
+          <button onClick={()=>setZoom(z=>Math.min(6,z+0.1))} style={zoomBtn}>+</button>
           <button onClick={()=>{ savedZoom = null; const w = boxRef.current?.clientWidth || 900; setZoom(Math.max(0.3, Math.min(1, Math.floor(((window.innerHeight * 0.6) / (w * SVG_H / SVG_W)) * 20) / 20))); }} style={zoomBtn} title="Вписати в екран">⟳</button>
           <button onClick={cycleLabels} style={zoomBtn} title="Підписи довжин листів: горизонтально → вертикально → сховати">
             {labels === 'h' ? 'Розміри: ↔' : labels === 'v' ? 'Розміри: ↕' : 'Розміри: —'}
@@ -921,7 +999,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       </div>
 
       <div style={{ fontSize:'.8rem', color:'var(--clr-text-3)', marginBottom:'8px' }}>
-        💡 Клік — виділити лист · Shift+клік — додати · Тягни мишу — виділити область
+        💡 Клік — виділити лист · Shift+клік — додати · Тягни мишу / пальцем — рухати схему · Shift+тягни — виділити область · Коліщатко / два пальці — масштаб
       </div>
 
       {/* Панель зсуву всієї розкладки — у бічній панелі (стрілки як у «Кровля Профи»: ◀ 0.1 м, ◀◀ 0.01 м, ◀◀◀ 0.001 м) */}
@@ -972,7 +1050,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
 
       {/* SVG */}
       <div className="ls-box">
-      <div ref={boxRef} style={{ overflowX:'auto', overflowY:'auto', maxHeight:'75vh', border:'1px solid var(--clr-border)', borderRadius:'8px', background:COLORS.bg }}>
+      <div ref={boxRef} style={{ overflowX:'auto', overflowY:'auto', maxHeight:'75vh', border:'1px solid var(--clr-border)', borderRadius:'8px', background:COLORS.bg,
+        cursor: panning ? 'grabbing' : 'grab', touchAction:'none', overscrollBehavior:'contain' }}>
         <svg ref={svgRef} viewBox={`0 0 ${SVG_W} ${SVG_H}`} overflow="hidden"
           style={{ display:'block', width:`${zoom*100}%`, height:'auto' }}
           onMouseDown={onSvgMouseDown} onMouseMove={onSvgMouseMove} onMouseUp={onSvgMouseUp} onClick={onSvgClick}>
