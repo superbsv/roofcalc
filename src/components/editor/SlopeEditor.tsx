@@ -529,7 +529,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     const move = (ev: MouseEvent) => {
       const dx = ev.clientX - x0, dy = ev.clientY - y0;
       if (!moved && Math.abs(dx) + Math.abs(dy) > 4) { moved = true; setPanning(true); }
-      if (moved) setOffset([o0[0] + dx, o0[1] + dy]);
+      if (moved) setOffset([o0[0] + dx, o0[1] - dy]);   // вісь Y креслення — вгору
     };
     const up = () => {
       window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up);
@@ -545,7 +545,8 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       const { scale: sc, offset: of } = viewRef.current;
       const n = Math.max(10, Math.min(2000, ns));
       setScale(n);
-      setOffset([sx - (sx - of[0]) * (n / sc), sy - (sy - of[1]) * (n / sc)]);
+      const fy = cv.height - sy;                       // відлік Y креслення — від низу полотна
+      setOffset([sx - (sx - of[0]) * (n / sc), fy - (fy - of[1]) * (n / sc)]);
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -566,7 +567,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
       } else if (e.touches.length === 1 && t0) {
         e.preventDefault();
         const t = e.touches[0];
-        setOffset([t0.o[0] + t.clientX - t0.x, t0.o[1] + t.clientY - t0.y]);
+        setOffset([t0.o[0] + t.clientX - t0.x, t0.o[1] - (t.clientY - t0.y)]);   // вісь Y креслення — вгору
       }
     };
     const onTE = (e: TouchEvent) => { if (!e.touches.length) { t0 = null; p0 = null; } };
