@@ -7,7 +7,7 @@
 // - горизонтальний зсув = повна перегенерація
 // ============================================
 
-import React, { useState, useRef, useCallback, useEffect, useMemo, useLayoutEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Point as ApiPoint } from '../../api/client';
 
@@ -958,10 +958,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, []);
 
-    () => Array.from(new Set(visiblePlacements.map(p => getLen(p)))).sort((a,b)=>a-b),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [placements]
-  );
 
   return (
     <div style={{ fontFamily:'system-ui, sans-serif', position:'relative' }}>
