@@ -958,7 +958,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, []);
 
-  const uniqueLengths = useMemo(
     () => Array.from(new Set(visiblePlacements.map(p => getLen(p)))).sort((a,b)=>a-b),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [placements]
@@ -1164,42 +1163,6 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
         <LegendItem color={COLORS.cut}      label="Обрізаний лист"/>
         <LegendItem color={COLORS.waste}    label="Великий відхід (>50%)"/>
         <LegendItem color={COLORS.selected} label="Виділений лист"/>
-      </div>
-
-      {/* Таблиця */}
-      <div style={{ marginTop:'16px', background:'var(--clr-surface)', border:'1px solid var(--clr-border)', borderRadius:'8px', overflow:'hidden' }}>
-        <div style={{ padding:'10px 16px', background:'var(--clr-surface-2)', borderBottom:'1px solid var(--clr-border)', fontWeight:600, fontSize:'.85rem' }}>
-          Специфікація листів
-        </div>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'.85rem' }}>
-          <thead>
-            <tr style={{ background:'var(--clr-surface-2)' }}>
-              <th style={{ padding:'8px 12px', textAlign:'left' }}>Довжина</th>
-              <th style={{ padding:'8px 12px', textAlign:'center' }}>Кількість</th>
-              <th style={{ padding:'8px 12px', textAlign:'center' }}>Корисна площа</th>
-              <th style={{ padding:'8px 12px', textAlign:'center' }}>Повна площа</th>
-            </tr>
-          </thead>
-          <tbody>
-            {uniqueLengths.map(len => {
-              const sheets = visiblePlacements.filter(p=>getLen(p)===len);
-              return (
-                <tr key={len} style={{ borderTop:'1px solid var(--clr-border)' }}>
-                  <td style={{ padding:'8px 12px', fontWeight:500 }}>{(len/1000).toFixed(3)} м</td>
-                  <td style={{ padding:'8px 12px', textAlign:'center' }}>{sheets.length} шт</td>
-                  <td style={{ padding:'8px 12px', textAlign:'center' }}>{sheets.reduce((s,p)=>s+(p.intersect_area_m2??0),0).toFixed(3)} м²</td>
-                  <td style={{ padding:'8px 12px', textAlign:'center' }}>{sheets.reduce((s,p)=>s+(p.full_area_m2??0),0).toFixed(3)} м²</td>
-                </tr>
-              );
-            })}
-            <tr style={{ borderTop:'1px solid var(--clr-border-dark)', fontWeight:600, background:'var(--clr-surface-2)' }}>
-              <td style={{ padding:'8px 12px' }}>Всього</td>
-              <td style={{ padding:'8px 12px', textAlign:'center' }}>{visiblePlacements.length} шт</td>
-              <td style={{ padding:'8px 12px', textAlign:'center' }}>{visiblePlacements.reduce((s,p)=>s+(p.intersect_area_m2??0),0).toFixed(3)} м²</td>
-              <td style={{ padding:'8px 12px', textAlign:'center' }}>{visiblePlacements.reduce((s,p)=>s+(p.full_area_m2??0),0).toFixed(3)} м²</td>
-            </tr>
-          </tbody>
-        </table>
       </div>
 
       {/* ===== ПЛАВАЮЧА ПАНЕЛЬ (стиль KrovlyaProfy) ===== */}
