@@ -421,8 +421,8 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     }
     placements.forEach((pl, idx) => {
       const mmToM = 1/1000;
-      const [px, py] = w2s(pl.x * mmToM, pl.y * mmToM, H);
-      const h = (pl as any).orient === 'h';            // сайдинг — горизонтальна панель
+      const h = (pl as any).orient === 'h';            // сайдинг — горизонтальна панель (координати движка: x ↔ y)
+      const [px, py] = h ? w2s(pl.y * mmToM, pl.x * mmToM, H) : w2s(pl.x * mmToM, pl.y * mmToM, H);
       const pw = (h ? pl.length : pl.useful_width) * mmToM * scale;
       const ph = (h ? pl.useful_width : pl.length) * mmToM * scale;
       const ci = idx % 2;

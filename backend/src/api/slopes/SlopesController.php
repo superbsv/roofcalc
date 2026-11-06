@@ -468,7 +468,7 @@ class SlopesController
                 $rot = $slope;
                 $rot['polygon_points'] = $tr($slope['polygon_points']);
                 $rot['holes'] = array_map($tr, is_array($slope['holes'] ?? null) ? $slope['holes'] : []);
-                $rot['eave_overhang'] = 0; $rot['ridge_gap'] = 0; $rot['v_shift'] = 0;
+                $rot['eave_overhang'] = 0; $rot['ridge_gap'] = 0;   // v_shift — зсув панелей уздовж стіни
                 // напрям: «зліва направо» → ряди знизу вгору, «справа наліво» → згори вниз (як «Сверху вниз» у КП)
                 $calc = new SheetLayoutEngine($profile, $rot, $mode);
                 break;
@@ -494,16 +494,10 @@ class SlopesController
             return $calcResult;
         }
         if (!empty($horizontal)) {
-            // назад у систему стіни: x — уздовж стіни (довжина панелі), y — висота (ряди)
-            foreach ($calcResult['placements'] ?? [] as $i => $pl) {
-                $calcResult['placements'][$i]['x'] = (int)round(($pl['y'] ?? 0) + ($pl['offset_y'] ?? 0));
-                $calcResult['placements'][$i]['y'] = (int)round(($pl['x'] ?? 0) + ($pl['offset_x'] ?? 0));
-                $calcResult['placements'][$i]['offset_x'] = 0; $calcResult['placements'][$i]['offset_y'] = 0;
-                $calcResult['placements'][$i]['orient'] = 'h';
-            }
+            // Розкладка лишається в системі движка (x ↔ y): так працюють усі правки, зсуви і лінія стику;
+            // схема «Укладка» сама показує її повернутою — ряди горизонтально
+            foreach ($calcResult['placements'] ?? [] as $i => $pl) $calcResult['placements'][$i]['orient'] = 'h';
             $calcResult['orientation'] = 'h';
-            [$calcResult['slope_width_mm'], $calcResult['slope_height_mm']] = [$calcResult['slope_height_mm'] ?? 0, $calcResult['slope_width_mm'] ?? 0];
-            $calcResult['joint_y_mm'] = null; $calcResult['joint_range_mm'] = null;
         }
         if ($dryRun) return $calcResult;   // пробний розрахунок (оптимізація) — без збереження
 
@@ -523,7 +517,7 @@ class SlopesController
         }
 
         // Ручні правки листів з «Укладки» (довжина / положення / видалення)
-        if (empty($horizontal)) $calcResult = self::applySheetEdits($calcResult, self::cleanSheetEdits(json_decode($slope['sheet_edits'] ?? 'null', true)));
+        $calcResult = self::applySheetEdits($calcResult, self::cleanSheetEdits(json_decode($slope['sheet_edits'] ?? 'null', true)));
         if ($tech) {
             // правлені вручну листи теж автоматично подовжуються до найближчої допустимої заводської довжини
             $changed = false;

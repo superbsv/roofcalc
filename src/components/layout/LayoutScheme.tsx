@@ -7,7 +7,7 @@
 // - горизонтальний зсув = повна перегенерація
 // ============================================
 
-import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Point as ApiPoint } from '../../api/client';
 
@@ -303,7 +303,14 @@ function sheetState(x: number, y: number, len: number, usefulWidth: number, poly
   return 'full';
 }
 
-export default function LayoutScheme({ calcResult, polygonPoints, holes = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset, splitForced = false, onForceSplit, rowsDiv = 0, rowLen = 0, onRowsDiv, vShift = 0, onVShift, waveStep = 0, sheetEdits, onEdits, shiftPanelTarget, overlay, onOptimize }: Props) {
+export default function LayoutScheme({ calcResult, polygonPoints: rawPolygon, holes: rawHoles = [], slopeName, onUpdate, jointY, jointRange, onJointChange, jointStep = 1, shiftX = 0, onShiftX, onReset, splitForced = false, onForceSplit, rowsDiv = 0, rowLen = 0, onRowsDiv, vShift = 0, onVShift, waveStep = 0, sheetEdits, onEdits, shiftPanelTarget, overlay, onOptimize }: Props) {
+  // Горизонтальний сайдинг: уся логіка працює в системі движка (x ↔ y), а схема показується повернутою
+  const horiz = (calcResult as any).orientation === 'h';
+  const polygonPoints = useMemo(() => horiz ? rawPolygon.map(([a, b]) => [b, a] as Point) : rawPolygon, [horiz, rawPolygon]);
+  const holes = useMemo(() => horiz ? rawHoles.map(h => h.map(([a, b]) => [b, a] as Point)) : rawHoles, [horiz, rawHoles]);
+  const CW = horiz ? SVG_H : SVG_W, CH = horiz ? SVG_W : SVG_H;   // «віртуальне» полотно до повороту
+  // підпис, що не перевертається разом зі схемою
+  const tt = (x: number, y: number, extra?: string) => horiz ? `matrix(0,-1,-1,0,${x + y},${x + y})` : extra;
   const W = calcResult.slope_width_mm;
   const H = calcResult.slope_height_mm;
 
@@ -318,11 +325,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   const rtl = calcResult.placements[0]?.lap === 'left';
   // Ліва межа повного листа: нахлест виходить у бік, протилежний напрямку укладки
   const fullX = (p: SheetPlacement) => p.x + (p.offset_x ?? 0) - (p.lap === 'left' ? p.full_width - p.useful_width : 0);
-  // Прямокутник листа в мм: вертикальний лист — ширина × довжина; горизонтальна панель сайдингу — довжина × ширина
-  const horiz = (calcResult as any).orientation === 'h';
-  const rectOf = (p: SheetPlacement, len: number) => p.orient === 'h'
-    ? { x: p.x + (p.offset_x ?? 0), y: p.y + (p.offset_y ?? 0) - (p.lap === 'left' ? p.full_width - p.useful_width : 0), w: len, h: p.full_width }
-    : { x: fullX(p), y: p.y + (p.offset_y ?? 0), w: p.full_width, h: len };
+  const rectOf = (p: SheetPlacement, len: number) => ({ x: fullX(p), y: p.y + (p.offset_y ?? 0), w: p.full_width, h: len });
 
   const [placements, setPlacements]   = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
   const [layoutOffset, setLayoutOffset] = useState(0);
@@ -434,7 +437,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   // рамка і масштаб стоять на місці, рухаються тільки листи
   const vx0 = -Math.round(fullWidth * 1.2), vx1 = W + Math.round(fullWidth * 1.2), vy0 = -800, vy1 = H + 800;
   const VW = Math.max(1, vx1 - vx0), VH = Math.max(1, vy1 - vy0);
-  const scale = Math.min((SVG_W - PADDING*2) / VW, (SVG_H - PADDING*2) / VH); // масштаб — через ширину SVG (zoom)
+  const scale = Math.min((CW - PADDING*2) / VW, (CH - PADDING*2) / VH); // масштаб — через ширину SVG (zoom)
   const tx = (x: number) => PADDING + (x - vx0) * scale;
   const ty = (y: number) => PADDING + (vy1 - y) * scale;
   // Дрібна сітка: 0.1 м, основні лінії — кожен 1 м
@@ -787,10 +790,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
     if (isSel) return COLORS.selected;
     if (polygonPoints.length >= 3) {
       // горизонтальна панель — перевіряємо в транспонованій системі (x ↔ y), як її рахує движок
-      const T = (pts: Point[]) => pts.map(([a, b]) => [b, a] as Point);
-      const st = p.orient === 'h'
-        ? sheetState(p.y, p.x, getLen(p), p.useful_width, T(polygonPoints), holes.map(T))
-        : sheetState(getX(p), getY(p), getLen(p), p.useful_width, polygonPoints, holes);
+      const st = sheetState(getX(p), getY(p), getLen(p), p.useful_width, polygonPoints, holes);
       return st === 'waste' ? COLORS.waste : st === 'cut' ? COLORS.cut : COLORS.full;
     }
     // Fallback на дані PHP якщо полігону нема
@@ -811,10 +811,11 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
     return { x: (e.clientX - rect.left)*f, y: (e.clientY - rect.top)*f };
   };
 
-  const svgToMm = (svgX: number, svgY: number) => ({
-    wx: vx0 + (svgX - PADDING) / scale,
-    wy: vy1 - (svgY - PADDING) / scale,
-  });
+  const svgToMm = (dx: number, dy: number) => {
+    // повернута схема: точка екрана → «віртуальне» полотно (обернення matrix(0,-1,-1,0,SVG_W,SVG_H))
+    const svgX = horiz ? SVG_H - dy : dx, svgY = horiz ? SVG_W - dx : dy;
+    return { wx: vx0 + (svgX - PADDING) / scale, wy: vy1 - (svgY - PADDING) / scale };
+  };
 
   // ---- Перегляд: тягни лівою кнопкою — рухати схему, Shift+тягни — виділити область, коліщатко — масштаб;
   // на телефоні — один палець рухає, два пальці — масштаб (щипок) ----
@@ -996,11 +997,9 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           <button onClick={cycleLabels} style={zoomBtn} title="Підписи довжин листів: горизонтально → вертикально → сховати">
             {labels === 'h' ? 'Розміри: ↔' : labels === 'v' ? 'Розміри: ↕' : 'Розміри: —'}
           </button>
-          {!horiz && <>
           <button onClick={mergeOverlaps} disabled={!canMerge} style={{ ...zoomBtn, opacity: canMerge ? 1 : .45, cursor: canMerge ? 'pointer' : 'default' }}
             title={maxLen ? `Замінити листи, що перекриваються, одним (до ${(maxLen / 1000).toFixed(3)} м). Діє на виділені листи або на весь скат` : 'Замінити листи, що перекриваються, одним'}>⇲ Прибрати зайві перекриття</button>{/* i18n-ignore: шаблон у tpl */}
           <button onClick={undo} disabled={!histLen} style={{ ...zoomBtn, opacity: histLen ? 1 : .45, cursor: histLen ? 'pointer' : 'default' }} title="Відмінити останню правку листів (Ctrl+Z), до 9 кроків">↶ Відмінити{histLen ? ` (${histLen})` : ''}</button>
-          </>}
           <button onClick={resetAll} style={{ ...zoomBtn, color:'var(--clr-error)', borderColor:'var(--clr-error)' }}>↩ Скинути</button>
         </div>
       </div>
@@ -1012,17 +1011,14 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       {/* Панель зсуву всієї розкладки — у бічній панелі (стрілки як у «Кровля Профи»: ◀ 0.1 м, ◀◀ 0.01 м, ◀◀◀ 0.001 м) */}
       {(() => {
         const vertOk = !(onJointChange && jointY == null && !onVShift);
-        const arrows = (ch: string, n: number) => ch.repeat(n);
-        if (horiz) {   // горизонтальний сайдинг: лише підбір положення рядів
-          const hp = <div className="ls-shift">{onOptimize && <button type="button" className="btn btn-primary btn-sm ls-opt" onClick={onOptimize}
-            title="Підібрати положення рядів з найменшою витратою матеріалу (з урахуванням вікон і дверей)">⚡ Оптимізувати укладку</button>}</div>;
-          return shiftPanelTarget ? createPortal(hp, shiftPanelTarget) : hp;
-        }
+        // повернута схема (сайдинг): «горизонталь» движка — це ряди вгору/вниз, «вертикаль» — уздовж стіни
+        const G: Record<string, string> = horiz ? { '◀': '▼', '▶': '▲', '▲': '▶', '▼': '◀' } : {};
+        const arrows = (ch: string, n: number) => (G[ch] || ch).repeat(n);
         const panel = (
           <div className="ls-shift">
             {onOptimize && <button type="button" className="btn btn-primary btn-sm ls-opt" onClick={onOptimize}
               title="Підібрати зсув листів з найменшою витратою матеріалу (з урахуванням вирізів)">⚡ Оптимізувати укладку</button>}
-            <div className="ls-shift-h">По горизонталі</div>
+            <div className="ls-shift-h">{horiz ? 'Ряди (по вертикалі)' : 'По горизонталі'}</div>
             <div className="ls-shift-row">
               {[...STEPS].reverse().map((st, i) => (
                 <HoldBtn key={'l' + st.mm} title={`← ${st.label}`} onTick={() => tickPend('h', -st.mm)} onEnd={endPend}>{arrows('◀', 3 - i)}</HoldBtn>
@@ -1032,7 +1028,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
               ))}
             </div>
             <div className="ls-shift-h" title={onJointChange ? 'Рухає лінію стику рядів — усі листи ската діляться по ній' : undefined}>
-              {onJointChange && jointY != null ? 'Лінія стику' : 'По вертикалі'}</div>
+              {onJointChange && jointY != null ? 'Лінія стику' : horiz ? 'Уздовж стіни (по горизонталі)' : 'По вертикалі'}</div>
             {vertOk && (
               <div className="ls-shift-col">
                 <div className="ls-shift-row">
@@ -1068,6 +1064,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           style={{ display:'block', width:`${zoom*100}%`, height:'auto' }}
           onMouseDown={onSvgMouseDown} onMouseMove={onSvgMouseMove} onMouseUp={onSvgMouseUp} onClick={onSvgClick}>
           <rect width={SVG_W} height={SVG_H} fill={COLORS.bg}/>
+          <g transform={horiz ? `matrix(0,-1,-1,0,${SVG_W},${SVG_H})` : undefined}>
           {gridLines.map(g => (
             <line key={g.k} x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2}
               stroke={g.major ? 'var(--clr-grid-major)' : 'var(--clr-grid)'} strokeWidth={g.major ? 0.8 : 0.4}/>
@@ -1101,30 +1098,26 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
                     <rect key={`z${a}`} x={x1} y={y1 - b * scale} width={w} height={(b - a) * scale}
                       fill="#16A34A" fillOpacity={0.22} stroke="#16A34A" strokeOpacity={0.6} strokeWidth={0.6} pointerEvents="none" />
                   ))}
-                  {labels === 'h' && p.orient === 'h' && h>7 && w>24 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
-                    fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(6,Math.min(12,h*0.75))} fontWeight="600">
+                  {labels === 'h' && h>20 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle" transform={tt(x1+w/2, y1-h/2)}
+                    fill={isSel?COLORS.selected:COLORS.text} fontSize={horiz ? Math.max(5, Math.min(12, w*0.75)) : Math.max(9,Math.min(13,h/4))} fontWeight="600">
                     {(length/1000).toFixed(3)}
                   </text>}
-                  {labels === 'h' && p.orient !== 'h' && h>20 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
-                    fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(9,Math.min(13,h/4))} fontWeight="600">
-                    {(length/1000).toFixed(3)}
-                  </text>}
-                  {labels === 'v' && p.orient !== 'h' && h>30 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
+                  {labels === 'v' && !horiz && h>30 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
                     transform={`rotate(-90 ${x1+w/2} ${y1-h/2})`}
                     fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(9,Math.min(14,w/2.2))} fontWeight="600">
                     {(length/1000).toFixed(3)}
                   </text>}
-                  {labels === 'h' && p.orient !== 'h' && h>30 && w>20 && <text x={x1+w/2} y={y1-h/2+14} textAnchor="middle" dominantBaseline="middle"
+                  {labels === 'h' && !horiz && h>30 && w>20 && <text x={x1+w/2} y={y1-h/2+14} textAnchor="middle" dominantBaseline="middle"
                     fill={isSel?COLORS.selected:COLORS.text} fontSize={8} opacity={0.7}>
                     №{p.sheet_number}
                   </text>}
-                  {p.manual_length && <text x={x1+3} y={y1-h+10} fill="#FF7A1A" fontSize={9}>✎</text>}
+                  {p.manual_length && <text x={x1+3} y={y1-h+10} transform={tt(x1+3, y1-h+10)} fill="#FF7A1A" fontSize={9}>✎</text>}
                   {(() => {
                     const err = length === p.length && p.tech_err ? p.tech_err : stampErr(length, tech);
                     if (!err) return null;
                     return <>
                       <rect x={x1+1.5} y={y1-h+1.5} width={Math.max(0, w-3)} height={Math.max(0, h-3)} fill="none" stroke="#DC2626" strokeWidth={2} strokeDasharray="5 3" pointerEvents="none"/>
-                      <text x={x1+w-4} y={y1-h+12} textAnchor="end" fill="#DC2626" fontSize={11} fontWeight="700">⚠</text>
+                      <text x={x1+w-4} y={y1-h+12} transform={tt(x1+w-4, y1-h+12)} textAnchor="end" fill="#DC2626" fontSize={11} fontWeight="700">⚠</text>
                       <title>{`№${p.sheet_number}: ${err}`}</title>
                     </>;
                   })()}
@@ -1147,28 +1140,31 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
               <g key={`hole${i}`} pointerEvents="none">
                 <path d={d} fill={COLORS.bg} />
                 <path d={d} fill="url(#ls-hole-hatch)" stroke="#DC2626" strokeWidth="1.5" />
-                <text x={tx(cx)} y={ty(cy) + 4} textAnchor="middle" fontSize="11" fontWeight="700" fill="#DC2626"
+                <text x={tx(cx)} y={ty(cy) + 4} transform={tt(tx(cx), ty(cy) + 4)} textAnchor="middle" fontSize="11" fontWeight="700" fill="#DC2626"
                   stroke={COLORS.bg} strokeWidth="3" style={{ paintOrder: 'stroke' }}>{`Виріз №${i + 1}`}</text>
               </g>
             );
           })}
 
+          </g>
           {rubberBand && (
             <rect x={rubberBand.x1} y={rubberBand.y1} width={rubberBand.x2-rubberBand.x1} height={rubberBand.y2-rubberBand.y1}
               fill="rgba(255,122,0,0.1)" stroke={COLORS.selected} strokeWidth="1" strokeDasharray="4 2"/>
           )}
+          <g transform={horiz ? `matrix(0,-1,-1,0,${SVG_W},${SVG_H})` : undefined}>
 
           <line x1={tx(0)} y1={PADDING-20} x2={tx(W)} y2={PADDING-20} stroke="var(--clr-text-3)" strokeWidth="1" markerEnd="url(#arrow)"/>
-          <text x={tx(W/2)} y={PADDING-28} textAnchor="middle" fill="var(--clr-text-2)" fontSize="11" fontWeight="600">{(W/1000).toFixed(2)} м</text>
+          <text x={tx(W/2)} y={PADDING-28} transform={tt(tx(W/2), PADDING-28)} textAnchor="middle" fill="var(--clr-text-2)" fontSize="11" fontWeight="600">{(W/1000).toFixed(2)} м</text>
           <line x1={tx(vx0)-20} y1={ty(0)} x2={tx(vx0)-20} y2={ty(H)} stroke="var(--clr-text-3)" strokeWidth="1"/>
           <text x={tx(vx0)-35} y={ty(H/2)} textAnchor="middle" fill="var(--clr-text-2)" fontSize="11" fontWeight="600"
-            transform={`rotate(-90,${tx(vx0)-35},${ty(H/2)})`}>{(H/1000).toFixed(2)} м</text>
+            transform={tt(tx(vx0)-35, ty(H/2), `rotate(-90,${tx(vx0)-35},${ty(H/2)})`)}>{(H/1000).toFixed(2)} м</text>
           {Array.from({length:Math.ceil(W/1000)+1},(_,i)=>i).map(i=>(
-            <text key={`lx${i}`} x={tx(i*1000)} y={ty(vy0)+18} textAnchor="middle" fill="var(--clr-text-3)" fontSize="9">{i}</text>
+            <text key={`lx${i}`} x={tx(i*1000)} y={ty(vy0)+18} transform={tt(tx(i*1000), ty(vy0)+18)} textAnchor="middle" fill="var(--clr-text-3)" fontSize="9">{i}</text>
           ))}
           {Array.from({length:Math.ceil(H/1000)+1},(_,i)=>i).map(i=>(
-            <text key={`ly${i}`} x={tx(vx0)-8} y={ty(i*1000)+3} textAnchor="end" fill="var(--clr-text-3)" fontSize="9">{i}</text>
+            <text key={`ly${i}`} x={tx(vx0)-8} y={ty(i*1000)+3} transform={tt(tx(vx0)-8, ty(i*1000)+3)} textAnchor="end" fill="var(--clr-text-3)" fontSize="9">{i}</text>
           ))}
+          </g>
         </svg>
       </div>
       {overlay && <div className="ls-overlay">{overlay}</div>}
@@ -1183,7 +1179,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       </div>
 
       {/* ===== ПЛАВАЮЧА ПАНЕЛЬ (стиль KrovlyaProfy) ===== */}
-      {hasSelection && !horiz && (
+      {hasSelection && (
         <div onMouseDown={onPanelMouseDown}
           style={{ position:'fixed', left:panelPos.x, top:panelPos.y, zIndex:500,
             background:'var(--clr-surface)', color:'var(--clr-text)', border:`2px solid ${COLORS.selected}`, borderRadius:'10px',
@@ -1199,26 +1195,26 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
             {/* Довжина ЗВЕРХУ: ▲ подовжити, ▼ вкоротити (▲ 0.1 м, ▲▲ 0.01 м, ▲▲▲ 0.001 м) */}
             <div style={{ marginBottom:'10px' }}>
               <div style={{ fontSize:'.72rem', fontWeight:600, color:'var(--clr-text-3)', marginBottom:'4px' }}>
-                ⬆ Довжина зверху (верхній край):
+                {horiz ? '➡ Довжина справа (правий край):' : '⬆ Довжина зверху (верхній край):'}
               </div>
               <div className="ls-shift-row">
-                {STEPS.map((st, i) => <HoldBtn key={'tu' + st.mm} title={`↑ ${st.label}`} onTick={() => changeLengthTop(+st.mm)}>{'▲'.repeat(i + 1)}</HoldBtn>)}
+                {STEPS.map((st, i) => <HoldBtn key={'tu' + st.mm} title={`↑ ${st.label}`} onTick={() => changeLengthTop(+st.mm)}>{(horiz ? '▶' : '▲').repeat(i + 1)}</HoldBtn>)}
               </div>
               <div className="ls-shift-row" style={{ marginTop: 4 }}>
-                {STEPS.map((st, i) => <HoldBtn key={'td' + st.mm} title={`↓ ${st.label}`} onTick={() => changeLengthTop(-st.mm)}>{'▼'.repeat(i + 1)}</HoldBtn>)}
+                {STEPS.map((st, i) => <HoldBtn key={'td' + st.mm} title={`↓ ${st.label}`} onTick={() => changeLengthTop(-st.mm)}>{(horiz ? '◀' : '▼').repeat(i + 1)}</HoldBtn>)}
               </div>
             </div>
 
             {/* Довжина ЗНИЗУ: ▼ подовжити донизу, ▲ вкоротити */}
             <div style={{ marginBottom:'12px' }}>
               <div style={{ fontSize:'.72rem', fontWeight:600, color:'var(--clr-text-3)', marginBottom:'4px' }}>
-                ⬇ Довжина знизу (нижній край):
+                {horiz ? '⬅ Довжина зліва (лівий край):' : '⬇ Довжина знизу (нижній край):'}
               </div>
               <div className="ls-shift-row">
-                {STEPS.map((st, i) => <HoldBtn key={'bu' + st.mm} title={`↑ ${st.label}`} onTick={() => changeLengthBottom(-st.mm)}>{'▲'.repeat(i + 1)}</HoldBtn>)}
+                {STEPS.map((st, i) => <HoldBtn key={'bu' + st.mm} title={`↑ ${st.label}`} onTick={() => changeLengthBottom(-st.mm)}>{(horiz ? '▶' : '▲').repeat(i + 1)}</HoldBtn>)}
               </div>
               <div className="ls-shift-row" style={{ marginTop: 4 }}>
-                {STEPS.map((st, i) => <HoldBtn key={'bd' + st.mm} title={`↓ ${st.label}`} onTick={() => changeLengthBottom(+st.mm)}>{'▼'.repeat(i + 1)}</HoldBtn>)}
+                {STEPS.map((st, i) => <HoldBtn key={'bd' + st.mm} title={`↓ ${st.label}`} onTick={() => changeLengthBottom(+st.mm)}>{(horiz ? '◀' : '▼').repeat(i + 1)}</HoldBtn>)}
               </div>
               <div style={{ fontSize:'.68rem', color:'var(--clr-text-3)', marginTop:'4px' }}>
                 ▲ / ▼ — 0.1 м · ▲▲ — 0.01 м · ▲▲▲ — 0.001 м. Сусідній лист компенсує зміну (стик рухається)
