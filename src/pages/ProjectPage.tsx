@@ -736,7 +736,7 @@ export default function ProjectPage({ projectId }: Props) {
               </>
             )}
             <div className="kp-tools">
-              <button className={`btn btn-sm ${cutouts ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setCutouts(v => !v)} disabled={!active || pts.length < 3} title="Режим «Вирізи»">Вирізи</button>
+              <button className={`btn btn-sm ${cutouts ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setCutouts(v => !v)} disabled={!active || pts.length < 3} title={ct?.facade ? 'Вікна, двері та інші вирізи у фасаді' : 'Режим «Вирізи»'}>{ct?.facade ? 'Вікна / двері' : 'Вирізи'}</button>
               <button className="btn btn-secondary btn-sm" onClick={() => active && duplicateSlope(active)} disabled={!active || !!busy} title="Копіювати скат (з розкладкою) і вставити одразу після нього">Копіювати скат</button>
               <button className="btn btn-secondary btn-sm" onClick={() => active && mirrorSlope(active)} disabled={!active || pts.length < 3} title="Зеркально відобразити і додати в кінець">Дзеркально</button>
               <button className="btn btn-secondary btn-sm" onClick={clearSlope} disabled={!active} title="Очистити поле">Очистити</button>
@@ -773,7 +773,7 @@ export default function ProjectPage({ projectId }: Props) {
                 </>
               ) : cutouts ? (
                 <>
-                  <div className="kp-h3">Вирізи</div>
+                  <div className="kp-h3">{ct?.facade ? 'Вікна, двері та вирізи' : 'Вирізи'}</div>
                   {holes.length ? (
                     <table className="kp-table">
                       <thead><tr><th>№</th><th>Ш × В, м</th><th>X, Y</th><th></th></tr></thead>
@@ -809,6 +809,14 @@ export default function ProjectPage({ projectId }: Props) {
                       </button>
                     ))}
                   </div>
+                  {ct?.facade && (
+                    <div className="kp-hole-presets">
+                      <span>Швидко:</span>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setHoleKind('rect'); setHole(v => ({ ...v, y: '0.900', w: '1.200', h: '1.400' })); }}>Вікно 1.2×1.4</button>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setHoleKind('rect'); setHole(v => ({ ...v, y: '0.000', w: '0.900', h: '2.100' })); }}>Двері 0.9×2.1</button>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setHoleKind('rect'); setHole(v => ({ ...v, y: '0.000', w: '2.500', h: '2.200' })); }}>Ворота 2.5×2.2</button>
+                    </div>
+                  )}
                   <div className="kp-holeform">
                     {[{ k: 'x', label: 'X лів. краю', def: '1.000' }, { k: 'y', label: 'Y низу', def: '1.000' }, ...HOLE_SHAPES.find(x => x.key === holeKind)!.fields].map(f => (
                       <label key={f.k}>{f.label}, м<input className="form-control" inputMode="decimal" value={hole[f.k] ?? f.def} onChange={e => setHole(v => ({ ...v, [f.k]: e.target.value }))} /></label>

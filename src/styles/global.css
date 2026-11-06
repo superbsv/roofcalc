@@ -1721,3 +1721,6 @@ tr:hover td { background: var(--clr-surface-2); }
 .kp-spec-note { display: flex; flex-direction: column; gap: 4px; width: 100%; font-size: .85rem; }
 .kp-paper-note { margin-top: 12px; font-size: .85rem; white-space: pre-wrap; }
 @media print { .no-print, .kp-spec-extra { display: none !important; } }
+
+/* Фасад: швидкі розміри вікна / дверей / воріт для вирізу */
+.kp-hole-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; font-size: .8rem; color: var(--clr-text-3); }
