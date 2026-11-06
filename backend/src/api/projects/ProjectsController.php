@@ -383,11 +383,21 @@ class ProjectsController
             if ($same) { $map[$fid] = (int)$same['id']; continue; }
             // файл «Кровля Профи»: беремо матеріал свого каталогу того самого типу і ширин, якщо такий є
             if (!empty($m['match_by_size'])) {
-                $bySize = Database::fetchOne(
-                    'SELECT id FROM material_profiles WHERE tenant_id = ? AND deleted = 0 AND is_active = 1 AND type = ? AND full_width = ? AND useful_width = ? ORDER BY sort_order, id LIMIT 1',
+                // свій матеріал того ж типу і ширин; якщо у файлі є невиконувані розміри — лише з такими самими діапазонами
+                $want = is_array($m['forbidden_lengths'] ?? null) ? json_encode(array_values($m['forbidden_lengths'])) : null;
+                $cands = Database::fetchAll(
+                    'SELECT id, forbidden_lengths FROM material_profiles WHERE tenant_id = ? AND deleted = 0 AND is_active = 1 AND type = ? AND full_width = ? AND useful_width = ? ORDER BY sort_order, id',
                     [$tid, $m['type'], (int)($m['full_width'] ?? 0), (int)($m['useful_width'] ?? 0)]
                 );
-                if ($bySize) { $map[$fid] = (int)$bySize['id']; continue; }
+                $hit = null;
+                foreach ($cands as $c) {
+                    if ($want === null) { $hit = $c; break; }
+                    $f = json_decode($c['forbidden_lengths'] ?? 'null', true);
+                    if (!is_array($f)) continue;
+                    $f = array_map(function ($x) { return is_array($x) ? [(int)($x[0] ?? $x['min'] ?? 0), (int)($x[1] ?? $x['max'] ?? 0)] : $x; }, array_values($f));
+                    if (json_encode($f) === $want) { $hit = $c; break; }
+                }
+                if ($hit) { $map[$fid] = (int)$hit['id']; continue; }
             }
             unset($m['match_by_size']);
             $sec = \RoofCalc\Core\Catalog::sectionFor(null, (string)$m['type']);

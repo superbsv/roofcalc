@@ -2,7 +2,8 @@
 // Імпорт файлу «Кровля Профи» (.kpr) → проект ROOFKIT (той самий формат, що й .roofkit).
 // .kpr — текст у кодуванні Windows-1251, одне значення на рядок (десятковий роздільник — кома).
 // Шапка: 1 версія · 2 № замовлення · 3 дата · 4 постачальник · 5 замовник · 6 матеріал · 8 покриття · 9 колір ·
-// 12 ПК, м · 13 ПЗ, м · 14 К, м · точність округлення — рядок перед першим скатом · 15 корисна ширина · 16 повна ширина · 17 Lmax станд. · 18 Lmax реальна.
+// 12 ПК, м · 13 ПЗ, м · 14 К, м · 15 корисна · 16 повна · 17 довжина хвилі (металочерепиця) · далі Lmax станд. і реальна ·
+// точність округлення — рядок перед першим скатом · в кінці: прапорець «невиконувані розміри» і 22 пари діапазонів · 15 корисна ширина · 16 повна ширина · 17 Lmax станд. · 18 Lmax реальна.
 // Скат: [True/False, False, 0, напрям «зліва направо» True/False, False, id, n] + n пар (тип сторони, довжина) + n+1 точок (x, y) ·
 // службові поля (площа тощо) · кількість вирізів і вирізи в тому самому форматі · 10 службових полів.
 // Геометрія — у метрах, y від карниза вгору (як у ROOFKIT).
@@ -59,20 +60,36 @@ export function parseKpr(text: string) {
   if (!slopes.length) throw new Error('У файлі «Кровля Профи» не знайдено скатів');
 
   const matName = (L[5] || '').replace(/(\s*\(Copy\))+/gi, '').trim() || 'Матеріал з «Кровля Профи»';
-  const type = guessType(matName);
+  // 17: у металочерепиці — довжина хвилі (< 2 м), далі Lmax стандартна і реальна; в інших — одразу Lmax станд. і реальна
+  const waveM = num(L[16]);
+  const isTile = waveM > 0.05 && waveM < 2;
+  const type = isTile ? 'tile' : guessType(matName);
   const useful = mm(L[14]) || 1100, full = mm(L[15]) || useful;
   const pk = mm(L[11]);                             // 12: ПК (перекриття конькове)
   const pz = mm(L[12]);                             // 13: ПЗ
   const k = mm(L[13]);                              // 14: К
   const round = /^\d+([.,]\d+)?$/.test(roundLine || '') ? mm(roundLine) : 0;
-  const lmaxReal = mm(L[17]) || 6000, lmaxStd = mm(L[16]) || lmaxReal;
+  const lmaxReal = mm(L[isTile ? 18 : 17]) || 6000, lmaxStd = mm(L[isTile ? 17 : 16]) || lmaxReal;
+  // Невиконувані розміри: останній рядок True/False у файлі — «враховувати», за ним 22 пари «від — до», м (нулі — порожні)
+  let flagAt = -1;
+  for (let q = L.length - 1; q > i; q--) if (L[q] === 'True' || L[q] === 'False') { flagAt = q; break; }
+  const forbidden: [number, number][] = [];
+  if (flagAt > 0 && L[flagAt] === 'True') {
+    for (let q = 0; q < 22; q++) {
+      const a = mm(L[flagAt + 1 + 2 * q]), b = mm(L[flagAt + 2 + 2 * q]);
+      if (b > a && b > 0) forbidden.push([a, b]);
+    }
+  }
   const date = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(L[2] || '');
   const material = {
     id: 1, name: matName, type, manufacturer: '', match_by_size: true,
     full_width: full, useful_width: useful, side_overlap: Math.max(0, full - useful),
     length_overlap: type === 'falts' ? 0 : pz, join_overlap: type === 'falts' ? pz : null,
-    wave_step: type === 'tile' ? 350 : 0, min_length: 300, max_length: lmaxReal, max_std_length: lmaxStd,
+    wave_step: isTile ? Math.round(waveM * 1000) : type === 'tile' ? 350 : 0, min_length: 300, max_length: lmaxReal, max_std_length: lmaxStd,
     round_step: round || 10, min_slope_angle: 0,
+    forbidden_lengths: forbidden.length ? forbidden : null,
+    // діапазони з КП уже описують технологію різу — власне правило «±50 мм від штампа» тоді вимикаємо
+    ...(isTile && forbidden.length ? { stamp_gap: 0 } : {}),
   };
   return {
     roofkit_project: 1,
