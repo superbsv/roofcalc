@@ -21,7 +21,7 @@ export const CALC_TYPES: CalcTypeInfo[] = [
     materialTypes: ['profile'], stock: true, ready: true },
   { key: 'falts', label: 'Клік-фальц', hint: 'Картини на всю довжину ската; стики — врозбіжку, якщо скат довший за Lmax.',
     materialTypes: ['falts'], stock: false, ready: true },
-  { key: 'siding', label: 'Металевий сайдинг', hint: 'Фасад: панелі ріжуться під висоту стіни з округленням, вирізи під вікна і двері.',
+  { key: 'siding', label: 'Металевий сайдинг', hint: 'Фасад: панелі лягають горизонтальними рядами, ріжуться по довжині стіни з округленням; вирізи під вікна і двері.',
     materialTypes: ['siding'], stock: false, facade: true, ready: true },
   { key: 'sandwich', label: 'Сендвіч-панелі', hint: 'Стіни і дахи: панелі під розмір з округленням до кроку заводу.',
     materialTypes: ['sandwich'], stock: false, ready: true },

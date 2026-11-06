@@ -422,8 +422,9 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     placements.forEach((pl, idx) => {
       const mmToM = 1/1000;
       const [px, py] = w2s(pl.x * mmToM, pl.y * mmToM, H);
-      const pw = pl.useful_width * mmToM * scale;
-      const ph = pl.length * mmToM * scale;
+      const h = (pl as any).orient === 'h';            // сайдинг — горизонтальна панель
+      const pw = (h ? pl.length : pl.useful_width) * mmToM * scale;
+      const ph = (h ? pl.useful_width : pl.length) * mmToM * scale;
       const ci = idx % 2;
       ctx.fillStyle = COLORS.sheet[ci];
       ctx.fillRect(px, py - ph, pw, ph);

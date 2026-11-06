@@ -722,7 +722,9 @@ export default function ProjectPage({ projectId }: Props) {
             {active && (
               <>
                 <div className="kp-radio" role="radiogroup" aria-label="Напрямок укладки">
-                  {([['left_right', 'Зліва направо'], ['right_left', 'Справа наліво']] as const).map(([v, l]) => (
+                  {(ct?.key === 'siding'
+                    ? [['left_right', 'Знизу вгору'], ['right_left', 'Згори вниз']] as const       // сайдинг — горизонтальні ряди
+                    : [['left_right', 'Зліва направо'], ['right_left', 'Справа наліво']] as const).map(([v, l]) => (
                     <label key={v}><input type="radio" checked={active.laying_direction === v}
                       onChange={() => run('dir', async () => { await patchSlope(active.id, { laying_direction: v }); })} /> {l}</label>
                   ))}

@@ -30,6 +30,7 @@ interface SheetPlacement {
   deleted?: boolean;
   tech_err?: string;
   split_n?: number;            // лист, отриманий розділенням листа col:row (ключ «col:row+n»)
+  orient?: 'h';                // сайдинг: панель лежить горизонтально (x — уздовж стіни, y — низ ряду)
 }
 
 type Point = ApiPoint;
@@ -317,6 +318,11 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   const rtl = calcResult.placements[0]?.lap === 'left';
   // Ліва межа повного листа: нахлест виходить у бік, протилежний напрямку укладки
   const fullX = (p: SheetPlacement) => p.x + (p.offset_x ?? 0) - (p.lap === 'left' ? p.full_width - p.useful_width : 0);
+  // Прямокутник листа в мм: вертикальний лист — ширина × довжина; горизонтальна панель сайдингу — довжина × ширина
+  const horiz = (calcResult as any).orientation === 'h';
+  const rectOf = (p: SheetPlacement, len: number) => p.orient === 'h'
+    ? { x: p.x + (p.offset_x ?? 0), y: p.y + (p.offset_y ?? 0) - (p.lap === 'left' ? p.full_width - p.useful_width : 0), w: len, h: p.full_width }
+    : { x: fullX(p), y: p.y + (p.offset_y ?? 0), w: p.full_width, h: len };
 
   const [placements, setPlacements]   = useState<SheetPlacement[]>(() => calcResult.placements.map(p => ({ ...p })));
   const [layoutOffset, setLayoutOffset] = useState(0);
@@ -780,7 +786,11 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
   const sheetColor = (p: SheetPlacement, isSel: boolean): string => {
     if (isSel) return COLORS.selected;
     if (polygonPoints.length >= 3) {
-      const st = sheetState(getX(p), getY(p), getLen(p), p.useful_width, polygonPoints, holes);
+      // горизонтальна панель — перевіряємо в транспонованій системі (x ↔ y), як її рахує движок
+      const T = (pts: Point[]) => pts.map(([a, b]) => [b, a] as Point);
+      const st = p.orient === 'h'
+        ? sheetState(p.y, p.x, getLen(p), p.useful_width, T(polygonPoints), holes.map(T))
+        : sheetState(getX(p), getY(p), getLen(p), p.useful_width, polygonPoints, holes);
       return st === 'waste' ? COLORS.waste : st === 'cut' ? COLORS.cut : COLORS.full;
     }
     // Fallback на дані PHP якщо полігону нема
@@ -910,8 +920,8 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       const minX = Math.min(w1.wx, w2.wx), maxX = Math.max(w1.wx, w2.wx);
       const minY = Math.min(w1.wy, w2.wy), maxY = Math.max(w1.wy, w2.wy);
       const inRect = visiblePlacements.filter(p => {
-        const len = getLen(p), py = getY(p), px = fullX(p);
-        return px < maxX && px + p.full_width > minX && py < maxY && py + len > minY;
+        const r = rectOf(p, getLen(p));
+        return r.x < maxX && r.x + r.w > minX && r.y < maxY && r.y + r.h > minY;
       }).map(p => p.sheet_number);
       if (inRect.length > 0) {
         setSelected(e.shiftKey ? new Set([...selected, ...inRect]) : new Set(inRect));
@@ -986,9 +996,11 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           <button onClick={cycleLabels} style={zoomBtn} title="Підписи довжин листів: горизонтально → вертикально → сховати">
             {labels === 'h' ? 'Розміри: ↔' : labels === 'v' ? 'Розміри: ↕' : 'Розміри: —'}
           </button>
+          {!horiz && <>
           <button onClick={mergeOverlaps} disabled={!canMerge} style={{ ...zoomBtn, opacity: canMerge ? 1 : .45, cursor: canMerge ? 'pointer' : 'default' }}
             title={maxLen ? `Замінити листи, що перекриваються, одним (до ${(maxLen / 1000).toFixed(3)} м). Діє на виділені листи або на весь скат` : 'Замінити листи, що перекриваються, одним'}>⇲ Прибрати зайві перекриття</button>{/* i18n-ignore: шаблон у tpl */}
           <button onClick={undo} disabled={!histLen} style={{ ...zoomBtn, opacity: histLen ? 1 : .45, cursor: histLen ? 'pointer' : 'default' }} title="Відмінити останню правку листів (Ctrl+Z), до 9 кроків">↶ Відмінити{histLen ? ` (${histLen})` : ''}</button>
+          </>}
           <button onClick={resetAll} style={{ ...zoomBtn, color:'var(--clr-error)', borderColor:'var(--clr-error)' }}>↩ Скинути</button>
         </div>
       </div>
@@ -1001,6 +1013,11 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       {(() => {
         const vertOk = !(onJointChange && jointY == null && !onVShift);
         const arrows = (ch: string, n: number) => ch.repeat(n);
+        if (horiz) {   // горизонтальний сайдинг: лише підбір положення рядів
+          const hp = <div className="ls-shift">{onOptimize && <button type="button" className="btn btn-primary btn-sm ls-opt" onClick={onOptimize}
+            title="Підібрати положення рядів з найменшою витратою матеріалу (з урахуванням вікон і дверей)">⚡ Оптимізувати укладку</button>}</div>;
+          return shiftPanelTarget ? createPortal(hp, shiftPanelTarget) : hp;
+        }
         const panel = (
           <div className="ls-shift">
             {onOptimize && <button type="button" className="btn btn-primary btn-sm ls-opt" onClick={onOptimize}
@@ -1064,12 +1081,12 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
           <g transform={pendH ? `translate(${pendH * scale},0)` : (pendV && jointY == null && onVShift) ? `translate(0,${-pendV * scale})` : undefined}>
             {visiblePlacements.map(p => {
               const length = getLen(p);
-              const py     = getY(p);
               const isSel  = selected.has(p.sheet_number);
-              const x1 = tx(fullX(p));
-              const y1 = ty(py);
-              const w  = p.full_width * scale;
-              const h  = length * scale;
+              const rr = rectOf(p, length);
+              const x1 = tx(rr.x);
+              const y1 = ty(rr.y);
+              const w  = rr.w * scale;
+              const h  = rr.h * scale;
               const color = sheetColor(p, isSel);
               return (
                 <g key={p.sheet_number} onClick={e=>handleSheetClick(e,p.sheet_number)} style={{cursor:'pointer'}}>
@@ -1084,16 +1101,20 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
                     <rect key={`z${a}`} x={x1} y={y1 - b * scale} width={w} height={(b - a) * scale}
                       fill="#16A34A" fillOpacity={0.22} stroke="#16A34A" strokeOpacity={0.6} strokeWidth={0.6} pointerEvents="none" />
                   ))}
-                  {labels === 'h' && h>20 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
+                  {labels === 'h' && p.orient === 'h' && h>7 && w>24 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
+                    fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(6,Math.min(12,h*0.75))} fontWeight="600">
+                    {(length/1000).toFixed(3)}
+                  </text>}
+                  {labels === 'h' && p.orient !== 'h' && h>20 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
                     fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(9,Math.min(13,h/4))} fontWeight="600">
                     {(length/1000).toFixed(3)}
                   </text>}
-                  {labels === 'v' && h>30 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
+                  {labels === 'v' && p.orient !== 'h' && h>30 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
                     transform={`rotate(-90 ${x1+w/2} ${y1-h/2})`}
                     fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(9,Math.min(14,w/2.2))} fontWeight="600">
                     {(length/1000).toFixed(3)}
                   </text>}
-                  {labels === 'h' && h>30 && w>20 && <text x={x1+w/2} y={y1-h/2+14} textAnchor="middle" dominantBaseline="middle"
+                  {labels === 'h' && p.orient !== 'h' && h>30 && w>20 && <text x={x1+w/2} y={y1-h/2+14} textAnchor="middle" dominantBaseline="middle"
                     fill={isSel?COLORS.selected:COLORS.text} fontSize={8} opacity={0.7}>
                     №{p.sheet_number}
                   </text>}
@@ -1162,7 +1183,7 @@ export default function LayoutScheme({ calcResult, polygonPoints, holes = [], sl
       </div>
 
       {/* ===== ПЛАВАЮЧА ПАНЕЛЬ (стиль KrovlyaProfy) ===== */}
-      {hasSelection && (
+      {hasSelection && !horiz && (
         <div onMouseDown={onPanelMouseDown}
           style={{ position:'fixed', left:panelPos.x, top:panelPos.y, zIndex:500,
             background:'var(--clr-surface)', color:'var(--clr-text)', border:`2px solid ${COLORS.selected}`, borderRadius:'10px',

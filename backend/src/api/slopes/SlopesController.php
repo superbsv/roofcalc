@@ -460,13 +460,24 @@ class SlopesController
 
         switch ($slope['type']) {
             // Листові та штучні матеріали — єдиний движок укладки (режими як у «Кровля Профи»)
+            case 'siding':
+                // Сайдинг кладеться горизонтально: рядами знизу вгору, панелі — вздовж стіни. Рахуємо тим самим
+                // движком у «транспонованій» системі (x ↔ y): колонки движка — це ряди, довжини — вздовж стіни.
+                $horizontal = true;
+                $tr = function ($pts) { return is_array($pts) ? array_reverse(array_map(function ($p) { return [(int)$p[1], (int)$p[0]]; }, $pts)) : $pts; };
+                $rot = $slope;
+                $rot['polygon_points'] = $tr($slope['polygon_points']);
+                $rot['holes'] = array_map($tr, is_array($slope['holes'] ?? null) ? $slope['holes'] : []);
+                $rot['eave_overhang'] = 0; $rot['ridge_gap'] = 0; $rot['v_shift'] = 0;
+                // напрям: «зліва направо» → ряди знизу вгору, «справа наліво» → згори вниз (як «Сверху вниз» у КП)
+                $calc = new SheetLayoutEngine($profile, $rot, $mode);
+                break;
             case 'tile':
             case 'profile':
             case 'tile_module':
             case 'sheet':
             case 'natural_tile':
-            case 'siding':      // сайдинг і сендвіч-панелі: панелі під розмір з округленням (як профнастил)
-            case 'sandwich':
+            case 'sandwich':    // сендвіч-панелі: панелі під розмір з округленням (як профнастил)
                 $calc = new SheetLayoutEngine($profile, $slope, $mode);
                 break;
             case 'falts':   // клік-фальц — той самий движок (колонки під форму ската, округлення, зсуви, вирізи)
@@ -481,6 +492,18 @@ class SlopesController
 
         if (!empty($calcResult['errors'])) {
             return $calcResult;
+        }
+        if (!empty($horizontal)) {
+            // назад у систему стіни: x — уздовж стіни (довжина панелі), y — висота (ряди)
+            foreach ($calcResult['placements'] ?? [] as $i => $pl) {
+                $calcResult['placements'][$i]['x'] = (int)round(($pl['y'] ?? 0) + ($pl['offset_y'] ?? 0));
+                $calcResult['placements'][$i]['y'] = (int)round(($pl['x'] ?? 0) + ($pl['offset_x'] ?? 0));
+                $calcResult['placements'][$i]['offset_x'] = 0; $calcResult['placements'][$i]['offset_y'] = 0;
+                $calcResult['placements'][$i]['orient'] = 'h';
+            }
+            $calcResult['orientation'] = 'h';
+            [$calcResult['slope_width_mm'], $calcResult['slope_height_mm']] = [$calcResult['slope_height_mm'] ?? 0, $calcResult['slope_width_mm'] ?? 0];
+            $calcResult['joint_y_mm'] = null; $calcResult['joint_range_mm'] = null;
         }
         if ($dryRun) return $calcResult;   // пробний розрахунок (оптимізація) — без збереження
 
@@ -500,7 +523,7 @@ class SlopesController
         }
 
         // Ручні правки листів з «Укладки» (довжина / положення / видалення)
-        $calcResult = self::applySheetEdits($calcResult, self::cleanSheetEdits(json_decode($slope['sheet_edits'] ?? 'null', true)));
+        if (empty($horizontal)) $calcResult = self::applySheetEdits($calcResult, self::cleanSheetEdits(json_decode($slope['sheet_edits'] ?? 'null', true)));
         if ($tech) {
             // правлені вручну листи теж автоматично подовжуються до найближчої допустимої заводської довжини
             $changed = false;
