@@ -4,7 +4,7 @@ DirectoryIndex index.html
 
 # index.html не кешується — після оновлення сайту браузер одразу бере нову версію
 <IfModule mod_headers.c>
-  <FilesMatch "^(index\.html|widget\.html)$">
+  <FilesMatch "^(index\.html|widget\.html|asset-manifest\.json)$">
     Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 </IfModule>
