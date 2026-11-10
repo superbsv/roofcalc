@@ -61,7 +61,8 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   const [dragIdx, setDragIdx]       = useState(-1);
   const [hoverEdge, setHoverEdge]   = useState(-1);
   // Точне введення: клік по стороні — довжина, клік по вершині — внутрішній кут
-  const [prompt, setPrompt] = useState<{ kind: 'side' | 'angle'; idx: number; x: number; y: number; value: string } | null>(null);
+  // вершина: координати X / Y і кут; сторона: довжина
+  const [prompt, setPrompt] = useState<{ kind: 'side' | 'angle'; idx: number; x: number; y: number; value: string; px?: string; py?: string; p0?: Point; a0?: string } | null>(null);
   const downRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const promptInput = useRef<HTMLInputElement>(null);
   const promptKey = prompt ? `${prompt.kind}${prompt.idx}` : '';
@@ -510,9 +511,23 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
 
   function applyPrompt() {
     if (!prompt) return;
-    const v = parseFloat(prompt.value.replace(',', '.'));
-    if (!Number.isFinite(v) || v <= 0) return;
-    const next = prompt.kind === 'side' ? setSideLength(points, prompt.idx, v) : (v < 360 ? setVertexAngle(points, prompt.idx, v) : points);
+    const f = (t?: string) => parseFloat(String(t ?? '').replace(',', '.'));
+    let next = points;
+    if (prompt.kind === 'angle') {
+      // змінено координати — ставимо вершину в точку X / Y; інакше — кут
+      const nx = f(prompt.px), ny = f(prompt.py), p0 = prompt.p0;
+      const moved = p0 && Number.isFinite(nx) && Number.isFinite(ny) && (Math.abs(nx - p0[0]) > 1e-6 || Math.abs(ny - p0[1]) > 1e-6);
+      if (moved) next = points.map((p, i) => i === prompt.idx ? [nx, ny] as Point : p);
+      else if (prompt.value !== prompt.a0) {
+        const v = f(prompt.value);
+        if (!Number.isFinite(v) || v <= 0 || v >= 360) return;
+        next = setVertexAngle(points, prompt.idx, v);
+      } else { setPrompt(null); return; }
+    } else {
+      const v = f(prompt.value);
+      if (!Number.isFinite(v) || v <= 0) return;
+      next = setSideLength(points, prompt.idx, v);
+    }
     const r = (x: number) => Math.round(x * 1000) / 1000;
     const rounded = next.map(([x, y]) => [r(x), r(y)] as Point);
     setPoints(rounded);
@@ -644,7 +659,9 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     if (dragIdx >= 0 && downRef.current && !downRef.current.moved) {
       // Клік по вершині без перетягування — ввести кут
       const ang = interiorAngles(points)[dragIdx];
-      if (ang) setPrompt({ kind: 'angle', idx: dragIdx, x: downRef.current.x, y: downRef.current.y, value: (Math.round(ang.deg * 10) / 10).toString() });
+      const pt = points[dragIdx], a = ang ? (Math.round(ang.deg * 10) / 10).toString() : '';
+      if (pt) setPrompt({ kind: 'angle', idx: dragIdx, x: downRef.current.x, y: downRef.current.y, value: a, a0: a,
+        px: pt[0].toFixed(3), py: pt[1].toFixed(3), p0: pt });
       downRef.current = null;
       setDragIdx(-1);
       return;
@@ -799,11 +816,23 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
         </div>
         <div className="editor-coords">{coordsText}</div>
         {prompt && (
-          <div className="kp-prompt" style={{ left: Math.max(8, Math.min(prompt.x + 12, (wrapRef.current?.clientWidth || 600) - 230)), top: Math.max(8, Math.min(prompt.y + 12, (wrapRef.current?.clientHeight || 400) - 130)) }}
+          <div className="kp-prompt" style={{ left: Math.max(8, Math.min(prompt.x + 12, (wrapRef.current?.clientWidth || 600) - 230)), top: Math.max(8, Math.min(prompt.y + 12, (wrapRef.current?.clientHeight || 400) - (prompt.kind === 'angle' ? 200 : 130))) }}
             onMouseDown={e => e.stopPropagation()}>
+            {prompt.kind === 'angle' && (
+              <div className="kp-prompt-xy">
+                {(['px', 'py'] as const).map((k, i) => (
+                  <label key={k}>
+                    <span>{i ? 'Y (висота), м' : 'X (по горизонталі), м'}</span>
+                    <input ref={i ? undefined : promptInput} className="form-control" inputMode="decimal" value={prompt[k] ?? ''}
+                      onChange={e => setPrompt(p => p && ({ ...p, [k]: e.target.value }))}
+                      onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') applyPrompt(); if (e.key === 'Escape') setPrompt(null); }} />
+                  </label>
+                ))}
+              </div>
+            )}
             <label>
-              <span>{prompt.kind === 'side' ? `Довжина сторони ${sideLetter(prompt.idx)}, м` : 'Внутрішній кут у вершині, °'}</span>
-              <input ref={promptInput} className="form-control" inputMode="decimal" value={prompt.value}
+              <span>{prompt.kind === 'side' ? `Довжина сторони ${sideLetter(prompt.idx)}, м` : 'або внутрішній кут у вершині, °'}</span>
+              <input ref={prompt.kind === 'side' ? promptInput : undefined} className="form-control" inputMode="decimal" value={prompt.value}
                 onChange={e => setPrompt(p => p && ({ ...p, value: e.target.value }))}
                 onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') applyPrompt(); if (e.key === 'Escape') setPrompt(null); }} />
             </label>

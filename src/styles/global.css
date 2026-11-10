@@ -1724,3 +1724,7 @@ tr:hover td { background: var(--clr-surface-2); }
 
 /* Фасад: швидкі розміри вікна / дверей / воріт для вирізу */
 .kp-hole-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; font-size: .8rem; color: var(--clr-text-3); }
+
+/* Вершина ската: координати X / Y поруч */
+.kp-prompt-xy { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+.kp-prompt-xy label span { font-size: .72rem; }

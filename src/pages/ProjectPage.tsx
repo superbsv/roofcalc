@@ -842,7 +842,7 @@ export default function ProjectPage({ projectId }: Props) {
                       </select>
                     </div>
                   ))}
-                  <div className="text-xs text-muted" style={{ marginTop: 6 }}>Розмір сторони можна ввести тут або клацнувши по стороні на кресленні. Клік по вершині — ввести внутрішній кут. Вершину можна перетягнути мишею (крок 1 см, із Shift — 1 мм).</div>
+                  <div className="text-xs text-muted" style={{ marginTop: 6 }}>Розмір сторони можна ввести тут або клацнувши по стороні на кресленні. Клік по вершині — ввести її координати X / Y або внутрішній кут. Вершину можна перетягнути мишею (крок 1 см, із Shift — 1 мм).</div>
                   <dl className="kp-mini">
                     <dt>Площа ската</dt><dd>{f2(polyArea(pts) / 1e6, 3)} м²</dd>
                     {holes.length > 0 && <><dt>Вирізи</dt><dd>{holes.length} шт</dd></>}
