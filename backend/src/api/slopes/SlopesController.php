@@ -31,11 +31,39 @@ class SlopesController
         Database::ensureMaterialSchema();
     }
 
+    // Скат завжди в межах осей: найлівіша точка — x = 0, найнижча — y = 0 (вирізи зсуваються разом зі скатом).
+    // Повертає [точки, вирізи, чи був зсув].
+    public static function toAxes(array $pts, array $holes): array
+    {
+        if (count($pts) < 3) return [$pts, $holes, false, 0, 0];
+        $dx = -min(array_map(function ($p) { return (int)($p[0] ?? 0); }, $pts));
+        $dy = -min(array_map(function ($p) { return (int)($p[1] ?? 0); }, $pts));
+        if (!$dx && !$dy) return [$pts, $holes, false, 0, 0];
+        $mv = function ($p) use ($dx, $dy) { return [(int)$p[0] + $dx, (int)$p[1] + $dy]; };
+        $holes = array_map(function ($h) use ($mv) { return is_array($h) ? array_map($mv, $h) : $h; }, $holes);
+        return [array_map($mv, $pts), $holes, true, $dx, $dy];
+    }
+
     // Розпаковка JSON-полів ската для відповіді API
     public static function decodeSlope(array $s): array
     {
         $s['polygon_points'] = json_decode($s['polygon_points'] ?? 'null', true) ?? [];
         $s['holes']          = json_decode($s['holes'] ?? 'null', true) ?? [];
+        [$s['polygon_points'], $s['holes'], $moved, $dx, $dy] = self::toAxes($s['polygon_points'], is_array($s['holes']) ? $s['holes'] : []);
+        if ($moved && !empty($s['id'])) {
+            // збережена розкладка зсувається разом зі скатом (сайдинг — у системі движка, x ↔ y)
+            $cr = is_string($s['calc_result'] ?? null) ? json_decode($s['calc_result'], true) : null;
+            if (is_array($cr) && !empty($cr['placements'])) {
+                $h = ($cr['orientation'] ?? '') === 'h';
+                foreach ($cr['placements'] as $i => $pl) {
+                    $cr['placements'][$i]['x'] = ($pl['x'] ?? 0) + ($h ? $dy : $dx);
+                    $cr['placements'][$i]['y'] = ($pl['y'] ?? 0) + ($h ? $dx : $dy);
+                }
+                $s['calc_result'] = json_encode($cr);
+            }
+            Database::query('UPDATE slopes SET polygon_points = ?, holes = ?' . ($cr ? ', calc_result = ?' : '') . ' WHERE id = ?',
+                array_merge([json_encode($s['polygon_points']), json_encode($s['holes'])], $cr ? [$s['calc_result']] : [], [$s['id']]));
+        }
         $s['edge_types']     = json_decode($s['edge_types'] ?? 'null', true) ?? [];
         if (array_key_exists('sheet_edits', $s)) $s['sheet_edits'] = self::cleanSheetEdits(json_decode($s['sheet_edits'] ?? 'null', true));
         if (array_key_exists('calc_result', $s) && is_string($s['calc_result'])) {
@@ -415,6 +443,10 @@ class SlopesController
 
         $slope['polygon_points'] = json_decode($slope['polygon_points'], true) ?? [];
         $slope['holes']          = self::cleanHoles(json_decode($slope['holes'] ?? 'null', true));
+        [$slope['polygon_points'], $slope['holes'], $moved] = self::toAxes($slope['polygon_points'], $slope['holes']);
+        if ($moved && !$override) {
+            Database::query('UPDATE slopes SET polygon_points = ?, holes = ? WHERE id = ?', [json_encode($slope['polygon_points']), json_encode($slope['holes']), $id]);
+        }
         $slope['edge_types']     = self::cleanEdgeTypes(json_decode($slope['edge_types'] ?? 'null', true));
         $slope['forbidden_lengths'] = $slope['forbidden_lengths'] ?? '[]';
         $slope['stock_lengths']     = $slope['stock_lengths']     ?? '[]';
