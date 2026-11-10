@@ -1098,13 +1098,14 @@ export default function LayoutScheme({ calcResult, polygonPoints: rawPolygon, ho
                     <rect key={`z${a}`} x={x1} y={y1 - b * scale} width={w} height={(b - a) * scale}
                       fill="#16A34A" fillOpacity={0.22} stroke="#16A34A" strokeOpacity={0.6} strokeWidth={0.6} pointerEvents="none" />
                   ))}
-                  {labels === 'h' && h>20 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle" transform={tt(x1+w/2, y1-h/2)}
-                    fill={isSel?COLORS.selected:COLORS.text} fontSize={horiz ? Math.max(5, Math.min(12, w*0.75)) : Math.max(9,Math.min(13,h/4))} fontWeight="600">
+                  {/* довжина підписується на кожному листі; на короткому — дрібнішим шрифтом, щоб влізла */}
+                  {labels === 'h' && h>6 && w>14 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle" transform={tt(x1+w/2, y1-h/2)}
+                    fill={isSel?COLORS.selected:COLORS.text} fontSize={horiz ? Math.max(5, Math.min(12, w*0.75, h/3.2)) : Math.max(6, Math.min(13, Math.max(h/4, 9), h*0.8, w/3.2))} fontWeight="600">
                     {(length/1000).toFixed(3)}
                   </text>}
-                  {labels === 'v' && !horiz && h>30 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
+                  {labels === 'v' && !horiz && h>14 && w>6 && <text x={x1+w/2} y={y1-h/2} textAnchor="middle" dominantBaseline="middle"
                     transform={`rotate(-90 ${x1+w/2} ${y1-h/2})`}
-                    fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(9,Math.min(14,w/2.2))} fontWeight="600">
+                    fill={isSel?COLORS.selected:COLORS.text} fontSize={Math.max(5, Math.min(14, w/2.2, h/3.2))} fontWeight="600">
                     {(length/1000).toFixed(3)}
                   </text>}
                   {labels === 'h' && !horiz && h>30 && w>20 && <text x={x1+w/2} y={y1-h/2+14} textAnchor="middle" dominantBaseline="middle"
