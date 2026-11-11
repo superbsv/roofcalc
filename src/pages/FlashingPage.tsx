@@ -5,38 +5,22 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { catApi } from '../components/catalog/CatalogNav';
 import FlashingSvg, { segLetter } from '../components/flashing/FlashingSvg';
-import { FDoc, FElem, FSeg, FLASH_TEMPLATES, blankCalc, emptyDoc, newElem, newId } from '../components/flashing/flashing';
+import { FDoc, FElem, FSeg, FLASH_TEMPLATES, Nest, blankCalc, emptyDoc, girth, nestPlan, newElem, newId } from '../components/flashing/flashing';
+import FlashingDraw from '../components/flashing/FlashingDraw';
+import NumIn from '../components/flashing/NumIn';
 import { specToPdf } from '../components/spec/specExport';
 
 interface ListRow { id: number; name: string; client_name?: string | null; updated_at: string; user_name?: string | null; items_count: number }
 interface Cur { id?: number; name: string; client_name: string; data: FDoc }
 
-const num = (v: string) => { const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : 0; };
 const f1 = (v: number) => (Math.round(v * 10) / 10).toString();
 const f2 = (v: number) => v.toFixed(2);
 const dateUa = (s?: string) => { if (!s) return ''; const d = new Date(s.replace(' ', 'T')); return isNaN(+d) ? s : d.toLocaleDateString('uk-UA'); };
 
-// Поле вводу числа: зберігає те, що набрано (кома, порожньо), а наверх віддає число
-function NumIn({ value, onChange, className, title, step }: { value: number; onChange: (v: number) => void; className?: string; title?: string; step?: number }) {
-  const [t, setT] = useState(String(value));
-  const last = useRef(value);
-  useEffect(() => { if (value !== last.current) { setT(String(value)); last.current = value; } }, [value]);
-  return (
-    <input className={'form-control ' + (className || '')} inputMode="decimal" title={title} value={t}
-      onChange={e => { setT(e.target.value); const n = num(e.target.value); last.current = n; onChange(n); }}
-      onKeyDown={e => {
-        if (!step || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
-        e.preventDefault();
-        const n = Math.round((num(t) + (e.key === 'ArrowUp' ? step : -step)) * 10) / 10;
-        setT(String(n)); last.current = n; onChange(n);
-      }} />
-  );
-}
-
-function ElemEditor({ e, sheetW, onChange, onDel, onDup, onMove, idx, total }:
-  { e: FElem; sheetW: number; onChange: (p: Partial<FElem>) => void; onDel: () => void; onDup: () => void; onMove: (d: number) => void; idx: number; total: number }) {
+function ElemEditor({ e, sheetW, sheetL, onChange, onDel, onDup, onMove, idx, total }:
+  { e: FElem; sheetW: number; sheetL: number; onChange: (p: Partial<FElem>) => void; onDel: () => void; onDup: () => void; onMove: (d: number) => void; idx: number; total: number }) {
   const [hi, setHi] = useState(-1);
-  const c = blankCalc(e, sheetW);
+  const c = blankCalc(e, sheetW, sheetL);
   const setSeg = (i: number, p: Partial<FSeg>) => onChange({ segs: e.segs.map((s, k) => k === i ? { ...s, ...p } : s) });
   const addSeg = (i: number) => {
     const segs = [...e.segs];
@@ -71,6 +55,10 @@ function ElemEditor({ e, sheetW, onChange, onDel, onDup, onMove, idx, total }:
         </div>
       </div>
       <div className="fl-elem-body">
+        <div className="fl-draw">
+          <FlashingDraw e={e} onChange={onChange} hi={hi} setHi={setHi} />
+          <div className="fl-legend"><i className="fl-paintmark" /> <span>фарбована сторона</span> · <span>a, b, c… — сторони</span> · <span>⟲ — закатка</span></div>
+        </div>
         <div className="fl-segs">
           <table className="fl-segtab">
             <thead><tr><th></th><th>Сторона, мм</th><th>Кут після, °</th><th>Загин</th><th></th></tr></thead>
@@ -110,23 +98,65 @@ function ElemEditor({ e, sheetW, onChange, onDel, onDup, onMove, idx, total }:
             <label><span>Кількість, шт</span><NumIn value={e.qty} step={1} onChange={v => onChange({ qty: Math.max(0, Math.round(v)) })} /></label>
           </div>
         </div>
-        <div className="fl-draw">
-          <FlashingSvg e={e} w={440} h={320} hi={hi} onSeg={i => setHi(i)} />
-          <div className="fl-legend"><i className="fl-paintmark" /> <span>фарбована сторона</span> · <span>a, b, c… — сторони</span></div>
-        </div>
       </div>
       <div className="fl-metrics">
-        <span>Розгортка: <b>{f1(c.girth)} мм</b></span>
+        <span>Ширина заготовки: <b>{f1(c.girth)} мм</b></span>
         <span>Загинів: <b>{c.bends}</b></span>
         <span>Заготовок з листа: <b>{c.strips} шт</b></span>
-        <span>Листів металу: <b>{c.sheets}</b></span>
+        <span>Заготовок потрібно: <b>{c.need} шт</b></span>
+        <span title="Якщо кроїти лише цей елемент">Листів окремо: <b>{c.sheets}</b></span>
         <span>Погонних метрів: <b>{f2(c.runM)}</b></span>
-        <span>Метал: <b>{f2(c.metal)} м²</b></span>
+        {e.length > sheetL && <span className="fl-warn">⚠ Виріб довший за лист</span>}
         {c.girth > sheetW && <span className="fl-warn">⚠ Розгортка більша за ширину листа</span>}
       </div>
     </div>
   );
 }
+
+const NEST_C = ['#f08c00', '#1c7ed6', '#2f9e44', '#ae3ec9', '#e03131', '#0c8599', '#5f3dc4', '#e8590c', '#66a80f', '#c2255c'];
+function NestView({ nest, items, sw, print = false }: { nest: Nest; items: FElem[]; sw: number; print?: boolean }) {
+  if (!nest.sheets && !nest.tooWide.length) return <div className="text-muted fl-nest-empty">Немає заготовок для розкрою.</div>;
+  const BW = print ? 300 : 340;
+  return (
+    <div className="fl-nest-body">
+      {!print && <div className="fl-nest-sum">
+        <span>Листів: <b>{nest.sheets}</b></span>
+        <span>Метал: <b>{f2(nest.sheetArea)} м²</b></span>
+        <span>У заготовках: <b>{f2(nest.usedArea)} м²</b></span>
+        <span>Відходи: <b>{f1(nest.wastePct)}%</b></span>
+      </div>}
+      {nest.tooWide.map(i => <div key={'w' + i} className="fl-warn">⚠ {i + 1}. <span data-no-i18n>{items[i]?.name}</span> — <span>заготовка ширша за лист</span></div>)}
+      <table className="fl-nest-tab">
+        <tbody>
+          {nest.plans.map((p, k) => {
+            let x = 0;
+            return (
+              <tr key={k}>
+                <td className="fl-nest-n">{p.count} ×</td>
+                <td>
+                  <svg width={BW} height={22} className="fl-nest-bar">
+                    <rect x={0.5} y={0.5} width={BW - 1} height={21} className="fl-nest-sheet" />
+                    {p.pattern.map((ii, q) => {
+                      const w = (girth(items[ii]) / sw) * (BW - 1), x0 = x; x += w;
+                      return <g key={q}><rect x={0.5 + x0} y={0.5} width={Math.max(0.5, w)} height={21} fill={NEST_C[ii % NEST_C.length]} opacity={0.75} stroke="#fff" strokeWidth={1} />
+                        {w > 14 && <text x={0.5 + x0 + w / 2} y={15} textAnchor="middle" className="fl-nest-t">{ii + 1}</text>}</g>;
+                    })}
+                  </svg>
+                </td>
+                <td className="fl-nest-d">{p.pattern.length > 0 ? groupPattern(p.pattern, items) : ''} <span className="fl-nest-w">· <span>залишок</span> {f1(p.waste)} мм</span></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+const groupPattern = (pat: number[], items: FElem[]) => {
+  const m = new Map<number, number>();
+  pat.forEach(i => m.set(i, (m.get(i) || 0) + 1));
+  return [...m.entries()].map(([i, n]) => `№${i + 1}: ${n}×${f1(girth(items[i]))}`).join(' + ');
+};
 
 export default function FlashingPage() {
   const [list, setList] = useState<ListRow[]>([]);
@@ -189,13 +219,16 @@ export default function FlashingPage() {
     try { await specToPdf(paperRef.current, `${cur.name}`); } catch (e: any) { alert(e.message || String(e)); } finally { setBusy(''); }
   };
 
+  const sw = cur?.data.sheet_width || 1250;
+  const sl = cur?.data.sheet_length || 2000;
+  const mix = cur?.data.nest !== false;
   const tot = useMemo(() => items.reduce((a, e) => {
-    const c = blankCalc(e, cur?.data.sheet_width || 1250);
-    return { qty: a.qty + (e.qty || 0), runM: a.runM + c.runM, metal: a.metal + c.metal, sheets: a.sheets + c.sheets };
-  }, { qty: 0, runM: 0, metal: 0, sheets: 0 }), [items, cur?.data.sheet_width]);
+    const c = blankCalc(e, sw, sl);
+    return { qty: a.qty + (e.qty || 0), runM: a.runM + c.runM, need: a.need + c.need };
+  }, { qty: 0, runM: 0, need: 0 }), [items, sw, sl]);
+  const nest = useMemo(() => nestPlan(items, sw, sl, mix), [items, sw, sl, mix]);
 
   const shown = list.filter(r => !q || (r.name + ' ' + (r.client_name || '')).toLowerCase().includes(q.toLowerCase()));
-  const sw = cur?.data.sheet_width || 1250;
 
   return (
     <div className="fl-wrap">
@@ -233,7 +266,8 @@ export default function FlashingPage() {
                 <label><span>Колір (RAL)</span><input className="form-control" value={cur.data.color || ''} onChange={e => patchDoc({ color: e.target.value })} data-no-i18n /></label>
                 <label><span>Покриття</span><input className="form-control" value={cur.data.coating || ''} onChange={e => patchDoc({ coating: e.target.value })} data-no-i18n /></label>
                 <label><span>Товщина, мм</span><input className="form-control" value={cur.data.thickness || ''} onChange={e => patchDoc({ thickness: e.target.value })} data-no-i18n /></label>
-                <label><span>Ширина листа металу, мм</span><NumIn value={sw} step={10} onChange={v => patchDoc({ sheet_width: Math.max(1, v) })} /></label>
+                <label><span>Лист металу, мм</span>
+                  <span className="fl-sheet"><NumIn value={sw} step={10} title="Ширина листа" onChange={v => patchDoc({ sheet_width: Math.max(1, v) })} /> × <NumIn value={sl} step={50} title="Довжина листа" onChange={v => patchDoc({ sheet_length: Math.max(1, v) })} /></span></label>
                 <label className="fl-wide"><span>Примітка</span><input className="form-control" value={cur.data.note || ''} onChange={e => patchDoc({ note: e.target.value })} data-no-i18n /></label>
               </div>
               <div className="fl-doc-tools">
@@ -248,7 +282,7 @@ export default function FlashingPage() {
 
             <div className="no-print">
               {items.map((e, i) => (
-                <ElemEditor key={e.id} e={e} idx={i} total={items.length} sheetW={sw}
+                <ElemEditor key={e.id} e={e} idx={i} total={items.length} sheetW={sw} sheetL={sl}
                   onChange={p => patchElem(e.id, p)}
                   onDel={() => { if (window.confirm(`Видалити елемент «${e.name}»?`)) setItems(items.filter(x => x.id !== e.id)); }} // i18n-ignore (tpl)
                   onDup={() => { const c = { ...JSON.parse(JSON.stringify(e)), id: newId() }; const it = [...items]; it.splice(i + 1, 0, c); setItems(it); }}
@@ -260,7 +294,15 @@ export default function FlashingPage() {
                   {FLASH_TEMPLATES.map((t, i) => <option key={i} value={i}>{t.name}</option>)}
                 </select>
                 <button className="btn btn-primary btn-sm" onClick={() => setItems([...items, newElem(FLASH_TEMPLATES[tpl])])}>+ Додати</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setItems([...items, { ...newElem(FLASH_TEMPLATES[0]), name: 'Новий елемент', segs: [] }])}>✎ Накреслити з нуля</button>
                 <span className="text-muted fl-add-note">Шаблони — типові форми з примірними розмірами, змініть їх під свій об'єкт.</span>
+              </div>
+              <div className="card fl-nest">
+                <div className="fl-nest-head">
+                  <b>Розкрій листів {sw} × {sl} мм</b>
+                  <label className="fl-chk"><input type="checkbox" checked={mix} onChange={ev => patchDoc({ nest: ev.target.checked })} /> <span>Оптимально: змішувати різні елементи на листі</span></label>
+                </div>
+                <NestView nest={nest} items={items} sw={sw} />
               </div>
             </div>
 
@@ -271,17 +313,17 @@ export default function FlashingPage() {
                 <div><span>Креслення:</span> <b data-no-i18n>{cur.name}</b></div>
                 <div><span>Клієнт / об'єкт:</span> <span data-no-i18n>{cur.client_name || '—'}</span></div>
                 <div><span>Колір:</span> <span data-no-i18n>{cur.data.color || '—'}</span> · <span>Покриття:</span> <span data-no-i18n>{cur.data.coating || '—'}</span> · <span>Товщина:</span> <span data-no-i18n>{cur.data.thickness || '—'}</span></div>
-                <div><span>Дата:</span> {new Date().toLocaleDateString('uk-UA')} · <span>Ширина листа:</span> {sw} мм</div>
+                <div><span>Дата:</span> {new Date().toLocaleDateString('uk-UA')} · <span>Лист:</span> {sw} × {sl} мм</div>
               </div>
               <div className="fl-paper-grid">
                 {items.map((e, i) => {
-                  const c = blankCalc(e, sw);
+                  const c = blankCalc(e, sw, sl);
                   return (
                     <div key={e.id} className="fl-paper-item">
                       <div className="fl-paper-name"><b>{i + 1}.</b> <span data-no-i18n>{e.name}</span></div>
                       <FlashingSvg e={e} w={380} h={250} print />
                       <div className="fl-paper-meta">
-                        <span>Розгортка: <b>{f1(c.girth)} мм</b></span><span>Загинів: <b>{c.bends}</b></span>
+                        <span>Заготовка: <b>{f1(c.girth)} мм</b></span><span>Загинів: <b>{c.bends}</b></span>
                         <span>Довжина: <b>{e.length} мм</b></span><span>К-сть: <b>{e.qty} шт</b></span>
                       </div>
                     </div>
@@ -289,16 +331,17 @@ export default function FlashingPage() {
                 })}
               </div>
               <table className="kp-table kp-paper-table">
-                <thead><tr><th>№</th><th>Елемент</th><th>Розгортка, мм</th><th>Загинів</th><th>Довжина, мм</th><th>К-сть, шт</th><th>П.м.</th><th>Метал, м²</th></tr></thead>
+                <thead><tr><th>№</th><th>Елемент</th><th>Ширина заготовки, мм</th><th>Загинів</th><th>Довжина, мм</th><th>К-сть, шт</th><th>П.м.</th><th>Заготовок</th></tr></thead>
                 <tbody>
                   {items.map((e, i) => {
-                    const c = blankCalc(e, sw);
-                    return <tr key={e.id}><td>{i + 1}</td><td data-no-i18n>{e.name}</td><td>{f1(c.girth)}</td><td>{c.bends}</td><td>{e.length}</td><td>{e.qty}</td><td>{f2(c.runM)}</td><td>{f2(c.metal)}</td></tr>;
+                    const c = blankCalc(e, sw, sl);
+                    return <tr key={e.id}><td>{i + 1}</td><td data-no-i18n>{e.name}</td><td>{f1(c.girth)}</td><td>{c.bends}</td><td>{e.length}</td><td>{e.qty}</td><td>{f2(c.runM)}</td><td>{c.need}</td></tr>;
                   })}
-                  <tr className="tr-total"><td colSpan={5}>Всього:</td><td>{tot.qty}</td><td>{f2(tot.runM)}</td><td>{f2(tot.metal)}</td></tr>
+                  <tr className="tr-total"><td colSpan={5}>Всього:</td><td>{tot.qty}</td><td>{f2(tot.runM)}</td><td>{tot.need}</td></tr>
                 </tbody>
               </table>
-              <div className="kp-paper-line">Листів металу: <b>{tot.sheets}</b></div>
+              <div className="kp-paper-line">Листів металу {sw} × {sl} мм: <b>{nest.sheets}</b> · <span>відходи</span> {f1(nest.wastePct)}%</div>
+              <div className="fl-paper-nest"><NestView nest={nest} items={items} sw={sw} print /></div>
               <div className="kp-paper-line fl-paper-legend">Помаранчева лінія на кресленні — фарбована сторона.</div>
               {cur.data.note && <div className="kp-paper-note"><b>Примітка:</b> <span data-no-i18n>{cur.data.note}</span></div>}
             </article>
