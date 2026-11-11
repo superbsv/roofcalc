@@ -345,3 +345,20 @@ export function fromSketch(s: SketchEl): FElem | null {
     qty: Number(s.qty) > 0 ? Math.round(Number(s.qty)) : 1,
   };
 }
+
+/** Зовнішній бік кожної сторони (для розмірів): +1 — ліворуч по ходу креслення, −1 — праворуч.
+ *  Загини повертають усередину профілю, тож зовні — протилежно повороту сусідніх загинів;
+ *  без загинів (пряма) — від центру ваги точок, інакше — fallback. pts — n+1 точок (Y — вгору), heads — напрями, рад. */
+export function outerSides(segs: FSeg[], pts: Pt[], heads: number[], fallback: 1 | -1): (1 | -1)[] {
+  const n = segs.length;
+  const cx = pts.reduce((a, p) => a + p[0], 0) / (pts.length || 1), cy = pts.reduce((a, p) => a + p[1], 0) / (pts.length || 1);
+  return segs.map((_, i) => {
+    let sc = 0;
+    if (i > 0) sc += segs[i - 1].dir * (180 - (Number(segs[i - 1].ang) || 0));
+    if (i < n - 1) sc += segs[i].dir * (180 - (Number(segs[i].ang) || 0));
+    if (Math.abs(sc) > 1e-6) return (sc > 0 ? -1 : 1) as 1 | -1;
+    const mx = (pts[i][0] + pts[i + 1][0]) / 2 - cx, my = (pts[i][1] + pts[i + 1][1]) / 2 - cy;
+    const d = mx * -Math.sin(heads[i]) + my * Math.cos(heads[i]);
+    return (Math.abs(d) > 1e-6 ? (d > 0 ? 1 : -1) : fallback) as 1 | -1;
+  });
+}

@@ -4,7 +4,7 @@
 // тож таблиця сторін і креслення завжди збігаються.
 // ============================================
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Core, FElem, HEM_LEN, Hem, LabelReq, Pt, angOffset, coreHeads, dimOffset, placeLabels, textBox, corePts, joinCore, ptsToCore, splitCore } from './flashing';
+import { Core, FElem, HEM_LEN, Hem, LabelReq, Pt, angOffset, coreHeads, dimOffset, placeLabels, textBox, corePts, joinCore, outerSides, ptsToCore, splitCore } from './flashing';
 import NumIn from './NumIn';
 import { RAL_FS, RalArrow } from './FlashingSvg';
 
@@ -300,9 +300,10 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
       const t = r1(q.ang) + '°';
       add('a' + i, t, 'fd-ang', 10, at[0], at[1], bx, by, angOffset(t, 10, q.ang));
     });
-    // розміри сторін — з нефарбованого боку
+    // розміри сторін — із зовнішнього боку профілю
+    const outer = outerSides(core.segs, pts, heads, (-e.paint) as 1 | -1);
     core.segs.forEach((q, i) => {
-      const A = S(pts[i]), B = S(pts[i + 1]), n = scrN(heads[i], -e.paint), t = String(r1(q.len));
+      const A = S(pts[i]), B = S(pts[i + 1]), n = scrN(heads[i], outer[i]), t = String(r1(q.len));
       add('d' + i, t, 'fd-dim' + (hi === fullIdx(i) ? ' on' : ''), 11, (A[0] + B[0]) / 2, (A[1] + B[1]) / 2, n[0], n[1], dimOffset(t, 11, n[0], n[1]));
     });
     // закатки — із зовнішнього боку
@@ -315,9 +316,11 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
     });
     // фарбований бік
     if (core.segs.length) {
-      let m = 0; core.segs.forEach((q, i) => { if (q.len > core.segs[m].len) m = i; });
+      const sc = (i: number) => core.segs[i].len * (outer[i] !== e.paint ? 10 : 1);   // краще там, де розмір з іншого боку
+      let m = 0; core.segs.forEach((q, i) => { if (sc(i) > sc(m)) m = i; });
       const A = S(pts[m]), B = S(pts[m + 1]), n = scrN(heads[m], e.paint);
-      add('pm', 'RAL', 'ral', RAL_FS, (A[0] + B[0]) / 2, (A[1] + B[1]) / 2, n[0], n[1], 18 + dimOffset('RAL', RAL_FS, n[0], n[1], 0));
+      add('pm', 'RAL', 'ral', RAL_FS, A[0] + (B[0] - A[0]) * 0.25, A[1] + (B[1] - A[1]) * 0.25,   // чверть сторони — подалі від розміру посередині
+         n[0], n[1], 18 + dimOffset('RAL', RAL_FS, n[0], n[1], 0));
     }
     const lines: [Pt, Pt][] = core.segs.map((_, i) => [S(pts[i]), S(pts[i + 1])]);
     [hemSG, hemEG].forEach(g => { if (g) lines.push([S(g.a), S(g.b)], [S(g.fold), S(g.core)]); });
