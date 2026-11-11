@@ -290,7 +290,7 @@ class CatalogController
     public function history(): void
     {
         $this->requireAdmin();
-        $this->json(['items' => CatalogHistory::list((int)$this->me['tid'])]);
+        $this->json(['items' => \RoofCalc\Core\History::list($this->me, (string)($_GET['kind'] ?? ''))]);
     }
 
     // POST /catalog/history/{id}/undo — скасувати дію
@@ -298,11 +298,11 @@ class CatalogController
     {
         $this->requireAdmin();
         try {
-            $n = CatalogHistory::undo($id, (int)$this->me['tid']);
+            $n = \RoofCalc\Core\History::undo($id, $this->me);
         } catch (\RuntimeException $e) {
             $this->error($e->getMessage());
         }
-        $this->json(['restored' => $n, 'items' => CatalogHistory::list((int)$this->me['tid'])]);
+        $this->json(['restored' => $n, 'items' => \RoofCalc\Core\History::list($this->me, (string)($_GET['kind'] ?? ''))]);
     }
 
     private function body(): array { return json_decode(file_get_contents('php://input'), true) ?? []; }

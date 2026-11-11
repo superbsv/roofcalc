@@ -1540,6 +1540,10 @@ tr:hover td { background: var(--clr-surface-2); }
 .hist-done { color: var(--clr-text-3); font-size: .72rem; }
 .hist-row .btn { padding: 2px 8px; white-space: nowrap; }
 .hist-msg { padding: 6px 12px; font-size: .8rem; background: var(--clr-surface-2); }
+.hist-page { max-width: 900px; }
+.hist-card { padding: 0; overflow: hidden; }
+.hist-chips { padding: 8px 12px; border-bottom: 1px solid var(--clr-border); margin: 0; }
+.hist-page .hist-list { max-height: none; }
 .hist-note { padding: 6px 12px; font-size: .7rem; color: var(--clr-text-3); border-top: 1px solid var(--clr-border); }
 .lib-box { width: min(760px, 100%); display: flex; flex-direction: column; max-height: 90vh; }
 .lib-tools { display: flex; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--clr-border); }

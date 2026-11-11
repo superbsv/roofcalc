@@ -28,7 +28,9 @@ spl_autoload_register(function (string $class) {
 // нових класів немає в classmap composer на сервері — підключаємо явно
 require_once SRC_PATH . '/core/Plans.php';
 require_once SRC_PATH . '/core/Catalog.php';
+require_once SRC_PATH . '/core/History.php';
 require_once SRC_PATH . '/core/CatalogHistory.php';
+require_once SRC_PATH . '/api/history/HistoryController.php';
 require_once SRC_PATH . '/api/super/SuperController.php';
 require_once SRC_PATH . '/api/tenant/TenantController.php';
 require_once SRC_PATH . '/api/widget/WidgetController.php';
@@ -81,6 +83,9 @@ try {
             exit;
         }
     }
+
+    // Історія дій: стан «до» для запитів, що змінюють проекти / скати / клієнтів / налаштування
+    if ($method !== 'GET') \RoofCalc\Core\History::capture($method, $uri, Auth::currentUser());
 
     switch (true) {
         case $method==='POST'&&$uri==='/auth/login':           (new AuthController)->login(); break;
@@ -135,6 +140,8 @@ try {
         case $method==='POST'&&$uri==='/catalog/import':       (new CatalogController)->import(); break;
         case $method==='POST'&&$uri==='/catalog/move':         (new CatalogController)->move(); break;
         case $method==='GET' &&$uri==='/catalog/history':      (new CatalogController)->history(); break;
+        case $method==='GET' &&$uri==='/history':              (new \RoofCalc\Api\History\HistoryController)->index(); break;
+        case $method==='POST'&&preg_match('#^/history/(\d+)/undo$#',$uri,$m): (new \RoofCalc\Api\History\HistoryController)->undo((int)$m[1]); break;
         case $method==='POST'&&preg_match('#^/catalog/history/(\d+)/undo$#',$uri,$m): (new CatalogController)->undo((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/materials/section/(\d+)$#',$uri,$m): (new MaterialsController)->bySection((int)$m[1]); break;
         case $method==='GET' &&$uri==='/materials':            (new MaterialsController)->index(); break;

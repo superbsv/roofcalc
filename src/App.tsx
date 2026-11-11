@@ -11,6 +11,7 @@ import PlansPage    from './pages/PlansPage';
 import TenantSettingsPage from './pages/TenantSettingsPage';
 import ClientsPage from './pages/ClientsPage';
 import LeadsPage from './pages/LeadsPage';
+import HistoryPage from './pages/HistoryPage';
 import BrandMark, { BrandWordmark } from './components/brand/BrandMark';
 import { ThemeToggle } from './components/theme/theme';
 import LangSwitch from './i18n/LangSwitch';
@@ -29,7 +30,8 @@ type Page =
   | { type: 'plans' }
   | { type: 'platform-settings' }
   | { type: 'tenant' }
-  | { type: 'leads' };
+  | { type: 'leads' }
+  | { type: 'history' };
 
 function Shell() {
   const { user, logout, loading, leaveImpersonation } = useAuth();
@@ -63,7 +65,7 @@ function Shell() {
   // Панель платформи (супер-адмін поза кабінетом): лише кабінети клієнтів, каталог, тарифи, журнал.
   // Розрахунки, заявки й налаштування компанії — тільки всередині кабінету (свій користувач або «Увійти як клієнт»)
   const isPlatform = !!user.is_superadmin && !user.impersonating;
-  const TENANT_ONLY = ['projects', 'project', 'leads', 'tenant', 'clients', 'users', 'settings'];
+  const TENANT_ONLY = ['projects', 'project', 'leads', 'tenant', 'clients', 'users', 'settings', 'history'];
   const view: Page = isPlatform && TENANT_ONLY.includes(page.type) ? { type: 'super' } : page;
   const home: Page = isPlatform ? { type: 'super' } : { type: 'projects' };
 
@@ -184,6 +186,13 @@ function Shell() {
             view.type==='leads',
             () => navigate({type:'leads'})
           )}
+          {navItem('Історія дій',
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 12a9 9 0 109-9 9.5 9.5 0 00-6.6 2.7L3 8 M3 3v5h5 M12 7v5l4 2"/>
+            </svg>,
+            view.type==='history',
+            () => navigate({type:'history'})
+          )}
         </div>}
 
         {user.role !== 'admin' && (
@@ -303,6 +312,7 @@ function Shell() {
         {view.type==='plans' && user.is_superadmin && <PlansPage />}
         {view.type==='tenant' && <TenantSettingsPage />}
         {view.type==='leads' && <LeadsPage />}
+        {view.type==='history' && <HistoryPage />}
       </main>
     </div>
   );
