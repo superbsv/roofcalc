@@ -4,8 +4,7 @@
 // тож таблиця сторін і креслення завжди збігаються.
 // ============================================
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Core, FElem, HEM_LEN, Hem, Pt, coreHeads, corePts, joinCore, ptsToCore, splitCore } from './flashing';
-import { segLetter } from './FlashingSvg';
+import { Core, FElem, HEM_LEN, Hem, LabelReq, Pt, angOffset, coreHeads, dimOffset, placeLabels, textBox, corePts, joinCore, ptsToCore, splitCore } from './flashing';
 import NumIn from './NumIn';
 
 type Pop = { kind: 'seg' | 'pt'; idx: number; x: number; y: number } | null;
@@ -21,7 +20,7 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
   { e: FElem; onChange: (p: Partial<FElem>) => void; hi: number; setHi: (i: number) => void }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const [W, setW] = useState(600);
+  const [W, setW] = useState(0);   // 0 — ще не виміряно
   const [view, setView] = useState<View>({ k: 1, tx: 300, ty: 190 });
   const viewRef = useRef(view); viewRef.current = view;
   const [org, setOrg] = useState<Pt>([0, 0]);
@@ -59,8 +58,8 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
   // ---- розмір полотна ----
   useEffect(() => {
     const el = wrapRef.current; if (!el) return;
-    const ro = new ResizeObserver(() => setW(Math.max(280, el.clientWidth)));
-    ro.observe(el); setW(Math.max(280, el.clientWidth));
+    const ro = new ResizeObserver(() => { if (el.clientWidth) setW(Math.max(260, el.clientWidth)); });
+    ro.observe(el); if (el.clientWidth) setW(Math.max(260, el.clientWidth));
     return () => ro.disconnect();
   }, []);
 
@@ -74,7 +73,7 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
     setView({ k, tx: w / 2 - ((minX + maxX) / 2) * k, ty: H / 2 + ((minY + maxY) / 2) * k });
   }, [pts, W]);
   const fitted = useRef(false);
-  useEffect(() => { if (!fitted.current && W > 280) { fitted.current = true; fit(W); } }, [W, fit]);
+  useEffect(() => { if (!fitted.current && W > 0) { fitted.current = true; fit(W); } }, [W, fit]);
 
   const S = (p: Pt): Pt => [view.tx + p[0] * view.k, view.ty - p[1] * view.k];
   const toWorld = (cx: number, cy: number): Pt => {
@@ -267,6 +266,8 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
     return { a: S0, b: [S0[0] + hm.len * u2[0], S0[1] + hm.len * u2[1]] as Pt, fold: S0, core: E, h: h2, bulge: U(h) };
   };
   const hemSG = hemGeo('S'), hemEG = hemGeo('E');
+  const nSeg = e.segs.length;
+  const fullIdx = (i: number) => i + hs;
 
   // сітка
   const gStep = GRID_STEPS.find(s => s * view.k >= 9) || 1000;
@@ -279,24 +280,54 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
     return out;
   }, [view, W, gStep]);
 
-  const off = 4;
   const scr = (h: number): Pt => [Math.cos(h), -Math.sin(h)];             // напрям на екрані
   const scrN = (h: number, side: number): Pt => [-Math.sin(h) * side, -Math.cos(h) * side];   // ліва нормаль на екрані × side
-  const paintLine = (a: Pt, b: Pt, h: number, key: string) => {
-    const A = S(a), B = S(b), n = scrN(h, e.paint);
-    return <line key={key} x1={A[0] + n[0] * off} y1={A[1] + n[1] * off} x2={B[0] + n[0] * off} y2={B[1] + n[1] * off} className="fd-paint" />;
-  };
-  const dimLabel = (a: Pt, b: Pt, h: number, text: React.ReactNode, key: string, on: boolean, d = 13) => {
-    const A = S(a), B = S(b), n = scrN(h, -e.paint);
-    return <text key={key} x={(A[0] + B[0]) / 2 + n[0] * d} y={(A[1] + B[1]) / 2 + n[1] * d} className={'fd-dim' + (on ? ' on' : '')} textAnchor="middle" dominantBaseline="middle">{text}</text>;
-  };
+  // ---- підписи: розміри, кути, закатки, «колір» — без перетинів з лініями, точками і між собою ----
+  const labels = (() => {
+    type L = LabelReq & { t: string; cls: string; key: string };
+    const out: L[] = [];
+    const add = (key: string, t: string, cls: string, fs: number, ax: number, ay: number, nx: number, ny: number, d: number) => {
+      const b = textBox(t, fs); out.push({ key, t, cls, ax, ay, nx, ny, d, w: b.w, h: b.h });
+    };
+    // кути — першими, по бісектрисі всередині загину
+    core.segs.slice(0, -1).forEach((q, i) => {
+      if (q.ang >= 179.95) return;
+      const at = S(pts[i + 1]), u1 = scr(heads[i]), u2 = scr(heads[i + 1]);
+      let bx = -u1[0] + u2[0], by = -u1[1] + u2[1];
+      const bl = Math.hypot(bx, by);
+      if (bl < 1e-6) { bx = -u1[1]; by = u1[0]; } else { bx /= bl; by /= bl; }
+      const t = r1(q.ang) + '°';
+      add('a' + i, t, 'fd-ang', 10, at[0], at[1], bx, by, angOffset(t, 10, q.ang));
+    });
+    // розміри сторін — з нефарбованого боку
+    core.segs.forEach((q, i) => {
+      const A = S(pts[i]), B = S(pts[i + 1]), n = scrN(heads[i], -e.paint), t = String(r1(q.len));
+      add('d' + i, t, 'fd-dim' + (hi === fullIdx(i) ? ' on' : ''), 11, (A[0] + B[0]) / 2, (A[1] + B[1]) / 2, n[0], n[1], dimOffset(t, 11, n[0], n[1]));
+    });
+    // закатки — із зовнішнього боку
+    ([[hemSG, core.hemS, 'dhs'], [hemEG, core.hemE, 'dhe']] as const).forEach(([g, hm, key]) => {
+      if (!g || !hm) return;
+      const F = S(g.fold), C = S(g.core), A = S(g.a), B = S(g.b);
+      let nx = F[0] - C[0], ny = F[1] - C[1]; const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;
+      const t = '⟲' + r1(hm.len);
+      add(key, t, 'fd-dim fd-hem-t', 10, (A[0] + B[0]) / 2, (A[1] + B[1]) / 2, nx, ny, dimOffset(t, 10, nx, ny, 4));
+    });
+    // фарбований бік
+    if (core.segs.length) {
+      let m = 0; core.segs.forEach((q, i) => { if (q.len > core.segs[m].len) m = i; });
+      const A = S(pts[m]), B = S(pts[m + 1]), n = scrN(heads[m], e.paint);
+      add('pm', 'колір', 'fd-paintmark', 9, (A[0] + B[0]) / 2, (A[1] + B[1]) / 2, n[0], n[1], dimOffset('колір', 9, n[0], n[1], 4));
+    }
+    const lines: [Pt, Pt][] = core.segs.map((_, i) => [S(pts[i]), S(pts[i + 1])]);
+    [hemSG, hemEG].forEach(g => { if (g) lines.push([S(g.a), S(g.b)], [S(g.fold), S(g.core)]); });
+    const pos = placeLabels(lines, pts.map(S), out);
+    return out.map((l, i) => <text key={l.key} x={pos[i][0]} y={pos[i][1]} className={l.cls} textAnchor="middle" dominantBaseline="central">{l.t}</text>);
+  })();
   const hemArc = (g: NonNullable<ReturnType<typeof hemGeo>>, key: string) => {
     const P = S(g.fold), Q = S(g.core), b = scr(Math.atan2(g.bulge[1], g.bulge[0]));
     const r = Math.max(2, Math.hypot(Q[0] - P[0], Q[1] - P[1]) * 0.7);
     return <path key={key} d={`M${P[0]},${P[1]} C${P[0] + b[0] * r},${P[1] + b[1] * r} ${Q[0] + b[0] * r},${Q[1] + b[1] * r} ${Q[0]},${Q[1]}`} className="fd-line" fill="none" />;
   };
-  const nSeg = e.segs.length;
-  const fullIdx = (i: number) => i + hs;
 
   // ---- вікно ----
   const popBox = (() => {
@@ -309,7 +340,7 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
       const s = core.segs[pop.idx]; if (!s) return null;
       return (
         <div className="kp-prompt fd-pop" style={{ left, top }} onPointerDown={ev => ev.stopPropagation()}>
-          {head(<>Сторона <b>{segLetter(fullIdx(pop.idx))}</b></>)}
+          {head('Сторона')}
           <label><span>Довжина, мм</span><NumIn autoFocus value={s.len} step={1} onEnter={() => setPop(null)} onChange={v => setCoreSeg(pop.idx, { len: Math.max(0.1, v) })} /></label>
           {(pop.idx === 0 || pop.idx === core.segs.length - 1) && <div className="fd-pop-btns">
             {pop.idx === 0 && (core.hemS
@@ -375,14 +406,10 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
         <button type="button" className="fd-tb" onClick={restart} title="Стерти і накреслити заново">⟲ Заново</button>
       </div>
       <div className="fd-canvas" ref={wrapRef}>
-        <svg ref={svgRef} width={W} height={H} tabIndex={0} className="fd-svg" style={{ cursor: cur }}
+        <svg ref={svgRef} width={W || '100%'} height={H} tabIndex={0} className="fd-svg" style={{ cursor: cur }}
           onPointerDown={onBgDown} onPointerMove={onMove} onPointerLeave={() => setCursor(null)}
           onDoubleClick={() => { if (mode === 'draw') finishDraw(); }} onContextMenu={ev => ev.preventDefault()} onKeyDown={onKey}>
           <g>{grid}</g>
-          {/* фарбована сторона */}
-          {core.segs.map((_, i) => paintLine(pts[i], pts[i + 1], heads[i], 'p' + i))}
-          {hemSG && paintLine(hemSG.a, hemSG.b, hemSG.h, 'phs')}
-          {hemEG && paintLine(hemEG.a, hemEG.b, hemEG.h, 'phe')}
           {/* закатки */}
           {hemSG && <g onPointerDown={mode === 'edit' ? ev => onHemDown(ev, 0) : undefined} style={{ cursor: 'pointer', pointerEvents: mode === 'draw' ? 'none' : undefined }}>{hemArc(hemSG, 'ahs')}
             <line x1={S(hemSG.a)[0]} y1={S(hemSG.a)[1]} x2={S(hemSG.b)[0]} y2={S(hemSG.b)[1]} stroke="transparent" strokeWidth={16} />
@@ -401,18 +428,7 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
               </g>
             );
           })}
-          {/* розміри */}
-          {core.segs.map((s, i) => dimLabel(pts[i], pts[i + 1], heads[i], <><tspan className="fd-l">{segLetter(fullIdx(i))}</tspan> {r1(s.len)}</>, 'd' + i, hi === fullIdx(i)))}
-          {hemSG && core.hemS && dimLabel(hemSG.a, hemSG.b, hemSG.h, <><tspan className="fd-l">{segLetter(0)}</tspan> ⟲{r1(core.hemS.len)}</>, 'dhs', hi === 0, 15)}
-          {hemEG && core.hemE && dimLabel(hemEG.a, hemEG.b, hemEG.h, <><tspan className="fd-l">{segLetter(nSeg - 1)}</tspan> ⟲{r1(core.hemE.len)}</>, 'dhe', hi === nSeg - 1, 15)}
-          {/* кути */}
-          {core.segs.slice(0, -1).map((s, i) => {
-            const at = S(pts[i + 1]), u1 = scr(heads[i]), u2 = scr(heads[i + 1]);
-            let bx = -u1[0] + u2[0], by = -u1[1] + u2[1];
-            const bl = Math.hypot(bx, by);
-            if (bl < 1e-6) { bx = -u1[1]; by = u1[0]; } else { bx /= bl; by /= bl; }
-            return <text key={'a' + i} x={at[0] + bx * 20} y={at[1] + by * 20} className="fd-ang" textAnchor="middle" dominantBaseline="middle">{r1(s.ang)}°</text>;
-          })}
+          {labels}
           {/* попередній перегляд нової сторони */}
           {preview && lastPt && (() => {
             const A = S(lastPt), B = S(preview), L = Math.hypot(preview[0] - lastPt[0], preview[1] - lastPt[1]);
@@ -422,7 +438,7 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
             return <g style={{ pointerEvents: 'none' }}>
               <line x1={A[0]} y1={A[1]} x2={B[0]} y2={B[1]} className="fd-prev" />
               <circle cx={B[0]} cy={B[1]} r={3} className="fd-prev-pt" />
-              <text x={B[0] + 10} y={B[1] - 10} className="fd-prev-t">{r1(L)} мм{t != null ? ` · ${r1(180 - Math.abs(t))}°` : ''}</text>
+              <text x={B[0] + 9} y={B[1] - 9} className="fd-prev-t">{r1(L)} мм{t != null ? ` · ${r1(180 - Math.abs(t))}°` : ''}</text>
             </g>;
           })()}
           {/* вершини */}

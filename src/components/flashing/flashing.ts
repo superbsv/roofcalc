@@ -266,3 +266,43 @@ export function nestPlan(items: FElem[], W: number, sheetL: number, mix = true):
   const sheetArea = sheets.length * W * sheetL / 1e6;
   return { sheets: sheets.length, plans, usedArea, sheetArea, wastePct: sheetArea ? (1 - usedArea / sheetArea) * 100 : 0, tooWide, tooLong };
 }
+
+// Підписи на кресленні: відступ тексту від лінії, щоб він її не торкався
+export const textBox = (t: string, fs: number) => ({ w: t.length * fs * 0.62, h: fs });
+/** Відступ центру підпису від середини сторони вздовж нормалі (nx, ny — одинична, екран) */
+export const dimOffset = (t: string, fs: number, nx: number, ny: number, gap = 5) => {
+  const b = textBox(t, fs);
+  return gap + Math.abs(nx) * b.w / 2 + Math.abs(ny) * b.h / 2;
+};
+/** Відстань центру підпису кута від вершини по бісектрисі; ang — внутрішній кут, ° */
+export const angOffset = (t: string, fs: number, ang: number, gap = 4) => {
+  const b = textBox(t, fs), rho = Math.hypot(b.w / 2, b.h / 2) * 0.85;
+  const sh = Math.sin(((Math.max(10, Math.min(180, ang)) / 2) * Math.PI) / 180);
+  return Math.min(70, Math.max(rho + 6, (rho + gap) / sh));
+};
+
+/** Розставити підписи без перетинів: кожен підпис зсувається вздовж свого напрямку (nx, ny),
+ *  доки не перестане торкатися ліній, точок і вже поставлених підписів. Координати — екранні. */
+export interface LabelReq { ax: number; ay: number; nx: number; ny: number; d: number; w: number; h: number }
+export function placeLabels(lines: [Pt, Pt][], points: Pt[], reqs: LabelReq[]): Pt[] {
+  const placed: { x: number; y: number; w: number; h: number }[] = [];
+  const hitsLine = (x: number, y: number, w: number, h: number) => lines.some(([a, b]) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / L2));
+    const px = a[0] + t * dx, py = a[1] + t * dy;
+    // зазор між прямокутником підпису і точкою лінії
+    return Math.abs(x - px) < w / 2 + 3 && Math.abs(y - py) < h / 2 + 3;
+  });
+  const hitsPt = (x: number, y: number, w: number, h: number) => points.some(p => Math.abs(x - p[0]) < w / 2 + 6 && Math.abs(y - p[1]) < h / 2 + 6);
+  const hitsLbl = (x: number, y: number, w: number, h: number) => placed.some(q => Math.abs(x - q.x) < (w + q.w) / 2 + 3 && Math.abs(y - q.y) < (h + q.h) / 2 + 2);
+  return reqs.map(r => {
+    let best: Pt = [r.ax + r.nx * r.d, r.ay + r.ny * r.d];
+    for (let k = 0; k < 16; k++) {
+      const d = r.d + k * 4, x = r.ax + r.nx * d, y = r.ay + r.ny * d;
+      if (k === 0) best = [x, y];
+      if (!hitsLine(x, y, r.w, r.h) && !hitsPt(x, y, r.w, r.h) && !hitsLbl(x, y, r.w, r.h)) { best = [x, y]; break; }
+    }
+    placed.push({ x: best[0], y: best[1], w: r.w, h: r.h });
+    return best;
+  });
+}

@@ -1795,9 +1795,10 @@ tr:hover td { background: var(--clr-surface-2); }
 .fl-params { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .fl-draw { background: var(--clr-surface-2); border: 1px solid var(--clr-border); border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; padding: 4px; min-width: 0; }
 .fl-svg { max-width: 100%; height: auto; }
-.fl-dim { font: 600 12px var(--font-mono, monospace); }
+.fl-dim { font: 500 11px var(--font-mono, monospace); }
 .fl-dim-l { fill: var(--clr-brand); font-weight: 700; }
-.fl-ang { font: 11px var(--font-mono, monospace); opacity: .8; }
+.fl-ang { font: 10px var(--font-mono, monospace); opacity: .7; }
+.fl-paint-t { font: italic 9px var(--font-sans, sans-serif); fill: #888; }
 .fl-legend { font-size: .7rem; color: var(--clr-text-3); padding: 2px 0 4px; }
 .fl-paintmark { display: inline-block; width: 18px; height: 3px; background: var(--clr-brand); vertical-align: middle; border-radius: 2px; }
 .fl-metrics { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--clr-border); font-size: .8rem; color: var(--clr-text-2); }
@@ -1823,21 +1824,21 @@ tr:hover td { background: var(--clr-surface-2); }
 .fd-canvas { position: relative; width: 100%; min-width: 0; }
 .fd-svg { display: block; background: var(--clr-surface); border: 1px solid var(--clr-border); border-radius: 6px; touch-action: none; user-select: none; outline: none; }
 .fd-svg:focus { border-color: var(--clr-brand); }
-.fd-g1 { stroke: var(--clr-border); stroke-width: .5; opacity: .45; }
-.fd-g2 { stroke: var(--clr-border); stroke-width: .8; opacity: .9; }
-.fd-line { stroke: var(--fl-ink); stroke-width: 2.4; stroke-linecap: round; fill: none; }
-.fd-line.on { stroke: var(--clr-brand); stroke-width: 3.4; }
-.fd-paint { stroke: var(--clr-brand); stroke-width: 2.5; stroke-linecap: round; opacity: .8; pointer-events: none; }
-.fd-pt { fill: var(--clr-surface); stroke: var(--fl-ink); stroke-width: 1.6; }
+.fd-g1 { stroke: var(--clr-border); stroke-width: .5; opacity: .3; }
+.fd-g2 { stroke: var(--clr-border); stroke-width: .6; opacity: .65; }
+.fd-line { stroke: var(--fl-ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.fd-line.on { stroke: var(--fl-ink); stroke-width: 2.8; }
+.fd-pt { fill: var(--clr-surface); stroke: var(--fl-ink); stroke-width: 1.2; }
 .fd-pt.end { fill: var(--fl-ink); }
-g:hover > .fd-pt, .fd-pt.on { fill: var(--clr-brand); stroke: var(--clr-brand); }
-.fd-dim { font: 600 11px var(--font-mono, monospace); fill: var(--fl-ink); pointer-events: none; paint-order: stroke; stroke: var(--clr-surface); stroke-width: 3px; }
-.fd-dim.on { fill: var(--clr-brand); }
-.fd-l { fill: var(--clr-brand); font-weight: 700; }
-.fd-ang { font: 10px var(--font-mono, monospace); fill: var(--clr-text-2); pointer-events: none; paint-order: stroke; stroke: var(--clr-surface); stroke-width: 3px; }
-.fd-prev { stroke: var(--clr-brand); stroke-width: 1.6; stroke-dasharray: 5 3; }
-.fd-prev-pt { fill: var(--clr-brand); }
-.fd-prev-t { font: 600 11px var(--font-mono, monospace); fill: var(--clr-brand); paint-order: stroke; stroke: var(--clr-surface); stroke-width: 3px; }
+g:hover > .fd-pt, .fd-pt.on { fill: var(--fl-ink); stroke: var(--fl-ink); }
+.fd-dim { font: 500 11px var(--font-mono, monospace); fill: var(--fl-ink); pointer-events: none; }
+.fd-dim.on { font-weight: 700; }
+.fd-hem-t { font-size: 10px; fill: var(--clr-text-2); }
+.fd-paintmark { font: italic 9px var(--font-sans, sans-serif); fill: var(--clr-text-3); pointer-events: none; letter-spacing: .02em; }
+.fd-ang { font: 10px var(--font-mono, monospace); fill: var(--clr-text-3); pointer-events: none; }
+.fd-prev { stroke: var(--clr-text-3); stroke-width: 1.2; stroke-dasharray: 4 3; }
+.fd-prev-pt { fill: var(--clr-text-3); }
+.fd-prev-t { font: 10px var(--font-mono, monospace); fill: var(--clr-text-2); }
 .fd-hint { font-size: .66rem; color: var(--clr-text-3); padding: 2px 2px 0; }
 .fd-pop { width: 224px; padding: 8px; gap: 6px; }
 .fd-pop .kp-prompt-head { margin: -8px -8px 0; cursor: default; }
