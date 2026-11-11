@@ -5,7 +5,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { catApi } from '../components/catalog/CatalogNav';
 import FlashingSvg from '../components/flashing/FlashingSvg';
-import { FDoc, FElem, FLASH_TEMPLATES, Nest, blankCalc, emptyDoc, girth, nestPlan, newElem, newId } from '../components/flashing/flashing';
+import { FDoc, FElem, FLASH_TEMPLATES, Nest, SketchEl, blankCalc, emptyDoc, fromSketch, girth, nestPlan, newElem, newId } from '../components/flashing/flashing';
 import FlashingDraw from '../components/flashing/FlashingDraw';
 import NumIn from '../components/flashing/NumIn';
 import { specToPdf } from '../components/spec/specExport';
@@ -114,6 +114,20 @@ const groupPattern = (pat: number[], items: FElem[]) => {
   return [...m.entries()].map(([i, n]) => `№${i + 1}: ${n}×${f1(girth(items[i]))}`).join(' + ');
 };
 
+// Фото → JPEG ≤ 1600 px (менше трафіку і дешевше розпізнавання)
+async function shrinkImage(file: File): Promise<{ data: string; media: string }> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error('Не вдалося відкрити фото')); i.src = url; });
+    const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    const g = c.getContext('2d')!; g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+    const d = c.toDataURL('image/jpeg', 0.85);
+    return { data: d.slice(d.indexOf(',') + 1), media: 'image/jpeg' };
+  } finally { URL.revokeObjectURL(url); }
+}
+
 export default function FlashingPage() {
   const [list, setList] = useState<ListRow[]>([]);
   const [q, setQ] = useState('');
@@ -144,6 +158,30 @@ export default function FlashingPage() {
   const patchElem = (id: string, p: Partial<FElem>) => { setCur(c => c && ({ ...c, data: { ...c.data, items: c.data.items.map(e => e.id === id ? { ...e, ...p } : e) } })); setDirty(true); };
   const items = useMemo(() => cur?.data.items || [], [cur?.data.items]);
   const setItems = (it: FElem[]) => patchDoc({ items: it });
+  const photoRef = useRef<HTMLInputElement>(null);
+  const [photoMsg, setPhotoMsg] = useState('');
+  const [photoNotes, setPhotoNotes] = useState<string[]>([]);
+  const fromPhoto = async (files: FileList | null) => {
+    if (!files || !files.length || !cur) return;
+    setBusy('photo'); setPhotoMsg(''); setPhotoNotes([]);
+    const added: FElem[] = [], notes: string[] = [];
+    try {
+      for (const f of Array.from(files)) {
+        const img = await shrinkImage(f);
+        const r = await catApi('POST', '/flashings/recognize', { image: img.data, media: img.media });
+        (r.elements as SketchEl[] || []).forEach(s => {
+          const e = fromSketch(s);
+          if (e) { added.push(e); if (s.unclear) notes.push(`${e.name}: ${s.unclear}`); }
+        });
+      }
+      if (!added.length) setPhotoMsg('На фото не знайдено ескізів доборів');
+      else {
+        patchDoc({ items: [...items, ...added] });
+        setPhotoMsg(`Додано з фото: ${added.length}. Перевірте розміри й кути.`); setPhotoNotes(notes);
+      }
+    } catch (e: any) { setPhotoMsg(e.message || String(e)); }
+    finally { setBusy(''); if (photoRef.current) photoRef.current.value = ''; }
+  };
 
   const save = useCallback(async () => {
     if (!cur) return;
@@ -251,7 +289,10 @@ export default function FlashingPage() {
                 </select>
                 <button className="btn btn-primary btn-sm" onClick={() => setItems([...items, newElem(FLASH_TEMPLATES[tpl])])}>+ Додати</button>
                 <button className="btn btn-secondary btn-sm" onClick={() => setItems([...items, { ...newElem(FLASH_TEMPLATES[0]), name: 'Новий елемент', segs: [] }])}>✎ Накреслити з нуля</button>
+                <button className="btn btn-secondary btn-sm" disabled={busy === 'photo'} onClick={() => photoRef.current?.click()} title="Сфотографуйте ескіз від руки — креслення з'явиться автоматично">{busy === 'photo' ? 'Розпізнаю фото…' : '📷 З фото ескізу'}</button>
+                <input ref={photoRef} type="file" accept="image/*" multiple hidden onChange={ev => fromPhoto(ev.target.files)} />
                 <span className="text-muted fl-add-note">Шаблони — типові форми з примірними розмірами, змініть їх під свій об'єкт.</span>
+                {photoMsg && <div className="fl-photo-msg"><span>{photoMsg}</span>{photoNotes.map((n, i) => <div key={i} className="fl-photo-note" data-no-i18n>⚠ {n}</div>)}</div>}
               </div>
               <div className="card fl-nest">
                 <div className="fl-nest-head">

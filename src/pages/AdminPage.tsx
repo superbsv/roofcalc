@@ -198,18 +198,21 @@ function SettingsTab() {
   const [settings, setSettings] = useState<Record<string,string>>({});
   const [busy, setBusy]         = useState(false);
   const [saved, setSaved]       = useState(false);
+  const [aiKey, setAiKey]       = useState<{ set: boolean; hint: string }>({ set: false, hint: '' });
 
-  useEffect(() => {
-    api('GET', '/admin/settings').then(r => {
-      const map: Record<string,string> = {};
-      r.settings.forEach((s: any) => { map[s.key_name] = s.value; });
-      setSettings(map);
+  const load = () => api('GET', '/admin/settings').then(r => {
+    const map: Record<string,string> = {};
+    r.settings.forEach((s: any) => {
+      map[s.key_name] = s.value;
+      if (s.key_name === 'anthropic_api_key') setAiKey({ set: !!s.is_set, hint: s.hint || '' });
     });
-  }, []);
+    setSettings(map);
+  });
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
     setBusy(true);
-    try { await api('PUT', '/admin/settings', settings); setSaved(true); setTimeout(()=>setSaved(false),3000); }
+    try { await api('PUT', '/admin/settings', settings); setSaved(true); setTimeout(()=>setSaved(false),3000); await load(); }
     catch {}
     setBusy(false);
   };
@@ -240,6 +243,14 @@ function SettingsTab() {
             />
           </div>
         ))}
+      </div>
+      <div className="form-group mt-3">
+        <label className="form-label">Ключ Claude API — розпізнавання фото ескізів доборів</label>
+        <input className="form-control" type="password" autoComplete="off"
+          placeholder={aiKey.set ? `Ключ збережено ${aiKey.hint} — введіть новий, щоб замінити` : 'sk-ant-…'}
+          value={settings.anthropic_api_key || ''}
+          onChange={e => setSettings(s => ({...s, anthropic_api_key: e.target.value}))} />
+        <span className="form-hint">Ключ видно лише серверу. Порожнє поле — ключ не змінюється; «-» — видалити ключ.</span>
       </div>
       <div className="flex gap-3 mt-4">
         <button className="btn btn-primary" onClick={save} disabled={busy}>

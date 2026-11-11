@@ -115,6 +115,27 @@ class FlashingsController
         $this->json(['message' => 'Креслення видалено']);
     }
 
+    // POST /api/flashings/recognize  { image: base64, media: image/jpeg }
+    public function recognize(): void
+    {
+        if (($this->me['role'] ?? '') === 'viewer') $this->json(['error' => 'Недостатньо прав'], 403);
+        $b = $this->body();
+        $img = (string)($b['image'] ?? '');
+        if (strpos($img, ',') !== false && strpos($img, 'data:') === 0) $img = substr($img, strpos($img, ',') + 1);
+        $media = (string)($b['media'] ?? 'image/jpeg');
+        if (!in_array($media, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true)) $this->json(['error' => 'Непідтримуваний формат зображення'], 400);
+        if ($img === '' || strlen($img) > 7 * 1024 * 1024 || base64_decode($img, true) === false) $this->json(['error' => 'Фото не отримано або воно завелике'], 400);
+        @set_time_limit(150);
+        try {
+            $r = FlashingRecognizer::recognize($img, $media);
+        } catch (\RuntimeException $e) {
+            if ($e->getMessage() === 'NO_KEY') $this->json(['error' => 'Розпізнавання фото ще не налаштоване: супер-адмін має вказати ключ Claude API у налаштуваннях платформи'], 503);
+            error_log('flashings.recognize: ' . $e->getMessage());
+            $this->json(['error' => 'Не вдалося розпізнати фото: ' . $e->getMessage()], 502);
+        }
+        $this->json($r);
+    }
+
     private function body(): array { return json_decode((string)file_get_contents('php://input'), true) ?: []; }
 
     private function json(array $data, int $code = 200): void

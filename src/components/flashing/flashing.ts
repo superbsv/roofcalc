@@ -306,3 +306,42 @@ export function placeLabels(lines: [Pt, Pt][], points: Pt[], reqs: LabelReq[]): 
     return best;
   });
 }
+
+// ============================================
+// Ескіз з фото (відповідь розпізнавання) → елемент креслення
+// Сторони — довжина + напрям «як намальовано»; кути загинів рахуються з напрямів,
+// підписаний кут на ескізі має пріоритет (бік загину — з малюнка).
+// ============================================
+export interface SketchHem { present?: boolean; len?: number; side?: 'left' | 'right' | 'unknown' }
+export interface SketchEl {
+  name?: string; qty?: number; length_mm?: number;
+  sides?: { len: number; dir_deg: number }[]; angles?: (number | null)[];
+  hem_start?: SketchHem | null; hem_end?: SketchHem | null;
+  paint_side?: 'left' | 'right' | 'unknown'; unclear?: string;
+}
+export function fromSketch(s: SketchEl): FElem | null {
+  const sides = (s.sides || []).filter(q => Number(q.len) > 0);
+  if (!sides.length) return null;
+  const paint: 1 | -1 = s.paint_side === 'right' ? -1 : 1;
+  const segs: FSeg[] = sides.map(q => ({ len: r1(Number(q.len)), ang: 90, dir: 1 }));
+  for (let i = 0; i < sides.length - 1; i++) {
+    let t = Number(sides[i + 1].dir_deg) - Number(sides[i].dir_deg);
+    while (t > 180) t -= 360;
+    while (t <= -180) t += 360;
+    const lab = Number(s.angles?.[i]) || 0;
+    segs[i].ang = lab > 0 && lab <= 180 ? lab : Math.max(8, r1(180 - Math.abs(t)));
+    segs[i].dir = t >= 0 ? 1 : -1;
+  }
+  const hem = (h?: SketchHem | null): Hem | null => {
+    if (!h || h.present === false || !(Number(h.len) > 0 || h.present)) return null;
+    return { len: Number(h.len) > 0 ? r1(Number(h.len)) : HEM_LEN, dir: h.side === 'left' ? 1 : h.side === 'right' ? -1 : ((-paint) as 1 | -1) };
+  };
+  const core: Core = { start: norm360(r1(Number(sides[0].dir_deg) || 0)), segs, hemS: hem(s.hem_start), hemE: hem(s.hem_end) };
+  const j = joinCore(core);
+  return {
+    id: newId(), name: (s.name || 'Елемент з фото').slice(0, 120),
+    segs: j.segs, start: j.start, paint,
+    length: Number(s.length_mm) > 0 ? Number(s.length_mm) : 2000,
+    qty: Number(s.qty) > 0 ? Math.round(Number(s.qty)) : 1,
+  };
+}

@@ -327,8 +327,20 @@ class AdminController
     // GET /api/admin/settings
     public function settings(): void
     {
-        $this->requireAdmin();
+        $me = $this->requireAdmin();
+        \RoofCalc\Api\Flashings\FlashingRecognizer::ensureSettings();
         $rows = Database::fetchAll('SELECT key_name, value, type, description FROM app_settings ORDER BY key_name');
+        // ключ Claude API ніколи не віддаємо — лише ознаку «збережено» і останні 4 символи (супер-адміну)
+        $k = \RoofCalc\Api\Flashings\FlashingRecognizer::KEY;
+        foreach ($rows as &$r) {
+            if ($r['key_name'] === $k) {
+                $v = (string)$r['value'];
+                $r['value'] = '';
+                $r['is_set'] = $v !== '';
+                $r['hint'] = ($v !== '' && !empty($me['sa'])) ? '…' . substr($v, -4) : '';
+            }
+        }
+        unset($r);
         $this->json(['settings' => $rows]);
     }
 
@@ -339,7 +351,14 @@ class AdminController
         if (empty($me['sa']) || !empty($me['imp'])) $this->error('Загальні налаштування змінює лише супер-адмін платформи', 403);
         $body = $this->body(); // ['key'=>'val',...]
 
+        \RoofCalc\Api\Flashings\FlashingRecognizer::ensureSettings();
         foreach ($body as $key => $value) {
+            // порожнє поле ключа = «не змінювати»; «-» = видалити ключ
+            if ($key === \RoofCalc\Api\Flashings\FlashingRecognizer::KEY) {
+                $value = trim((string)$value);
+                if ($value === '') continue;
+                if ($value === '-') $value = '';
+            }
             Database::query(
                 'UPDATE app_settings SET value = ?, updated_at = NOW() WHERE key_name = ?',
                 [(string)$value, $key]
