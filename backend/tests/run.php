@@ -153,6 +153,17 @@ eq(array_column($kr['placements'], 'length'), [1200, 2350, 3550, 4700, 5850, 635
 $kr7 = (new E($kpM, ['polygon_points' => [[0, 0], [1500, 0], [4334, 3100], [2834, 3100]], 'holes' => [], 'eave_overhang' => 0, 'ridge_gap' => 50, 'laying_direction' => 'right_left']))->calculate();
 eq(count($kr7['placements']), 4, 'скат-паралелограм: 4 листи, без зайвого листа на гострий кут 4 см');
 
+echo "Нижній лист — цілі модулі без довгого хвоста\n";
+// Ендова: низ лівих колонок піднімається діагоналлю, скат вищий за Lmax → два ряди.
+// Кожен нижній лист = хвиля × n + ПЗ (за останнім штампом лише нахлест), стик на одній лінії.
+$vr = (new E(array_merge($mat, ['max_length' => 6000]), ['polygon_points' => [[0, 3000], [3000, 0], [9000, 0], [9000, 9000], [0, 9000]],
+    'holes' => [], 'eave_overhang' => 50, 'ridge_gap' => 0, 'laying_direction' => 'right_left']))->calculate();
+$low = array_values(array_filter($vr['placements'], function ($q) { return $q['row_index'] === 0; }));
+ok(count($low) === 9 && !array_filter($low, function ($q) { return ($q['length'] - 150) % 350 !== 0; }),
+   'усі 9 нижніх листів стандартні: ' . implode(', ', array_column($low, 'length')));
+ok(count(array_unique(array_map(function ($q) { return $q['y'] + $q['length']; }, $low))) === 1, 'верх нижніх листів — на одній лінії стику');
+ok(!array_filter($low, function ($q) { return $q['y'] > ($q['x'] < 3000 ? 3000 - max(0, $q['x']) : 0) - 50; }), 'низ кожного листа не вище карниза (з урахуванням К)');
+
 echo "Немає допустимого рішення\n";
 $tight = $calc([], ['max_length' => 440, 'min_length' => 400]);   // допустимі лише 400…440 (r 50…90)
 ok(isset($tight['tech_ok']), 'розрахунок не падає');
