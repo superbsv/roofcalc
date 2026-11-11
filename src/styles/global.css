@@ -1168,7 +1168,7 @@ tr:hover td { background: var(--clr-surface-2); }
 .kp-params:has(.kp-left-text) label { grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr); }
 .kp-cell { width: 100%; border: 0; background: transparent; color: var(--clr-text); font: inherit; padding: 2px 0; outline: none; }
 .kp-cell:focus { box-shadow: inset 0 -2px 0 var(--clr-brand); }
-.kp-prompt { position: absolute; z-index: 20; width: 220px; background: var(--clr-surface); border: 1px solid var(--clr-brand); border-radius: 8px; box-shadow: var(--shadow-md); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.kp-prompt { position: absolute; z-index: 20; width: 240px; background: var(--clr-surface); border: 1px solid var(--clr-brand); border-radius: 8px; box-shadow: var(--shadow-md); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
 .kp-prompt label { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; color: var(--clr-text-2); font-weight: 600; }
 .kp-prompt .form-control { font-family: var(--font-mono); text-align: right; }
 .kp-prompt-btns { display: flex; justify-content: flex-end; gap: 6px; }
@@ -1742,5 +1742,9 @@ tr:hover td { background: var(--clr-surface-2); }
 .kp-hole-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; font-size: .8rem; color: var(--clr-text-3); }
 
 /* Вершина ската: координати X / Y поруч */
+.kp-prompt-nudge { display: flex; flex-direction: column; gap: 4px; }
+.kp-prompt-nudge .ls-shift-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
+.kp-prompt-nudge .ls-arr { height: 28px; }
+.kp-prompt-nudge .ls-shift-legend { font-size: .66rem; color: var(--clr-text-3); text-align: center; }
 .kp-prompt-xy { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
 .kp-prompt-xy label span { font-size: .72rem; }

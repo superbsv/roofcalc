@@ -8,6 +8,7 @@ import { TEMPLATES, buildTemplate, templateIconPoints, sideLetter } from '../roo
 import { useTheme, Theme } from '../theme/theme';
 import { Point, Slope, SheetPlacement, CalcResult, EdgeType } from '../../api/client';
 import { edgeColor, interiorAngles, fmtAngle, setSideLength, setVertexAngle } from '../roof/edges';
+import { HoldBtn, STEPS } from '../layout/HoldBtn';
 
 interface Props {
   slope: Slope | null;
@@ -62,7 +63,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   const [hoverEdge, setHoverEdge]   = useState(-1);
   // Точне введення: клік по стороні — довжина, клік по вершині — внутрішній кут
   // вершина: координати X / Y і кут; сторона: довжина
-  const [prompt, setPrompt] = useState<{ kind: 'side' | 'angle'; idx: number; x: number; y: number; value: string; px?: string; py?: string; p0?: Point; a0?: string } | null>(null);
+  const [prompt, setPrompt] = useState<{ kind: 'side' | 'angle'; idx: number; x: number; y: number; value: string; px?: string; py?: string; p0?: Point; a0?: string; pts0?: Point[] } | null>(null);
   const downRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const promptInput = useRef<HTMLInputElement>(null);
   const promptKey = prompt ? `${prompt.kind}${prompt.idx}` : '';
@@ -509,6 +510,24 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
     return best;
   }
 
+  // Стрілки у вікні вершини: зсув на 0.1 / 0.01 / 0.001 м (затиснута — повторює); зберігається після відпускання
+  const ptsRef = useRef(points); ptsRef.current = points;
+  const nudgeVertex = (dx: number, dy: number) => {
+    if (!prompt || prompt.kind !== 'angle') return;
+    const i = prompt.idx, r = (x: number) => Math.round(x * 1000) / 1000, cur0 = ptsRef.current;
+    const np = ptsRef.current.map((p, k) => k === i ? [r(p[0] + dx), r(p[1] + dy)] as Point : p);
+    ptsRef.current = np;
+    setPoints(np);
+    const ang = interiorAngles(np)[i], a = ang ? (Math.round(ang.deg * 10) / 10).toString() : '';
+    setPrompt(p => p && ({ ...p, px: np[i][0].toFixed(3), py: np[i][1].toFixed(3), p0: np[i], value: a, a0: a, pts0: p.pts0 || cur0 }));
+  };
+  const nudgeEnd = () => notifyChange(ptsRef.current);
+  // «Скасувати» у вікні вершини повертає точку туди, де вона була до стрілок
+  const cancelPrompt = () => {
+    if (prompt?.pts0) { setPoints(prompt.pts0); notifyChange(prompt.pts0); }
+    setPrompt(null);
+  };
+
   function applyPrompt() {
     if (!prompt) return;
     const f = (t?: string) => parseFloat(String(t ?? '').replace(',', '.'));
@@ -816,7 +835,7 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
         </div>
         <div className="editor-coords">{coordsText}</div>
         {prompt && (
-          <div className="kp-prompt" style={{ left: Math.max(8, Math.min(prompt.x + 12, (wrapRef.current?.clientWidth || 600) - 230)), top: Math.max(8, Math.min(prompt.y + 12, (wrapRef.current?.clientHeight || 400) - (prompt.kind === 'angle' ? 200 : 130))) }}
+          <div className="kp-prompt" style={{ left: Math.max(8, Math.min(prompt.x + 12, (wrapRef.current?.clientWidth || 600) - 250)), top: Math.max(8, Math.min(prompt.y + 12, (wrapRef.current?.clientHeight || 400) - (prompt.kind === 'angle' ? 300 : 130))) }}
             onMouseDown={e => e.stopPropagation()}>
             {prompt.kind === 'angle' && (
               <div className="kp-prompt-xy">
@@ -825,19 +844,32 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
                     <span>{i ? 'Y (висота), м' : 'X (по горизонталі), м'}</span>
                     <input ref={i ? undefined : promptInput} className="form-control" inputMode="decimal" value={prompt[k] ?? ''}
                       onChange={e => setPrompt(p => p && ({ ...p, [k]: e.target.value }))}
-                      onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') applyPrompt(); if (e.key === 'Escape') setPrompt(null); }} />
+                      onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') applyPrompt(); if (e.key === 'Escape') cancelPrompt(); }} />
                   </label>
                 ))}
+              </div>
+            )}
+            {prompt.kind === 'angle' && (
+              <div className="kp-prompt-nudge">
+                <div className="ls-shift-row">
+                  {[...STEPS].reverse().map((st, i) => <HoldBtn key={'l' + st.mm} title={`← ${st.label}`} onTick={() => nudgeVertex(-st.mm / 1000, 0)} onEnd={nudgeEnd}>{'◀'.repeat(3 - i)}</HoldBtn>)}
+                  {STEPS.map((st, i) => <HoldBtn key={'r' + st.mm} title={`→ ${st.label}`} onTick={() => nudgeVertex(st.mm / 1000, 0)} onEnd={nudgeEnd}>{'▶'.repeat(i + 1)}</HoldBtn>)}
+                </div>
+                <div className="ls-shift-row">
+                  {[...STEPS].reverse().map((st, i) => <HoldBtn key={'d' + st.mm} title={`↓ ${st.label}`} onTick={() => nudgeVertex(0, -st.mm / 1000)} onEnd={nudgeEnd}>{'▼'.repeat(3 - i)}</HoldBtn>)}
+                  {STEPS.map((st, i) => <HoldBtn key={'u' + st.mm} title={`↑ ${st.label}`} onTick={() => nudgeVertex(0, st.mm / 1000)} onEnd={nudgeEnd}>{'▲'.repeat(i + 1)}</HoldBtn>)}
+                </div>
+                <div className="ls-shift-legend">◀ / ▲ — 0.1 м · ◀◀ — 0.01 м · ◀◀◀ — 0.001 м</div>
               </div>
             )}
             <label>
               <span>{prompt.kind === 'side' ? `Довжина сторони ${sideLetter(prompt.idx)}, м` : 'або внутрішній кут у вершині, °'}</span>
               <input ref={prompt.kind === 'side' ? promptInput : undefined} className="form-control" inputMode="decimal" value={prompt.value}
                 onChange={e => setPrompt(p => p && ({ ...p, value: e.target.value }))}
-                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') applyPrompt(); if (e.key === 'Escape') setPrompt(null); }} />
+                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') applyPrompt(); if (e.key === 'Escape') cancelPrompt(); }} />
             </label>
             <div className="kp-prompt-btns">
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPrompt(null)}>Скасувати</button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={cancelPrompt}>Скасувати</button>
               <button type="button" className="btn btn-primary btn-sm" onClick={applyPrompt}>OK</button>
             </div>
           </div>
