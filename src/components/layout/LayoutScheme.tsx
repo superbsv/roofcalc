@@ -718,8 +718,9 @@ export default function LayoutScheme({ calcResult, polygonPoints: rawPolygon, ho
     // металочерепиця: нижній лист — стандартний (цілі хвилі + нахлест), щоб малюнок збігся з верхнім
     let lower = Math.round((L + ovMm) / 2 / 10) * 10;
     if (waveStep > 0) {
-      lower = Math.max(1, Math.round((lower - ovMm) / waveStep)) * waveStep + ovMm;
-      if (lower > L - 300) lower = Math.max(1, Math.floor((L - 300 - ovMm) / waveStep)) * waveStep + ovMm;
+      const base = Number((calcResult as any).std_base_mm ?? ovMm) || 0;   // стандарт = хвиля × n + база (з таблиці виробника)
+      lower = Math.max(1, Math.round((lower - base) / waveStep)) * waveStep + base;
+      if (lower > L - 300) lower = Math.max(1, Math.floor((L - 300 - base) / waveStep)) * waveStep + base;
     }
     const upperY = y0 + lower - ovMm, upperLen = y0 + L - upperY;
     const used = new Set(placements.filter(q => q.col_index === p.col_index && q.row_index === p.row_index).map(q => q.split_n || 0));

@@ -186,6 +186,26 @@ foreach (['трикутник' => [[0, 0], [10000, 0], [5000, 9000]], 'ендо�
     ok(!$bad, "$nm: нижні листи стандартні, недопустимих довжин немає" . ($bad ? ' — ' . implode(', ', $bad) : ''));
 }
 
+echo "Good Roof: 4 профілі з каталогу (стандарт = 350·n + база з таблиці)\n";
+foreach (array_combine([130, 106, 100, 150], require __DIR__ . '/../src/core/catalog_data/goodroof.php') as $gBase => $gm) {
+    $gM = array_merge($gm, ['type' => 'tile', 'wave_step' => 350, 'round_step' => 10, 'stamp_gap' => 0]);
+    $gBad = function ($l) use ($gm) { foreach ($gm['forbidden_lengths'] as $q) if ($l >= $q[0] && $l <= $q[1]) return true; return $l < $gm['min_length'] || $l > $gm['max_length']; };
+    $bad = []; $base = null;
+    foreach ([[[0, 0], [10000, 0], [5000, 9000]], [[0, 3000], [3000, 0], [9000, 0], [9000, 9000], [0, 9000]], [[0, 0], [6000, 0], [6000, 4321], [0, 4321]]] as $pp) {
+        $rr = (new E($gM, ['polygon_points' => $pp, 'holes' => [], 'eave_overhang' => 50, 'ridge_gap' => 50, 'laying_direction' => 'right_left']))->calculate();
+        $base = $rr['std_base_mm'];
+        $cols = []; foreach ($rr['placements'] as $q) $cols[$q['col_index']][] = $q;
+        foreach ($cols as $cq) {
+            usort($cq, function ($a, $b) { return $a['y'] <=> $b['y']; });
+            foreach ($cq as $i => $q) {
+                if ($gBad($q['length'])) $bad[] = 'недопустима ' . $q['length'];
+                if ($i < count($cq) - 1 && ($q['length'] - $gBase) % 350 !== 0) $bad[] = 'нижній не стандартний ' . $q['length'];
+            }
+        }
+    }
+    ok($base === $gBase && !$bad, $gm['name'] . ": база стандарту $gBase, нижні стандартні, недопустимих немає" . ($bad ? ' — ' . implode(', ', array_unique($bad)) : '') . ($base !== $gBase ? " (база $base)" : ''));
+}
+
 echo "Немає допустимого рішення\n";
 $tight = $calc([], ['max_length' => 440, 'min_length' => 400]);   // допустимі лише 400…440 (r 50…90)
 ok(isset($tight['tech_ok']), 'розрахунок не падає');

@@ -25,6 +25,40 @@ class Catalog
         self::migratePersonal();
         Database::ensureColumn('tenants', 'catalog_seeded', 'TINYINT NOT NULL DEFAULT 0');
         self::seedAll();
+        self::seedGoodRoof();
+    }
+
+    // Разово: металочерепиця Good Roof (Classic / Maxi / Premium / Retro-Roof) у каталог ROOFKIT
+    // з таблицями недопустимих розмірів виробника; позиція з такою назвою вже є — оновлюються параметри.
+    // Нові позиції одразу копіюються в каталоги всіх кабінетів (propagateNew).
+    private static function seedGoodRoof(): void
+    {
+        try {
+            if (Database::fetchOne("SELECT key_name FROM app_settings WHERE key_name = 'catalog_goodroof_v1'")) return;
+            $sec = self::sectionFor(null, 'tile');
+            foreach (require __DIR__ . '/catalog_data/goodroof.php' as $m) {
+                $vals = [
+                    'type' => 'tile', 'manufacturer' => 'Good Roof', 'name' => $m['name'],
+                    'full_width' => $m['full_width'], 'useful_width' => $m['useful_width'], 'wave_height' => $m['wave_height'],
+                    'length_overlap' => $m['length_overlap'], 'wave_step' => 350, 'min_length' => $m['min_length'],
+                    'max_length' => $m['max_length'], 'round_step' => 10, 'cut_step' => 10, 'stamp_gap' => 0,
+                    'forbidden_lengths' => json_encode($m['forbidden_lengths']), 'is_active' => 1,
+                    'section_id' => $sec ? (int)$sec['id'] : null,
+                ];
+                $short = explode(' ', $m['name'])[0];   // «Classic-Roof»
+                $ex = Database::fetchOne("SELECT id FROM material_profiles WHERE tenant_id IS NULL AND deleted = 0 AND type = 'tile' AND name LIKE ? ORDER BY id LIMIT 1", [$short . '%']);
+                if ($ex) {
+                    $set = implode(', ', array_map(function ($k) { return "$k = ?"; }, array_keys($vals)));
+                    Database::query("UPDATE material_profiles SET $set WHERE id = ?", array_merge(array_values($vals), [(int)$ex['id']]));
+                } else {
+                    $id = Database::insert('INSERT INTO material_profiles (' . implode(',', array_keys($vals)) . ') VALUES (' . implode(',', array_fill(0, count($vals), '?')) . ')', array_values($vals));
+                    self::propagateNew($id);
+                }
+            }
+            Database::query("INSERT INTO app_settings (key_name, value, type, description, updated_at) VALUES ('catalog_goodroof_v1', '1', 'string', 'Каталог: металочерепиця Good Roof', NOW())");
+        } catch (\Throwable $e) {
+            error_log('ROOFKIT Good Roof seed: ' . $e->getMessage());
+        }
     }
 
     // ---------- Особистий каталог кабінету = копія каталогу ROOFKIT ----------

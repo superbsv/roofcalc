@@ -58,6 +58,7 @@ class SheetLayoutEngine
     private array $warnings = [];
     private ?int $jointY = null;
     private ?array $jointRange = null;
+    private int $stdBase = 0;                // стандартний лист = хвиля × n + stdBase (металочерепиця)
     private ?MetalTileProfile $tech = null;  // технологічний рівень (штампи металочерепиці); null — правила не діють
     private bool $snap = true;               // Snap: довжини автоматично підганяються під допустимі заводські
 
@@ -92,11 +93,27 @@ class SheetLayoutEngine
         }
         $this->snap = true; // підгонка довжин під зони різу — завжди (перемикач прибрано на вимогу користувача)
 
+        // Стандартний лист металочерепиці = хвиля × n + «база» (капельник + хвіст за останнім штампом).
+        // За таблицею виробника стандарт — це перша довжина після діапазону недопустимих розмірів
+        // (Classic-Roof 701–829 → 830 = 350×2 + 130; Maxi-Roof 785–805 → 806 = 350×2 + 106). База часто
+        // не дорівнює поперечному нахлесту, тому береться з діапазонів; немає діапазонів — база = ПЗ.
+        $this->stdBase = $this->pz;
+        if ($this->wave > 0 && $this->forbidden) {
+            $cnt = [];
+            foreach ($this->forbidden as $r) {
+                $hi = $r[1] % max(1, $this->round) === 0 ? $r[1] : $r[1] + 1;
+                $b = MetalTileProfile::positiveModulo($hi, $this->wave);
+                $cnt[$b] = ($cnt[$b] ?? 0) + 1;
+            }
+            arsort($cnt);
+            $this->stdBase = (int)array_key_first($cnt);
+        }
+
         $std = (int)($profile['max_std_length'] ?? 0);
         if ($this->wave > 0) {
             $base = $std > 0 ? $std : $this->lmax;
-            $n = (int)floor(($base - $this->pz) / $this->wave);
-            $this->lmaxStd = max($this->lmin, $n * $this->wave + $this->pz);
+            $n = (int)floor(($base - $this->stdBase) / $this->wave);
+            $this->lmaxStd = max($this->lmin, $n * $this->wave + $this->stdBase);
             if ($this->tech && $this->snap && !$this->tech->isValid($this->lmaxStd)) {
                 $this->lmaxStd = $this->tech->floorValid($this->lmaxStd) ?? $this->lmaxStd;
             }
@@ -329,6 +346,7 @@ class SheetLayoutEngine
             'joint_range_mm'     => $this->jointRange,
             'v_shift_mm'         => $this->vShift,
             'wave_step_mm'       => $this->wave,
+            'std_base_mm'        => $this->wave > 0 ? $this->stdBase : null,
             'split_forced'       => !empty($this->slope['split_forced']),
             'rows_user'          => (int)($this->slope['rows_count'] ?? 0),
             'row_len_mm'         => $this->rowLen,
@@ -485,7 +503,7 @@ class SheetLayoutEngine
     private function nearestStd(int $len, int $max): int
     {
         $step = $this->wave > 0 ? $this->wave : $this->round;
-        $base = $this->wave > 0 ? $this->pz : 0;
+        $base = $this->wave > 0 ? $this->stdBase : 0;
         $l = (int)(round(($len - $base) / $step) * $step + $base);
         return min(max($l, $this->lmin), $max);
     }
@@ -494,7 +512,7 @@ class SheetLayoutEngine
     private function stdLen(int $len, int $max): int
     {
         if ($this->wave > 0) {
-            $l = (int)(ceil(($len - $this->pz) / $this->wave) * $this->wave + $this->pz);
+            $l = (int)(max(1, ceil(($len - $this->stdBase) / $this->wave)) * $this->wave + $this->stdBase);
             $l = min($l, $max);
             return $this->techLen($l, $max);
         }
@@ -528,14 +546,15 @@ class SheetLayoutEngine
     }
 
     // Діапазон, у який потрапляє довжина → [найбільша виконувана нижче, найменша виконувана вище].
-    // Межі в таблицях виробників (і у файлах КП) — перший і останній НЕвиконуваний розмір: 701–829 → 700 / 830.
+    // Межі в таблицях виробників (і у файлах КП) — перший і останній НЕвиконуваний розмір: 701–829 → 700 / 830,
+    // 785–805 → 784 / 806 (верх рекомендованого діапазону / наступний стандарт).
     // Межа, кратна кроку округлення (3850–3980, старі записи), вважається виконуваною.
     private function forbiddenRange(int $len): ?array
     {
         $st = max(1, $this->round);
         foreach ($this->forbidden as $r) {
-            $lo = $r[0] % $st === 0 ? $r[0] : (int)(floor($r[0] / $st) * $st);
-            $hi = $r[1] % $st === 0 ? $r[1] : (int)(ceil($r[1] / $st) * $st);
+            $lo = $r[0] % $st === 0 ? $r[0] : $r[0] - 1;
+            $hi = $r[1] % $st === 0 ? $r[1] : $r[1] + 1;
             if ($len > $lo && $len < $hi) return [$lo, $hi];
         }
         return null;
