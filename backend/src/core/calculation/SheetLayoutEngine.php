@@ -510,9 +510,10 @@ class SheetLayoutEngine
         if ($len < $this->lmin) $len = $this->lmin;
         $r = $this->forbiddenRange($len);
         if ($r) {
-            // як у КП: беремо нижню межу діапазону, якщо вона ще покриває потрібну довжину, інакше — верхню
-            if ($r[0] >= $need && $r[0] >= $this->lmin) $len = $r[0];
-            else $len = $r[1] <= $max ? $r[1] : max($this->lmin, $r[0]);
+            // як у КП: найближча виконувана довжина під діапазоном, якщо вона ще покриває потрібну, інакше — над ним
+            [$lo, $hi] = $r;
+            if ($lo >= $need && $lo >= $this->lmin) $len = $lo;
+            else $len = $hi <= $max ? $hi : max($this->lmin, $lo);
         }
         return $this->techLen(min($len, $max), $max);
     }
@@ -526,9 +527,17 @@ class SheetLayoutEngine
         return $this->tech->ceilValid($len, $max) ?? $len;
     }
 
+    // Діапазон, у який потрапляє довжина → [найбільша виконувана нижче, найменша виконувана вище].
+    // Межі в таблицях виробників (і у файлах КП) — перший і останній НЕвиконуваний розмір: 701–829 → 700 / 830.
+    // Межа, кратна кроку округлення (3850–3980, старі записи), вважається виконуваною.
     private function forbiddenRange(int $len): ?array
     {
-        foreach ($this->forbidden as $r) if ($len > $r[0] && $len < $r[1]) return $r;
+        $st = max(1, $this->round);
+        foreach ($this->forbidden as $r) {
+            $lo = $r[0] % $st === 0 ? $r[0] : (int)(floor($r[0] / $st) * $st);
+            $hi = $r[1] % $st === 0 ? $r[1] : (int)(ceil($r[1] / $st) * $st);
+            if ($len > $lo && $len < $hi) return [$lo, $hi];
+        }
         return null;
     }
 

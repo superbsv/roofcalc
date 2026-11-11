@@ -164,6 +164,28 @@ ok(count($low) === 9 && !array_filter($low, function ($q) { return ($q['length']
 ok(count(array_unique(array_map(function ($q) { return $q['y'] + $q['length']; }, $low))) === 1, 'верх нижніх листів — на одній лінії стику');
 ok(!array_filter($low, function ($q) { return $q['y'] > ($q['x'] < 3000 ? 3000 - max(0, $q['x']) : 0) - 50; }), 'низ кожного листа не вище карниза (з урахуванням К)');
 
+echo "Classic-Roof 350/15: таблиця виробника (стандарт = 350·n + 130, недопустимі std+221…std+349)\n";
+$crR = []; for ($i = 1; $i <= 21; $i++) { $sd = 130 + 350 * $i; $crR[] = [$sd + 221, $sd + 349]; }   // 701–829, 1051–1179… як у .kpr
+$crM = ['type' => 'tile', 'name' => 'CR', 'full_width' => 1200, 'useful_width' => 1110, 'length_overlap' => 130, 'wave_step' => 350,
+        'min_length' => 480, 'max_length' => 7829, 'max_std_length' => 6000, 'round_step' => 10, 'stamp_gap' => 0, 'forbidden_lengths' => $crR];
+$crE = new E($crM, ['polygon_points' => [[0, 0], [1000, 0], [1000, 1000], [0, 1000]], 'holes' => []]);
+eq([$crE->fit(700), $crE->fit(701), $crE->fit(829), $crE->fit(830), $crE->fit(3979)], [700, 830, 830, 830, 3980],
+   'межі діапазону 701–829 недопустимі: 701 → 830, 700 і 830 — допустимо');
+$crBad = function ($l) use ($crR) { foreach ($crR as $q) if ($l >= $q[0] && $l <= $q[1]) return true; return false; };
+foreach (['трикутник' => [[0, 0], [10000, 0], [5000, 9000]], 'ендова' => [[0, 3000], [3000, 0], [9000, 0], [9000, 9000], [0, 9000]]] as $nm => $pp) {
+    $rr = (new E($crM, ['polygon_points' => $pp, 'holes' => [], 'eave_overhang' => 50, 'ridge_gap' => 50, 'laying_direction' => 'right_left']))->calculate();
+    $cols = []; foreach ($rr['placements'] as $q) $cols[$q['col_index']][] = $q;
+    $bad = [];
+    foreach ($cols as $cq) {
+        usort($cq, function ($a, $b) { return $a['y'] <=> $b['y']; });
+        foreach ($cq as $i => $q) {
+            if ($crBad($q['length'])) $bad[] = 'недопустима ' . $q['length'];
+            if ($i < count($cq) - 1 && ($q['length'] - 130) % 350 !== 0) $bad[] = 'нижній не стандартний ' . $q['length'];
+        }
+    }
+    ok(!$bad, "$nm: нижні листи стандартні, недопустимих довжин немає" . ($bad ? ' — ' . implode(', ', $bad) : ''));
+}
+
 echo "Немає допустимого рішення\n";
 $tight = $calc([], ['max_length' => 440, 'min_length' => 400]);   // допустимі лише 400…440 (r 50…90)
 ok(isset($tight['tech_ok']), 'розрахунок не падає');

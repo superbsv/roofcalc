@@ -702,7 +702,8 @@ export default function LayoutScheme({ calcResult, polygonPoints: rawPolygon, ho
     });
   }, [selected, onUpdate]);
 
-  // Розділити виділений лист на два з нахлестом (для врізання вікна, димоходу): низ і верх — порівну,
+  // Розділити виділений лист на два з нахлестом (для врізання вікна, димоходу): низ і верх — порівну
+  // (металочерепиця — нижній стандартної довжини),
   // далі розміри коригуються стрілками «Довжина знизу / зверху» (сусідній лист компенсує зміну)
   const ovMm = Math.max(0, Number((calcResult as any).overlap_mm) || 0);
   const splitTarget = selected.size === 1 ? placements.find(p => !p.deleted && selected.has(p.sheet_number)) : undefined;
@@ -714,7 +715,12 @@ export default function LayoutScheme({ calcResult, polygonPoints: rawPolygon, ho
     markDirty();
     setManualMode(true);
     const L = getLen(p), y0 = getY(p);
-    const lower = Math.round((L + ovMm) / 2 / 10) * 10;
+    // металочерепиця: нижній лист — стандартний (цілі хвилі + нахлест), щоб малюнок збігся з верхнім
+    let lower = Math.round((L + ovMm) / 2 / 10) * 10;
+    if (waveStep > 0) {
+      lower = Math.max(1, Math.round((lower - ovMm) / waveStep)) * waveStep + ovMm;
+      if (lower > L - 300) lower = Math.max(1, Math.floor((L - 300 - ovMm) / waveStep)) * waveStep + ovMm;
+    }
     const upperY = y0 + lower - ovMm, upperLen = y0 + L - upperY;
     const used = new Set(placements.filter(q => q.col_index === p.col_index && q.row_index === p.row_index).map(q => q.split_n || 0));
     let n = 1; while (used.has(n)) n++;
