@@ -36,6 +36,7 @@ require_once SRC_PATH . '/api/tenant/TenantController.php';
 require_once SRC_PATH . '/api/widget/WidgetController.php';
 require_once SRC_PATH . '/api/catalog/CatalogController.php';
 require_once SRC_PATH . '/api/clients/ClientsController.php';
+require_once SRC_PATH . '/api/flashings/FlashingsController.php';
 
 use RoofCalc\Core\Auth;
 use RoofCalc\Api\Auth\AuthController;
@@ -122,6 +123,11 @@ try {
         case $method==='POST'&&preg_match('#^/slopes/(\d+)/calculate$#',$uri,$m): (new SlopesController)->calculate((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/slopes/(\d+)/layout$#',$uri,$m): (new SlopesController)->layout((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/projects/(\d+)/specification$#',$uri,$m): (new SpecController)->index((int)$m[1]); break;
+        case $method==='GET' &&$uri==='/flashings':            (new \RoofCalc\Api\Flashings\FlashingsController)->index(); break;
+        case $method==='POST'&&$uri==='/flashings':            (new \RoofCalc\Api\Flashings\FlashingsController)->create(); break;
+        case $method==='GET' &&preg_match('#^/flashings/(\d+)$#',$uri,$m): (new \RoofCalc\Api\Flashings\FlashingsController)->show((int)$m[1]); break;
+        case $method==='PUT' &&preg_match('#^/flashings/(\d+)$#',$uri,$m): (new \RoofCalc\Api\Flashings\FlashingsController)->update((int)$m[1]); break;
+        case $method==='DELETE'&&preg_match('#^/flashings/(\d+)$#',$uri,$m): (new \RoofCalc\Api\Flashings\FlashingsController)->delete((int)$m[1]); break;
         case $method==='GET' &&$uri==='/clients':              (new ClientsController)->index(); break;
         case $method==='POST'&&$uri==='/clients':              (new ClientsController)->create(); break;
         case $method==='GET' &&preg_match('#^/clients/(\d+)$#',$uri,$m): (new ClientsController)->show((int)$m[1]); break;

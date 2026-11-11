@@ -8,7 +8,7 @@ import { catApi, catalogChanged } from '../catalog/CatalogNav';
 export interface HistItem { id: number; kind: string; label: string; created_at: string; updated_at?: string; undone_at?: string | null; user_name?: string | null }
 
 export const KINDS: [string, string][] = [
-  ['', 'Усе'], ['project', 'Проекти'], ['client', 'Клієнти'], ['catalog', 'Каталог'], ['settings', 'Налаштування'], ['lead', 'Заявки'],
+  ['', 'Усе'], ['project', 'Проекти'], ['client', 'Клієнти'], ['catalog', 'Каталог'], ['flashing', 'Креслення'], ['settings', 'Налаштування'], ['lead', 'Заявки'],
 ];
 
 const when = (s?: string) => {

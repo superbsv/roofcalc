@@ -12,6 +12,7 @@ import TenantSettingsPage from './pages/TenantSettingsPage';
 import ClientsPage from './pages/ClientsPage';
 import LeadsPage from './pages/LeadsPage';
 import HistoryPage from './pages/HistoryPage';
+import FlashingPage from './pages/FlashingPage';
 import BrandMark, { BrandWordmark } from './components/brand/BrandMark';
 import { ThemeToggle } from './components/theme/theme';
 import LangSwitch from './i18n/LangSwitch';
@@ -31,7 +32,8 @@ type Page =
   | { type: 'platform-settings' }
   | { type: 'tenant' }
   | { type: 'leads' }
-  | { type: 'history' };
+  | { type: 'history' }
+  | { type: 'flashings' };
 
 function Shell() {
   const { user, logout, loading, leaveImpersonation } = useAuth();
@@ -65,7 +67,7 @@ function Shell() {
   // Панель платформи (супер-адмін поза кабінетом): лише кабінети клієнтів, каталог, тарифи, журнал.
   // Розрахунки, заявки й налаштування компанії — тільки всередині кабінету (свій користувач або «Увійти як клієнт»)
   const isPlatform = !!user.is_superadmin && !user.impersonating;
-  const TENANT_ONLY = ['projects', 'project', 'leads', 'tenant', 'clients', 'users', 'settings', 'history'];
+  const TENANT_ONLY = ['projects', 'project', 'leads', 'tenant', 'clients', 'users', 'settings', 'history', 'flashings'];
   const view: Page = isPlatform && TENANT_ONLY.includes(page.type) ? { type: 'super' } : page;
   const home: Page = isPlatform ? { type: 'super' } : { type: 'projects' };
 
@@ -115,6 +117,9 @@ function Shell() {
           </a>
           <a href="/" onClick={e=>{e.preventDefault();setGutOpen(true);}} title="Калькулятор водостоку: жолоби, труби, кронштейни">
             Водостік
+          </a>
+          <a href="/" className={view.type==='flashings'?'active':''} onClick={e=>{e.preventDefault();navigate({type:'flashings'});}} title="Креслення добірних елементів: планки, коньки, ендови, примикання">
+            Добори
           </a>
           </>}
           {view.type==='project' && (
@@ -178,6 +183,13 @@ function Shell() {
             </svg>,
             gutOpen,
             () => { setGutOpen(true); setSidebarOpen(false); }
+          )}
+          {navItem('Креслення добірних елементів',
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 17l5-9 6 5 4-7 3 2 M3 21h18"/>
+            </svg>,
+            view.type==='flashings',
+            () => navigate({type:'flashings'})
           )}
           {navItem('Заявки з сайту',
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -313,6 +325,7 @@ function Shell() {
         {view.type==='tenant' && <TenantSettingsPage />}
         {view.type==='leads' && <LeadsPage />}
         {view.type==='history' && <HistoryPage />}
+        {view.type==='flashings' && <FlashingPage />}
       </main>
     </div>
   );

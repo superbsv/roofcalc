@@ -25,7 +25,7 @@ class History
     private const TENANT_COLS = ['name', 'doc_company', 'doc_address', 'doc_phone', 'doc_email', 'doc_site', 'doc_requisites',
         'brand_color', 'logo', 'widget_enabled', 'widget_materials', 'widget_k'];
     private const CLIENT_PROJECT_COLS = ['client_id', 'client_name', 'client_phone'];
-    private const ORDER = ['tenants' => 0, 'clients' => 1, 'material_profiles' => 2, 'projects' => 3, 'slopes' => 4, 'spec' => 5, 'leads' => 6];
+    private const ORDER = ['tenants' => 0, 'clients' => 1, 'material_profiles' => 2, 'projects' => 3, 'slopes' => 4, 'spec' => 5, 'leads' => 6, 'flashings' => 7];
 
     public static function ensure(): void
     {
@@ -153,7 +153,13 @@ class History
             'slopes'   => (int)(Database::fetchOne('SELECT MAX(s.id) m FROM slopes s JOIN projects p ON p.id = s.project_id WHERE p.tenant_id = ?', [$tid])['m'] ?? 0),
             'clients'  => (int)(Database::fetchOne('SELECT MAX(id) m FROM clients WHERE tenant_id = ?', [$tid])['m'] ?? 0),
             'material_profiles' => (int)(Database::fetchOne('SELECT MAX(id) m FROM material_profiles WHERE tenant_id = ?', [$tid])['m'] ?? 0),
+            'flashings' => self::maxFlashing($tid),
         ];
+    }
+    private static function maxFlashing(int $tid): int
+    {
+        try { return (int)(Database::fetchOne('SELECT MAX(id) m FROM flashings WHERE tenant_id = ?', [$tid])['m'] ?? 0); }
+        catch (\Throwable $e) { return 0; }   // таблиця ще не створена
     }
 
     private static function newIds(int $tid, array $max): array
@@ -163,6 +169,9 @@ class History
         foreach (Database::fetchAll('SELECT s.id FROM slopes s JOIN projects p ON p.id = s.project_id WHERE p.tenant_id = ? AND s.id > ?', [$tid, $max['slopes']]) as $r) $out[] = ['slopes', (int)$r['id']];
         foreach (Database::fetchAll('SELECT id FROM clients WHERE tenant_id = ? AND id > ?', [$tid, $max['clients']]) as $r) $out[] = ['clients', (int)$r['id']];
         foreach (Database::fetchAll('SELECT id FROM material_profiles WHERE tenant_id = ? AND id > ?', [$tid, $max['material_profiles']]) as $r) $out[] = ['material_profiles', (int)$r['id']];
+        try {
+            foreach (Database::fetchAll('SELECT id FROM flashings WHERE tenant_id = ? AND id > ?', [$tid, $max['flashings'] ?? 0]) as $r) $out[] = ['flashings', (int)$r['id']];
+        } catch (\Throwable $e) {}
         return $out;
     }
 
@@ -212,6 +221,11 @@ class History
                     $merge = $method === 'PUT' ? "c$cid" : null;
                     $slope = $cid;   // id клієнта — для назви
                 }
+            } elseif (preg_match('#^/flashings(?:/(\d+))?$#', $uri, $m)) {
+                $kind = 'flashing'; $fid = (int)($m[1] ?? 0); $slope = $fid;
+                $label = $method === 'POST' ? 'new_flashing' : ($method === 'DELETE' ? 'del_flashing' : 'edit_flashing');
+                if ($fid) $before = self::rows('flashings', [$fid]);
+                $merge = $method === 'PUT' ? "f$fid" : null;
             } elseif ($method === 'PUT' && ($uri === '/tenant' || $uri === '/tenant/widget')) {
                 $kind = 'settings'; $label = $uri === '/tenant' ? 'tenant' : 'widget'; $merge = $label;
                 $before = self::rows('tenants', [$tid], self::TENANT_COLS);
@@ -261,6 +275,11 @@ class History
                 case 'del_client':
                     $cn = ''; foreach ($c['before'] as $it) if ($it['t'] === 'clients') $cn = (string)($it['r']['name'] ?? '');
                     $l = "Видалено клієнта «{$cn}»"; break;
+                case 'new_flashing': $n = self::nameOf('flashings', $firstNew('flashings')); $l = "Створено креслення «{$n}»"; break;
+                case 'edit_flashing': $n = self::nameOf('flashings', (int)$c['slope']); $l = "Змінено креслення «{$n}»"; break;
+                case 'del_flashing':
+                    $n = ''; foreach ($c['before'] as $it) if ($it['t'] === 'flashings') $n = (string)($it['r']['name'] ?? '');
+                    $l = "Видалено креслення «{$n}»"; break;
                 case 'tenant':      $l = 'Змінено налаштування кабінету'; break;
                 case 'widget':      $l = 'Змінено налаштування віджета'; break;
                 case 'lead':        $n = self::nameOf('leads', (int)$c['slope']); $l = "Змінено статус заявки «{$n}»"; break;
@@ -359,6 +378,8 @@ class History
         } elseif ($t === 'clients') {
             Database::query('UPDATE projects SET client_id = NULL WHERE client_id = ?', [$id]);
             Database::query('DELETE FROM clients WHERE id = ?', [$id]);
+        } elseif ($t === 'flashings') {
+            Database::query('DELETE FROM flashings WHERE id = ?', [$id]);
         } elseif ($t === 'material_profiles') {
             $used = (int)(Database::fetchOne('SELECT COUNT(*) c FROM slopes WHERE material_profile_id = ?', [$id])['c'] ?? 0);
             if ($used) Database::query('UPDATE material_profiles SET deleted = 1, published = 0, is_active = 0 WHERE id = ?', [$id]);
