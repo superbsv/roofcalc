@@ -4,7 +4,6 @@
 // ============================================
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { catApi } from '../components/catalog/CatalogNav';
-import FlashingSvg from '../components/flashing/FlashingSvg';
 import { FDoc, FElem, FLASH_TEMPLATES, Nest, SketchEl, blankCalc, emptyDoc, fromSketch, girth, nestPlan, newElem, newId } from '../components/flashing/flashing';
 import FlashingDraw from '../components/flashing/FlashingDraw';
 import NumIn from '../components/flashing/NumIn';
@@ -322,7 +321,7 @@ export default function FlashingPage() {
                   return (
                     <div key={e.id} className="fl-paper-item">
                       <div className="fl-paper-name"><b>{i + 1}.</b> <span data-no-i18n>{e.name}</span></div>
-                      <FlashingSvg e={e} w={380} h={250} print />
+                      <FlashingDraw e={e} still={{ w: 400, h: 260 }} />
                       <div className="fl-paper-meta">
                         <span>Заготовка: <b>{f1(c.girth)} мм</b></span><span>Загинів: <b>{c.bends}</b></span>
                         <span>Довжина: <b>{e.length} мм</b></span><span>К-сть: <b>{e.qty} шт</b></span>
