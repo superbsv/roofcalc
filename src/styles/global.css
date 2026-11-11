@@ -1829,6 +1829,8 @@ tr:hover td { background: var(--clr-surface-2); }
 .fd-g2 { stroke: var(--clr-border); stroke-width: .6; opacity: .65; }
 .fd-line { stroke: var(--fl-ink); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; fill: none; }
 .fd-line.on { stroke: var(--fl-ink); stroke-width: 2.8; }
+.fd-line.fd-hem { stroke-width: 1.2; }
+.fd-line.fd-hem.on { stroke-width: 2; }
 .fd-pt { fill: var(--clr-surface); stroke: var(--fl-ink); stroke-width: 1.2; }
 .fd-pt.end { fill: var(--fl-ink); }
 g:hover > .fd-pt, .fd-pt.on { fill: var(--fl-ink); stroke: var(--fl-ink); }

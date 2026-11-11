@@ -50,7 +50,7 @@ function ElemEditor({ e, sheetW, sheetL, onChange, onDel, onDup, onMove, idx, to
       <div className="fl-elem-body">
         <div className="fl-draw">
           <FlashingDraw e={e} onChange={onChange} hi={hi} setHi={setHi} />
-          <div className="fl-legend"><span>→ RAL — фарбований бік</span> · <span>⟲ — закатка</span></div>
+          <div className="fl-legend"><span>→ RAL — фарбований бік</span> · <span>⟲ — завальцювання</span></div>
         </div>
       </div>
       <div className="fl-metrics">

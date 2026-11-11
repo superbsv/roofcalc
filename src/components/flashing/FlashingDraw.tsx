@@ -248,7 +248,7 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
   };
 
   // ---- геометрія для малювання ----
-  const gapW = 7 / view.k;
+  const gapW = 3 / view.k;   // завальцювання — тонка петля
   const U = (h: number): Pt => [Math.cos(h), Math.sin(h)];
   const LN = (h: number): Pt => [-Math.sin(h), Math.cos(h)];
   // закатки: лінія (a→b у напрямку руху креслення) + дуга від згину до основної ламаної
@@ -331,8 +331,8 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
   })();
   const hemArc = (g: NonNullable<ReturnType<typeof hemGeo>>, key: string) => {
     const P = S(g.fold), Q = S(g.core), b = scr(Math.atan2(g.bulge[1], g.bulge[0]));
-    const r = Math.max(2, Math.hypot(Q[0] - P[0], Q[1] - P[1]) * 0.7);
-    return <path key={key} d={`M${P[0]},${P[1]} C${P[0] + b[0] * r},${P[1] + b[1] * r} ${Q[0] + b[0] * r},${Q[1] + b[1] * r} ${Q[0]},${Q[1]}`} className="fd-line" fill="none" />;
+    const r = Math.max(1.5, Math.hypot(Q[0] - P[0], Q[1] - P[1]) * 0.7);
+    return <path key={key} d={`M${P[0]},${P[1]} C${P[0] + b[0] * r},${P[1] + b[1] * r} ${Q[0] + b[0] * r},${Q[1] + b[1] * r} ${Q[0]},${Q[1]}`} className="fd-line fd-hem" fill="none" />;
   };
 
   // ---- вікно ----
@@ -375,10 +375,10 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
           <button type="button" className="fl-dir" onClick={() => setCoreSeg(j - 1, { dir: (-bend.dir) as 1 | -1 })}>{bend.dir > 0 ? '↺ загин уліво' : '↻ загин управо'} — змінити</button>
         </>}
         {isEnd && core.segs.length > 0 && (hm ? <>
-          <label><span>Закатка (завальцювання), мм</span><NumIn autoFocus value={hm.len} step={1} onEnter={() => setPop(null)} onChange={v => setHem(endKey, { ...hm, len: Math.max(1, v) })} /></label>
+          <label><span>Завальцювання, мм</span><NumIn autoFocus value={hm.len} step={1} onEnter={() => setPop(null)} onChange={v => setHem(endKey, { ...hm, len: Math.max(1, v) })} /></label>
           <div className="fd-pop-btns">
             <button type="button" className="fl-dir" onClick={() => setHem(endKey, { ...hm, dir: (-hm.dir) as 1 | -1 })}>⇅ На інший бік</button>
-            <button type="button" className="btn btn-ghost btn-sm fl-del" onClick={() => setHem(endKey, null)}>Прибрати закатку</button>
+            <button type="button" className="btn btn-ghost btn-sm fl-del" onClick={() => setHem(endKey, null)}>Прибрати завальцювання</button>
           </div>
         </> : <>
           <div className="fd-pop-btns">
@@ -419,10 +419,10 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
           {/* закатки */}
           {hemSG && <g onPointerDown={mode === 'edit' ? ev => onHemDown(ev, 0) : undefined} style={{ cursor: 'pointer', pointerEvents: mode === 'draw' ? 'none' : undefined }}>{hemArc(hemSG, 'ahs')}
             <line x1={S(hemSG.a)[0]} y1={S(hemSG.a)[1]} x2={S(hemSG.b)[0]} y2={S(hemSG.b)[1]} stroke="transparent" strokeWidth={16} />
-            <line x1={S(hemSG.a)[0]} y1={S(hemSG.a)[1]} x2={S(hemSG.b)[0]} y2={S(hemSG.b)[1]} className={ink + (hi === 0 ? ' on' : '')} /></g>}
+            <line x1={S(hemSG.a)[0]} y1={S(hemSG.a)[1]} x2={S(hemSG.b)[0]} y2={S(hemSG.b)[1]} className={ink + ' fd-hem' + (hi === 0 ? ' on' : '')} /></g>}
           {hemEG && <g onPointerDown={mode === 'edit' ? ev => onHemDown(ev, pts.length - 1) : undefined} style={{ cursor: 'pointer', pointerEvents: mode === 'draw' ? 'none' : undefined }}>{hemArc(hemEG, 'ahe')}
             <line x1={S(hemEG.a)[0]} y1={S(hemEG.a)[1]} x2={S(hemEG.b)[0]} y2={S(hemEG.b)[1]} stroke="transparent" strokeWidth={16} />
-            <line x1={S(hemEG.a)[0]} y1={S(hemEG.a)[1]} x2={S(hemEG.b)[0]} y2={S(hemEG.b)[1]} className={ink + (hi === nSeg - 1 ? ' on' : '')} /></g>}
+            <line x1={S(hemEG.a)[0]} y1={S(hemEG.a)[1]} x2={S(hemEG.b)[0]} y2={S(hemEG.b)[1]} className={ink + ' fd-hem' + (hi === nSeg - 1 ? ' on' : '')} /></g>}
           {/* сторони */}
           {core.segs.map((_, i) => {
             const A = S(pts[i]), B = S(pts[i + 1]), on = hi === fullIdx(i) || (pop?.kind === 'seg' && pop.idx === i);
