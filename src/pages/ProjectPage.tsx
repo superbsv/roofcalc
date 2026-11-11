@@ -1369,6 +1369,19 @@ function Specification({ project, settings, slopes, material, items, projectId, 
           </div>
         )}
 
+        {lenRows.length > 0 && (
+          <>
+            {/* Дані для доставки: вага орієнтовно 4 кг на м² повної площі листів, найдовший лист — для вибору машини */}
+            <h3 className="kp-paper-h">ДАНІ ДЛЯ ДОСТАВКИ</h3>
+            <dl className="kp-paper-params kp-delivery">
+              <dt>Орієнтовна вага, кг</dt><dd>{Math.ceil(tot.full * KG_PER_M2)}</dd>
+              <dt>Найдовший лист, м</dt><dd>{m3(lenRows[0][0])}</dd>
+              <dt>Листів, шт</dt><dd>{tot.sheets}</dd>
+            </dl>
+            <div className="kp-paper-line kp-delivery-note">Вага — орієнтовно, {KG_PER_M2} кг на 1 м² повної площі листів ({f2(tot.full, 3)} м²).</div>{/* i18n-ignore (tpl) */}
+          </>
+        )}
+
         {calc.some(s => s.calc_result?.cutting?.length) && (
           <>
             <h3 className="kp-paper-h">ТАБЛИЦЯ РОЗКРОЮ</h3>
@@ -1410,6 +1423,9 @@ function Specification({ project, settings, slopes, material, items, projectId, 
 }
 
 // Додаткові позиції і примітка до специфікації (як у КП: те, що програма не рахує — снігозатримувачі, водостік, фарба…)
+// Орієнтовна вага покрівельного / фасадного листа для розрахунку доставки
+const KG_PER_M2 = 4;
+
 function SpecExtras({ settings, onSave }: { settings: ProjectSettings; onSave: (p: Partial<ProjectSettings>) => Promise<void> }) {
   type Row = { name: string; unit: string; qty: string };
   const toRows = () => (settings.extra_items || []).map(r => ({ name: r.name, unit: r.unit, qty: r.qty != null ? String(r.qty) : '' }));
