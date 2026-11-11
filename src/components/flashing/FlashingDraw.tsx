@@ -4,7 +4,7 @@
 // тож таблиця сторін і креслення завжди збігаються.
 // ============================================
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Core, FElem, Hem, Pt, coreHeads, corePts, joinCore, ptsToCore, splitCore } from './flashing';
+import { Core, FElem, HEM_LEN, Hem, Pt, coreHeads, corePts, joinCore, ptsToCore, splitCore } from './flashing';
 import { segLetter } from './FlashingSvg';
 import NumIn from './NumIn';
 
@@ -34,6 +34,8 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
   const undo = useRef<Pick<FElem, 'segs' | 'start' | 'paint'>[]>([]);
   const [, force] = useState(0);
   const popEdited = useRef(false);
+  const pinch = useRef<{ d: number; mx: number; my: number; v: View } | null>(null);
+  const touched2 = useRef(false);     // у жесті був другий палець — клік/точку не ставимо
 
   const core = useMemo(() => splitCore(e), [e]);
   const hs = core.hemS ? 1 : 0;
@@ -102,20 +104,54 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
       const k = Math.max(0.05, Math.min(40, v.k * f)), q = k / v.k;
       setView({ k, tx: sx - (sx - v.tx) * q, ty: sy - (sy - v.ty) * q });
     };
+    // Два пальці — масштаб і рух; один палець — як миша (pointer-події)
+    const two = (t: TouchList) => {
+      const r = el.getBoundingClientRect(), a = t[0], b = t[1];
+      return { d: Math.max(1, Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)), mx: (a.clientX + b.clientX) / 2 - r.left, my: (a.clientY + b.clientY) / 2 - r.top };
+    };
+    const onTS = (ev: TouchEvent) => {
+      if (ev.touches.length === 1) touched2.current = false;
+      if (ev.touches.length >= 2) { touched2.current = true; pinch.current = { ...two(ev.touches), v: viewRef.current }; }
+    };
+    const onTM = (ev: TouchEvent) => {
+      const p = pinch.current;
+      if (!p || ev.touches.length < 2) return;
+      ev.preventDefault();
+      const c = two(ev.touches), k = Math.max(0.05, Math.min(40, p.v.k * c.d / p.d)), q = k / p.v.k;
+      setView({ k, tx: c.mx - (p.mx - p.v.tx) * q, ty: c.my - (p.my - p.v.ty) * q });
+    };
+    const onTE = (ev: TouchEvent) => { if (ev.touches.length < 2) pinch.current = null; };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    el.addEventListener('touchstart', onTS, { passive: true });
+    el.addEventListener('touchmove', onTM, { passive: false });
+    el.addEventListener('touchend', onTE);
+    el.addEventListener('touchcancel', onTE);
+    return () => {
+      el.removeEventListener('wheel', onWheel); el.removeEventListener('touchstart', onTS);
+      el.removeEventListener('touchmove', onTM); el.removeEventListener('touchend', onTE); el.removeEventListener('touchcancel', onTE);
+    };
   }, []);
+  const zoomBy = (f: number) => {
+    const v = viewRef.current, k = Math.max(0.05, Math.min(40, v.k * f)), q = k / v.k, cx = W / 2, cy = H / 2;
+    setView({ k, tx: cx - (cx - v.tx) * q, ty: cy - (cy - v.ty) * q });
+  };
 
   // Рух креслення з порожнього місця; без руху — onClick
   const startPan = (ev: React.PointerEvent, onClick?: () => void) => {
     const x0 = ev.clientX, y0 = ev.clientY, v0 = viewRef.current;
     let moved = false;
+    if (pinch.current) return;
     const move = (m: PointerEvent) => {
+      if (pinch.current || touched2.current) { moved = true; return; }
       const dx = m.clientX - x0, dy = m.clientY - y0;
-      if (!moved && Math.abs(dx) + Math.abs(dy) > 4) { moved = true; setPanning(true); }
+      if (!moved && Math.abs(dx) + Math.abs(dy) > (m.pointerType === 'touch' ? 8 : 4)) { moved = true; setPanning(true); }
       if (moved) setView({ ...v0, tx: v0.tx + dx, ty: v0.ty + dy });
     };
-    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); setPanning(false); if (!moved) onClick?.(); };
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+      setPanning(false); if (!moved && !touched2.current) onClick?.();
+    };
+    window.addEventListener('pointercancel', up);
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
 
@@ -155,7 +191,8 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
     const hd = heads;
     let moved = false;
     const move = (m: PointerEvent) => {
-      if (!moved && Math.abs(m.clientX - x0) + Math.abs(m.clientY - y0) > 3) { moved = true; pushUndo(); setPop(null); }
+      if (pinch.current) return;
+      if (!moved && Math.abs(m.clientX - x0) + Math.abs(m.clientY - y0) > (m.pointerType === 'touch' ? 6 : 3)) { moved = true; pushUndo(); setPop(null); }
       if (!moved) return;
       const raw = toWorld(m.clientX, m.clientY), free = m.shiftKey;
       const np = j > 0 ? snapFrom(base[j - 1], raw, j >= 2 ? hd[j - 2] : null, free)
@@ -165,7 +202,7 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
     };
     const up = (m: PointerEvent) => {
       window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
-      if (!moved) { const r = wrapRef.current!.getBoundingClientRect(); openPop('pt', j, m.clientX - r.left, m.clientY - r.top); }
+      if (!moved && !touched2.current) { const r = wrapRef.current!.getBoundingClientRect(); openPop('pt', j, m.clientX - r.left, m.clientY - r.top); }
     };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
@@ -175,6 +212,12 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
     if (ev.button !== 0) return;
     const r = wrapRef.current!.getBoundingClientRect();
     openPop('seg', i, ev.clientX - r.left, ev.clientY - r.top);
+  };
+  const onHemDown = (ev: React.PointerEvent, j: number) => {
+    ev.stopPropagation();
+    if (ev.button !== 0) return;
+    const r = wrapRef.current!.getBoundingClientRect();
+    openPop('pt', j, ev.clientX - r.left, ev.clientY - r.top);
   };
   const editOnce = () => { if (!popEdited.current) { popEdited.current = true; pushUndo(); } };
 
@@ -194,6 +237,7 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
     else commitPts(p, j === 0 ? null : core.hemS, j === pts.length - 1 ? null : core.hemE);
     setPop(null);
   };
+  const hemSide = (-e.paint) as 1 | -1;   // закатка — на нефарбований бік
   const flipPaint = () => { pushUndo(); onChange({ paint: (-e.paint) as 1 | -1 }); };
 
   // ---- клавіші ----
@@ -267,6 +311,14 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
         <div className="kp-prompt fd-pop" style={{ left, top }} onPointerDown={ev => ev.stopPropagation()}>
           {head(<>Сторона <b>{segLetter(fullIdx(pop.idx))}</b></>)}
           <label><span>Довжина, мм</span><NumIn autoFocus value={s.len} step={1} onEnter={() => setPop(null)} onChange={v => setCoreSeg(pop.idx, { len: Math.max(0.1, v) })} /></label>
+          {(pop.idx === 0 || pop.idx === core.segs.length - 1) && <div className="fd-pop-btns">
+            {pop.idx === 0 && (core.hemS
+              ? <button type="button" className="btn btn-ghost btn-sm fl-del" onClick={() => setHem('S', null)}>{core.segs.length > 1 ? 'Прибрати завальцювання' : 'Прибрати завальцювання початку'}</button>
+              : <button type="button" className="btn btn-primary btn-sm" onClick={() => setHem('S', { len: HEM_LEN, dir: hemSide })}>{core.segs.length > 1 ? '⟲ Завальцювати' : '⟲ Завальцювати початок'}</button>)}
+            {pop.idx === core.segs.length - 1 && (core.hemE
+              ? <button type="button" className="btn btn-ghost btn-sm fl-del" onClick={() => setHem('E', null)}>{core.segs.length > 1 ? 'Прибрати завальцювання' : 'Прибрати завальцювання кінця'}</button>
+              : <button type="button" className="btn btn-primary btn-sm" onClick={() => setHem('E', { len: HEM_LEN, dir: hemSide })}>{core.segs.length > 1 ? '⟲ Завальцювати' : '⟲ Завальцювати кінець'}</button>)}
+          </div>}
           <div className="fd-pop-btns">
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => splitSeg(pop.idx)}>Розділити навпіл</button>
           </div>
@@ -292,10 +344,8 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
             <button type="button" className="btn btn-ghost btn-sm fl-del" onClick={() => setHem(endKey, null)}>Прибрати закатку</button>
           </div>
         </> : <>
-          <span className="fd-pop-sub">Закатка (завальцювання краю):</span>
           <div className="fd-pop-btns">
-            <button type="button" className="fl-dir" onClick={() => setHem(endKey, { len: 12, dir: 1 })}>+ закатка ↺</button>
-            <button type="button" className="fl-dir" onClick={() => setHem(endKey, { len: 12, dir: -1 })}>+ закатка ↻</button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => setHem(endKey, { len: HEM_LEN, dir: hemSide })}>⟲ Завальцювати</button>
           </div>
         </>)}
         <div className="fd-pop-btns">
@@ -319,6 +369,8 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
         <button type="button" className={'fd-tb' + (snap ? ' on' : '')} onClick={() => setSnap(!snap)} title="Довжина кроком, кут кроком 5°. Shift — тимчасово без прив'язки">⌗ Прив'язка</button>
         <span className="fd-sep" />
         <button type="button" className="fd-tb" disabled={!undo.current.length} onClick={doUndo} title="Відмінити (Ctrl+Z)">↶</button>
+        <button type="button" className="fd-tb" onClick={() => zoomBy(1.3)} title="Збільшити">＋</button>
+        <button type="button" className="fd-tb" onClick={() => zoomBy(1 / 1.3)} title="Зменшити">－</button>
         <button type="button" className="fd-tb" onClick={() => fit()} title="Вмістити креслення">⊡</button>
         <button type="button" className="fd-tb" onClick={restart} title="Стерти і накреслити заново">⟲ Заново</button>
       </div>
@@ -332,8 +384,12 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
           {hemSG && paintLine(hemSG.a, hemSG.b, hemSG.h, 'phs')}
           {hemEG && paintLine(hemEG.a, hemEG.b, hemEG.h, 'phe')}
           {/* закатки */}
-          {hemSG && <>{hemArc(hemSG, 'ahs')}<line x1={S(hemSG.a)[0]} y1={S(hemSG.a)[1]} x2={S(hemSG.b)[0]} y2={S(hemSG.b)[1]} className={ink + (hi === 0 ? ' on' : '')} /></>}
-          {hemEG && <>{hemArc(hemEG, 'ahe')}<line x1={S(hemEG.a)[0]} y1={S(hemEG.a)[1]} x2={S(hemEG.b)[0]} y2={S(hemEG.b)[1]} className={ink + (hi === nSeg - 1 ? ' on' : '')} /></>}
+          {hemSG && <g onPointerDown={mode === 'edit' ? ev => onHemDown(ev, 0) : undefined} style={{ cursor: 'pointer', pointerEvents: mode === 'draw' ? 'none' : undefined }}>{hemArc(hemSG, 'ahs')}
+            <line x1={S(hemSG.a)[0]} y1={S(hemSG.a)[1]} x2={S(hemSG.b)[0]} y2={S(hemSG.b)[1]} stroke="transparent" strokeWidth={16} />
+            <line x1={S(hemSG.a)[0]} y1={S(hemSG.a)[1]} x2={S(hemSG.b)[0]} y2={S(hemSG.b)[1]} className={ink + (hi === 0 ? ' on' : '')} /></g>}
+          {hemEG && <g onPointerDown={mode === 'edit' ? ev => onHemDown(ev, pts.length - 1) : undefined} style={{ cursor: 'pointer', pointerEvents: mode === 'draw' ? 'none' : undefined }}>{hemArc(hemEG, 'ahe')}
+            <line x1={S(hemEG.a)[0]} y1={S(hemEG.a)[1]} x2={S(hemEG.b)[0]} y2={S(hemEG.b)[1]} stroke="transparent" strokeWidth={16} />
+            <line x1={S(hemEG.a)[0]} y1={S(hemEG.a)[1]} x2={S(hemEG.b)[0]} y2={S(hemEG.b)[1]} className={ink + (hi === nSeg - 1 ? ' on' : '')} /></g>}
           {/* сторони */}
           {core.segs.map((_, i) => {
             const A = S(pts[i]), B = S(pts[i + 1]), on = hi === fullIdx(i) || (pop?.kind === 'seg' && pop.idx === i);
@@ -372,15 +428,17 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
           {/* вершини */}
           {pts.map((p, j) => {
             const P = S(p), end = j === 0 || j === pts.length - 1;
-            return <circle key={'v' + j} cx={P[0]} cy={P[1]} r={end ? 4.5 : 4} className={'fd-pt' + (end ? ' end' : '') + (pop?.kind === 'pt' && pop.idx === j ? ' on' : '')}
-              onPointerDown={mode === 'edit' ? ev => startDrag(ev, j) : undefined} style={{ pointerEvents: mode === 'draw' ? 'none' : undefined, cursor: 'grab' }} />;
+            return <g key={'v' + j} onPointerDown={mode === 'edit' ? ev => startDrag(ev, j) : undefined} style={{ pointerEvents: mode === 'draw' ? 'none' : undefined, cursor: 'grab' }}>
+              <circle cx={P[0]} cy={P[1]} r={13} fill="transparent" />
+              <circle cx={P[0]} cy={P[1]} r={end ? 4.5 : 4} className={'fd-pt' + (end ? ' end' : '') + (pop?.kind === 'pt' && pop.idx === j ? ' on' : '')} />
+            </g>;
           })}
         </svg>
         {popBox}
         <div className="fd-hint">
           {mode === 'draw'
             ? (pts.length ? 'Клік — наступна точка · подвійний клік / Enter / ПКМ — завершити · Backspace — прибрати останню · Shift — без прив\'язки' : 'Клікніть, де починається профіль')
-            : 'Тягніть вершини · клік по стороні — довжина · по вершині — кут, закатка · колесо — масштаб · тягніть фон — рух'}
+            : 'Тягніть вершини · клік по стороні — довжина, завальцювати · по вершині — кут · колесо / два пальці — масштаб · тягніть фон — рух'}
         </div>
       </div>
     </div>

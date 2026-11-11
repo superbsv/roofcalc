@@ -4,8 +4,8 @@
 // ============================================
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { catApi } from '../components/catalog/CatalogNav';
-import FlashingSvg, { segLetter } from '../components/flashing/FlashingSvg';
-import { FDoc, FElem, FSeg, FLASH_TEMPLATES, Nest, blankCalc, emptyDoc, girth, nestPlan, newElem, newId } from '../components/flashing/flashing';
+import FlashingSvg from '../components/flashing/FlashingSvg';
+import { FDoc, FElem, FLASH_TEMPLATES, Nest, blankCalc, emptyDoc, girth, nestPlan, newElem, newId } from '../components/flashing/flashing';
 import FlashingDraw from '../components/flashing/FlashingDraw';
 import NumIn from '../components/flashing/NumIn';
 import { specToPdf } from '../components/spec/specExport';
@@ -21,13 +21,6 @@ function ElemEditor({ e, sheetW, sheetL, onChange, onDel, onDup, onMove, idx, to
   { e: FElem; sheetW: number; sheetL: number; onChange: (p: Partial<FElem>) => void; onDel: () => void; onDup: () => void; onMove: (d: number) => void; idx: number; total: number }) {
   const [hi, setHi] = useState(-1);
   const c = blankCalc(e, sheetW, sheetL);
-  const setSeg = (i: number, p: Partial<FSeg>) => onChange({ segs: e.segs.map((s, k) => k === i ? { ...s, ...p } : s) });
-  const addSeg = (i: number) => {
-    const segs = [...e.segs];
-    segs.splice(i + 1, 0, { len: 50, ang: 90, dir: segs[i]?.dir || 1 });
-    onChange({ segs });
-  };
-  const delSeg = (i: number) => { if (e.segs.length > 1) onChange({ segs: e.segs.filter((_, k) => k !== i) }); };
   // Дзеркально: усі загини в інший бік, напрям першої сторони відбивається
   const mirror = () => onChange({ segs: e.segs.map(s => ({ ...s, dir: (-s.dir) as 1 | -1 })), start: (540 - e.start) % 360, paint: (-e.paint) as 1 | -1 });
   // Креслити з іншого кінця: зворотний порядок сторін
@@ -59,47 +52,10 @@ function ElemEditor({ e, sheetW, sheetL, onChange, onDel, onDup, onMove, idx, to
           <FlashingDraw e={e} onChange={onChange} hi={hi} setHi={setHi} />
           <div className="fl-legend"><i className="fl-paintmark" /> <span>фарбована сторона</span> · <span>a, b, c… — сторони</span> · <span>⟲ — закатка</span></div>
         </div>
-        <div className="fl-segs">
-          <table className="fl-segtab">
-            <thead><tr><th></th><th>Сторона, мм</th><th>Кут після, °</th><th>Загин</th><th></th></tr></thead>
-            <tbody>
-              {e.segs.map((s, i) => (
-                <tr key={i} className={i === hi ? 'on' : ''} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(-1)}>
-                  <td className="fl-l">{segLetter(i)}</td>
-                  <td><NumIn value={s.len} step={1} onChange={v => setSeg(i, { len: Math.max(0, v) })} /></td>
-                  {i < e.segs.length - 1 ? <>
-                    <td><NumIn value={s.ang} step={1} title="Внутрішній кут між цією і наступною стороною: 90° — прямий, 135° — тупий, 0° — закатка"
-                      onChange={v => setSeg(i, { ang: Math.max(0, Math.min(180, v)) })} /></td>
-                    <td>
-                      <button type="button" className="fl-dir" onClick={() => setSeg(i, { dir: (-s.dir) as 1 | -1 })} title="Загин уліво / управо">
-                        {s.dir > 0 ? '↺ ліво' : '↻ право'}</button>
-                    </td>
-                  </> : <><td className="fl-end" colSpan={2}>кінець</td></>}
-                  <td className="fl-rowbtn">
-                    <button type="button" onClick={() => addSeg(i)} title="Додати сторону після цієї">+</button>
-                    <button type="button" disabled={e.segs.length < 2} onClick={() => delSeg(i)} title="Видалити сторону">−</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="fl-quick">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange({ segs: [{ len: 12, ang: 0, dir: e.segs[0]?.dir || 1 }, ...e.segs] })} title="Закатка 12 мм на початку">+ закатка на початку</button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
-              const segs = e.segs.map((s, i) => i === e.segs.length - 1 ? { ...s, ang: 0, dir: s.dir } : s);
-              onChange({ segs: [...segs, { len: 12, ang: 90, dir: 1 }] });
-            }} title="Закатка 12 мм у кінці">+ закатка в кінці</button>
-          </div>
-          <div className="fl-params">
-            <label><span>Напрям 1-ї сторони, °</span><NumIn value={e.start} step={5} onChange={v => onChange({ start: v })} /></label>
-            <label><span>Фарбована сторона</span>
-              <button type="button" className="fl-dir" onClick={() => onChange({ paint: (-e.paint) as 1 | -1 })}>{e.paint > 0 ? '◐ ліва' : '◑ права'}</button></label>
-            <label><span>Довжина виробу, мм</span><NumIn value={e.length} step={50} onChange={v => onChange({ length: Math.max(0, v) })} /></label>
-            <label><span>Кількість, шт</span><NumIn value={e.qty} step={1} onChange={v => onChange({ qty: Math.max(0, Math.round(v)) })} /></label>
-          </div>
-        </div>
       </div>
       <div className="fl-metrics">
+        <label className="fl-inl"><span>Довжина, мм</span><NumIn value={e.length} step={50} onChange={v => onChange({ length: Math.max(0, v) })} /></label>
+        <label className="fl-inl"><span>Кількість, шт</span><NumIn value={e.qty} step={1} onChange={v => onChange({ qty: Math.max(0, Math.round(v)) })} /></label>
         <span>Ширина заготовки: <b>{f1(c.girth)} мм</b></span>
         <span>Загинів: <b>{c.bends}</b></span>
         <span>Заготовок з листа: <b>{c.strips} шт</b></span>
@@ -255,7 +211,7 @@ export default function FlashingPage() {
         {!cur ? (
           <div className="card fl-empty no-print">
             <p>Виберіть креслення зліва або створіть нове.</p>
-            <p className="text-muted">Елемент креслиться сторонами: довжина сторони в мм і внутрішній кут загину після неї (90° — прямий, 135° — тупий, 0° — закатка). Розгортка і кількість заготовок з листа рахуються автоматично.</p>
+            <p className="text-muted">Елемент креслиться мишкою або пальцем: точка за точкою, потім клік по стороні — точна довжина або завальцювання, по вершині — кут. Ширина заготовки і кількість листів рахуються автоматично.</p>
           </div>
         ) : (
           <div className="fl-main">
