@@ -9,6 +9,7 @@ namespace RoofCalc\Api\Catalog;
 
 use RoofCalc\Core\Auth;
 use RoofCalc\Core\Catalog;
+use RoofCalc\Core\CatalogHistory;
 use RoofCalc\Core\Database;
 
 class CatalogController
@@ -125,6 +126,7 @@ class CatalogController
         }
         $mf = array_key_exists('manufacturer', $b) ? (string)(Catalog::canonicalManufacturer($b['manufacturer'], $this->platform() ? null : (int)$this->me['tid']) ?? '') : null;
         $moved = 0; $skipped = 0; $wrongType = 0;
+        $before = CatalogHistory::snap($ids);
         foreach ($ids as $id) {
             $m = Database::fetchOne('SELECT id, tenant_id, type FROM material_profiles WHERE id = ? AND deleted = 0', [$id]);
             if (!$m || !$this->canEdit($m)) { $skipped++; continue; }
@@ -141,6 +143,14 @@ class CatalogController
             $moved++;
         }
         if ($wrongType && !$moved) $this->error('Цей розділ має інший тип розрахунку — перетягувати можна лише в розділи того ж типу');
+        if ($moved) {
+            $after = []; foreach (CatalogHistory::snap($ids) as $r) $after[$r['id']] = $r;
+            $before = array_values(array_filter($before, function ($r) use ($after) { return isset($after[$r['id']]) && $after[$r['id']] != $r; }));
+            $cnt = count($before); $one = $before[0]['name'] ?? ''; $sn = $sec['name'] ?? ''; $mn = $mf ?: '—';
+            if ($sec) $label = $cnt === 1 ? "Переміщено «{$one}» у розділ «{$sn}»" : "Переміщено {$cnt} поз. у розділ «{$sn}»";
+            else      $label = $cnt === 1 ? "Переміщено «{$one}» до виробника «{$mn}»" : "Переміщено {$cnt} поз. до виробника «{$mn}»";
+            CatalogHistory::record($label, $before);
+        }
         $this->json(['moved' => $moved, 'skipped' => $skipped, 'wrong_type' => $wrongType]);
     }
 
@@ -173,13 +183,14 @@ class CatalogController
         $this->requireAdmin();
         $ids = array_slice(array_map('intval', (array)($this->body()['ids'] ?? [])), 0, 500);
         [$w, $p] = Catalog::librarySql();
-        $copied = 0; $skipped = 0;
+        $copied = 0; $skipped = 0; $new = [];
         foreach ($ids as $id) {
             if (!Database::fetchOne("SELECT id FROM material_profiles WHERE id = ? AND $w", array_merge([$id], $p))) { $skipped++; continue; }
             if (Database::fetchOne('SELECT id FROM material_profiles WHERE tenant_id = ? AND source_id = ? AND deleted = 0', [$this->me['tid'], $id])) { $skipped++; continue; }
-            Catalog::copyMaterial($id, (int)$this->me['tid']);
+            $new[] = Catalog::copyMaterial($id, (int)$this->me['tid']);
             $copied++;
         }
+        CatalogHistory::record("Додано з каталогу ROOFKIT: $copied поз.", [], $new);
         $this->json(['copied' => $copied, 'skipped' => $skipped]);
     }
 
@@ -215,7 +226,7 @@ class CatalogController
         $sections = Database::fetchAll('SELECT * FROM catalog_sections');
         $secByName = [];
         foreach ($sections as $sc) $secByName[mb_strtolower(trim($sc['name']))] = $sc;
-        $created = 0; $updated = 0; $errors = [];
+        $created = 0; $updated = 0; $errors = []; $hBefore = []; $hNew = [];
         foreach ($rows as $i => $r) {
             $line = $i + 2;
             if (!is_array($r)) continue;
@@ -254,6 +265,7 @@ class CatalogController
             if ($existing) {
                 if ($sec && (int)$existing['section_id'] !== (int)$sec['id'] && $sec['calc_type'] === $existing['type']) $vals['section_id'] = $sec['id'];
                 $set = implode(', ', array_map(function ($k) { return "$k = ?"; }, array_keys($vals)));
+                $hBefore[] = $existing;
                 Database::query("UPDATE material_profiles SET $set WHERE id = ?", array_merge(array_values($vals), [$existing['id']]));
                 $updated++;
             } else {
@@ -262,11 +274,35 @@ class CatalogController
                 $vals['type'] = $sec['calc_type']; $vals['section_id'] = $sec['id']; $vals['tenant_id'] = $tid;
                 $vals['sort_order'] = (int)(Database::fetchOne('SELECT MAX(sort_order) m FROM material_profiles WHERE section_id = ?', [$sec['id']])['m'] ?? 0) + 10;
                 $newId = Database::insert('INSERT INTO material_profiles (' . implode(',', array_keys($vals)) . ') VALUES (' . implode(',', array_fill(0, count($vals), '?')) . ')', array_values($vals));
-                if ($tid === null) Catalog::propagateNew((int)$newId);   // імпорт у каталог ROOFKIT — копії всім кабінетам
+                $hNew[] = (int)$newId;
+                if ($tid === null) {   // імпорт у каталог ROOFKIT — копії всім кабінетам
+                    Catalog::propagateNew((int)$newId);
+                    $hNew = array_merge($hNew, array_map('intval', array_column(Database::fetchAll('SELECT id FROM material_profiles WHERE source_id = ?', [$newId]), 'id')));
+                }
                 $created++;
             }
         }
+        CatalogHistory::record("Імпорт з файлу: нових $created, оновлено $updated", $hBefore, $hNew);
         $this->json(['created' => $created, 'updated' => $updated, 'errors' => array_slice($errors, 0, 50), 'errors_count' => count($errors)]);
+    }
+
+    // GET /catalog/history — останні дії з каталогом цього кабінету
+    public function history(): void
+    {
+        $this->requireAdmin();
+        $this->json(['items' => CatalogHistory::list((int)$this->me['tid'])]);
+    }
+
+    // POST /catalog/history/{id}/undo — скасувати дію
+    public function undo(int $id): void
+    {
+        $this->requireAdmin();
+        try {
+            $n = CatalogHistory::undo($id, (int)$this->me['tid']);
+        } catch (\RuntimeException $e) {
+            $this->error($e->getMessage());
+        }
+        $this->json(['restored' => $n, 'items' => CatalogHistory::list((int)$this->me['tid'])]);
     }
 
     private function body(): array { return json_decode(file_get_contents('php://input'), true) ?? []; }

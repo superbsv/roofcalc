@@ -8,6 +8,7 @@ import { MATERIAL_TYPES, isFixedType } from '../components/roof/materials';
 import { useAuth } from '../components/auth/AuthContext';
 import { useSections, catalogChanged, CATALOG_EVENT, MAT_DND } from '../components/catalog/CatalogNav';
 import LibraryPicker from '../components/catalog/LibraryPicker';
+import CatalogHistory from '../components/catalog/CatalogHistory';
 import ManufacturerSelect, { useManufacturers, canonicalMf } from '../components/catalog/ManufacturerSelect';
 import { exportCatalog, importCatalog } from '../components/catalog/catalogIO';
 
@@ -177,6 +178,7 @@ export default function ProductsPage({ section, onSection }: { section?: number;
   const isAdmin = user?.role === 'admin';
   const mfList = useManufacturers();
   const [lib, setLib] = useState(false);
+  const [hist, setHist] = useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
   const doExport = async () => {
     setError(''); setSuccess('');
@@ -407,6 +409,8 @@ export default function ProductsPage({ section, onSection }: { section?: number;
               <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" hidden onChange={e => doImport(e.target.files?.[0])} />
             </div>
           )}
+          {isAdmin && <button className="btn btn-ghost btn-sm prod-histbtn" onClick={() => setHist(true)} title="Останні зміни каталогу — можна скасувати">🕘 Історія дій</button>}
+          {hist && <CatalogHistory onClose={() => setHist(false)} onUndone={() => { setSelected(null); setIsNew(false); loadMaterials(); }} />}
           {isAdmin && <div className="prod-dnd-hint">Перетягуйте матеріали, щоб змінити порядок, виробника або розділ</div>}
           {lib && <LibraryPicker section={secId} onClose={() => setLib(false)} onCopied={n => { setSuccess(`Скопійовано в ваш каталог: ${n}`); loadMaterials(); }} />}
         </div>

@@ -28,6 +28,7 @@ spl_autoload_register(function (string $class) {
 // нових класів немає в classmap composer на сервері — підключаємо явно
 require_once SRC_PATH . '/core/Plans.php';
 require_once SRC_PATH . '/core/Catalog.php';
+require_once SRC_PATH . '/core/CatalogHistory.php';
 require_once SRC_PATH . '/api/super/SuperController.php';
 require_once SRC_PATH . '/api/tenant/TenantController.php';
 require_once SRC_PATH . '/api/widget/WidgetController.php';
@@ -133,6 +134,8 @@ try {
         case $method==='GET' &&$uri==='/catalog/export':       (new CatalogController)->export(); break;
         case $method==='POST'&&$uri==='/catalog/import':       (new CatalogController)->import(); break;
         case $method==='POST'&&$uri==='/catalog/move':         (new CatalogController)->move(); break;
+        case $method==='GET' &&$uri==='/catalog/history':      (new CatalogController)->history(); break;
+        case $method==='POST'&&preg_match('#^/catalog/history/(\d+)/undo$#',$uri,$m): (new CatalogController)->undo((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/materials/section/(\d+)$#',$uri,$m): (new MaterialsController)->bySection((int)$m[1]); break;
         case $method==='GET' &&$uri==='/materials':            (new MaterialsController)->index(); break;
         case $method==='GET' &&preg_match('#^/materials/(tile|profile|falts|siding|sandwich|tile_module|sheet|natural_tile)$#',$uri,$m): (new MaterialsController)->byType($m[1]); break;

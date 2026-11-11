@@ -205,7 +205,12 @@ class AdminController
         $extra[] = 'tenant_id = ?'; $vals[] = (!empty($me['sa']) && empty($me['imp'])) ? null : $me['tid'];
         $vals[] = $id; Database::query('UPDATE material_profiles SET ' . implode(', ', $extra) . ' WHERE id = ?', $vals);
         // нова позиція каталогу ROOFKIT — одразу в особистих каталогах усіх кабінетів
-        if (!empty($me['sa']) && empty($me['imp'])) \RoofCalc\Core\Catalog::propagateNew((int)$id);
+        $copies = [];
+        if (!empty($me['sa']) && empty($me['imp'])) {
+            \RoofCalc\Core\Catalog::propagateNew((int)$id);
+            $copies = array_column(Database::fetchAll('SELECT id FROM material_profiles WHERE source_id = ?', [$id]), 'id');
+        }
+        \RoofCalc\Core\CatalogHistory::record('Додано: ' . trim(($body['manufacturer'] ?? '') . ' ' . $body['name']), [], array_merge([(int)$id], $copies));
 
         $this->log('admin.material.create', 'material', $id);
         $this->json(['id' => $id, 'message' => 'Профіль створено'], 201);
@@ -239,7 +244,9 @@ class AdminController
         $mat = Database::fetchOne('SELECT id, name, tenant_id FROM material_profiles WHERE id = ? AND deleted = 0', [$id]);
         if (!$mat) $this->error('Матеріал не знайдено', 404);
         if (!$this->canEditMaterial($me, $mat)) $this->error('Видаляти можна лише власні матеріали кабінету', 403);
+        $before = \RoofCalc\Core\CatalogHistory::snap([$id]);
         $r = $this->removeMaterial($id);
+        \RoofCalc\Core\CatalogHistory::record('Видалено: ' . $mat['name'], $before);
         $this->log('material.delete', 'material', $id, ['name' => $mat['name'], 'result' => $r]);
         $this->json(['result' => $r]);
     }
@@ -255,11 +262,16 @@ class AdminController
         $ids = array_map('intval', (array)($b['ids'] ?? []));
         if ($type === '' || !$ids) $this->error('Не вказано матеріали');
         $done = 0; $hidden = 0; $skipped = 0;
+        $before = \RoofCalc\Core\CatalogHistory::snap($ids);
         foreach ($ids as $id) {
             $mat = Database::fetchOne('SELECT id, tenant_id FROM material_profiles WHERE id = ? AND type = ? AND deleted = 0', [$id, $type]);
             if (!$mat || !$this->canEditMaterial($me, $mat)) { $skipped++; continue; }
             $this->removeMaterial($id) === 'hidden' ? $hidden++ : $done++;
         }
+        $gone = array_column(Database::fetchAll('SELECT id FROM material_profiles WHERE deleted = 0 AND id IN (' . implode(',', array_map('intval', $ids)) . ')'), 'id');
+        $before = array_values(array_filter($before, function ($r) use ($gone) { return !in_array($r['id'], $gone); }));
+        $n = count($before);
+        \RoofCalc\Core\CatalogHistory::record($mf !== '' ? "Видалено виробника «{$mf}»: {$n} поз." : "Видалено: {$n} поз.", $before);
         $this->log('material.delete_group', 'material', 0, ['manufacturer' => $mf, 'type' => $type, 'deleted' => $done, 'hidden' => $hidden, 'skipped' => $skipped]);
         $this->json(['deleted' => $done, 'hidden' => $hidden, 'skipped' => $skipped]);
     }
@@ -300,7 +312,9 @@ class AdminController
 
         if (!$fields) $this->error('Немає полів для оновлення', 400);
         $params[] = $id;
+        $before = \RoofCalc\Core\CatalogHistory::snap([$id]);
         Database::query('UPDATE material_profiles SET ' . implode(', ', $fields) . ' WHERE id = ?', $params);
+        if ($before && $before != \RoofCalc\Core\CatalogHistory::snap([$id])) \RoofCalc\Core\CatalogHistory::record('Змінено: ' . trim(($before[0]['manufacturer'] ?? '') . ' ' . $before[0]['name']), $before);
 
         $this->log('admin.material.update', 'material', $id);
         $this->json(['message' => 'Профіль оновлено']);
