@@ -523,6 +523,22 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
   };
   const nudgeEnd = () => notifyChange(ptsRef.current);
   // «Скасувати» у вікні вершини повертає точку туди, де вона була до стрілок
+  // Вікно вершини / сторони можна перетягнути за заголовок; позиція запам'ятовується до кінця роботи з кресленням
+  const [promptPos, setPromptPos] = useState<{ left: number; top: number } | null>(null);
+  const promptBox = useRef<HTMLDivElement>(null);
+  const startPromptDrag = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    const box = promptBox.current, wrap = wrapRef.current;
+    if (!box || !wrap) return;
+    e.preventDefault();
+    const x0 = e.clientX, y0 = e.clientY, l0 = box.offsetLeft, t0 = box.offsetTop;
+    const move = (ev: PointerEvent) => {
+      const maxL = wrap.clientWidth - box.offsetWidth - 4, maxT = wrap.clientHeight - 40;
+      setPromptPos({ left: Math.max(4, Math.min(maxL, l0 + ev.clientX - x0)), top: Math.max(4, Math.min(maxT, t0 + ev.clientY - y0)) });
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  };
   const cancelPrompt = () => {
     if (prompt?.pts0) { setPoints(prompt.pts0); notifyChange(prompt.pts0); }
     setPrompt(null);
@@ -835,8 +851,12 @@ export default function SlopeEditor({ slope, calcResult, onPolygonChange, readOn
         </div>
         <div className="editor-coords">{coordsText}</div>
         {prompt && (
-          <div className="kp-prompt" style={{ left: Math.max(8, Math.min(prompt.x + 12, (wrapRef.current?.clientWidth || 600) - 250)), top: Math.max(8, Math.min(prompt.y + 12, (wrapRef.current?.clientHeight || 400) - (prompt.kind === 'angle' ? 300 : 130))) }}
+          <div ref={promptBox} className="kp-prompt" style={promptPos || { left: Math.max(8, Math.min(prompt.x + 12, (wrapRef.current?.clientWidth || 600) - 250)), top: Math.max(8, Math.min(prompt.y + 12, (wrapRef.current?.clientHeight || 400) - (prompt.kind === 'angle' ? 300 : 130))) }}
             onMouseDown={e => e.stopPropagation()}>
+            <div className="kp-prompt-head" onPointerDown={startPromptDrag} title="Перетягніть, щоб пересунути вікно">
+              <span><i className="kp-grip">⠿</i> <span>{prompt.kind === 'angle' ? 'Вершина' : 'Сторона'}</span></span>
+              <button type="button" className="kp-x" onClick={cancelPrompt} onPointerDown={e => e.stopPropagation()} aria-label="Закрити">×</button>
+            </div>
             {prompt.kind === 'angle' && (
               <div className="kp-prompt-xy">
                 {(['px', 'py'] as const).map((k, i) => (
