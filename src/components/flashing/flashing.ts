@@ -17,7 +17,7 @@ export interface FElem {
   note?: string;
 }
 export interface FDoc {
-  client?: string; color?: string; coating?: string; thickness?: string;
+  client?: string; color?: string; coating?: string; thickness?: string; maker?: string;   // maker — виробник металу
   sheet_width: number;    // ширина листа / рулону металу, мм
   sheet_length?: number;  // довжина листа, мм (стандарт 2000 — виріб завжди на всю довжину листа)
   nest?: boolean;         // оптимальний розкрій: змішувати заготовки різних елементів на одному листі

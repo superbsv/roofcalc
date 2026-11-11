@@ -258,8 +258,12 @@ export default function FlashingPage() {
                 <label className="fl-wide"><span>Назва креслення</span><input className="form-control" value={cur.name} onChange={e => patch({ name: e.target.value })} data-no-i18n /></label>
                 <label><span>Клієнт / об'єкт</span><input className="form-control" value={cur.client_name} onChange={e => patch({ client_name: e.target.value })} data-no-i18n /></label>
                 <label><span>Колір (RAL)</span><input className="form-control" value={cur.data.color || ''} onChange={e => patchDoc({ color: e.target.value })} data-no-i18n /></label>
-                <label><span>Покриття</span><input className="form-control" value={cur.data.coating || ''} onChange={e => patchDoc({ coating: e.target.value })} data-no-i18n /></label>
-                <label><span>Товщина, мм</span><input className="form-control" value={cur.data.thickness || ''} onChange={e => patchDoc({ thickness: e.target.value })} data-no-i18n /></label>
+                <label><span>Покриття</span><input className="form-control" list="fl-coatings" value={cur.data.coating || ''} onChange={e => patchDoc({ coating: e.target.value })} data-no-i18n /></label>
+                <label><span>Товщина, мм</span><input className="form-control" list="fl-thick" inputMode="decimal" value={cur.data.thickness || ''} onChange={e => patchDoc({ thickness: e.target.value })} data-no-i18n /></label>
+                <label><span>Виробник металу</span><input className="form-control" list="fl-makers" value={cur.data.maker || ''} onChange={e => patchDoc({ maker: e.target.value })} data-no-i18n /></label>
+                <datalist id="fl-coatings">{['Поліестер', 'Матовий поліестер', 'PURAL', 'PURAL Matt', 'Printech', 'Оцинкування'].map(v => <option key={v} value={v} />)}</datalist>
+                <datalist id="fl-thick">{['0.4', '0.45', '0.5', '0.55', '0.7'].map(v => <option key={v} value={v} />)}</datalist>
+                <datalist id="fl-makers">{['ArcelorMittal', 'Tata Steel', 'SSAB', 'U.S. Steel Košice', 'Marcegaglia', 'Thyssenkrupp', 'Dongbu (Корея)', 'Китай'].map(v => <option key={v} value={v} />)}</datalist>
                 <label><span>Лист металу, мм</span>
                   <span className="fl-sheet"><NumIn value={sw} step={10} title="Ширина листа" onChange={v => patchDoc({ sheet_width: Math.max(1, v) })} /> × <NumIn value={sl} step={50} title="Довжина листа" onChange={v => patchDoc({ sheet_length: Math.max(1, v) })} /></span></label>
                 <label className="fl-wide"><span>Примітка</span><input className="form-control" value={cur.data.note || ''} onChange={e => patchDoc({ note: e.target.value })} data-no-i18n /></label>
@@ -309,7 +313,7 @@ export default function FlashingPage() {
               <div className="fl-paper-head">
                 <div><span>Креслення:</span> <b data-no-i18n>{cur.name}</b></div>
                 <div><span>Клієнт / об'єкт:</span> <span data-no-i18n>{cur.client_name || '—'}</span></div>
-                <div><span>Колір:</span> <span data-no-i18n>{cur.data.color || '—'}</span> · <span>Покриття:</span> <span data-no-i18n>{cur.data.coating || '—'}</span> · <span>Товщина:</span> <span data-no-i18n>{cur.data.thickness || '—'}</span></div>
+                <div><span>Колір:</span> <span data-no-i18n>{cur.data.color || '—'}</span> · <span>Покриття:</span> <span data-no-i18n>{cur.data.coating || '—'}</span> · <span>Товщина:</span> <span data-no-i18n>{cur.data.thickness ? cur.data.thickness + ' мм' : '—'}</span> · <span>Виробник металу:</span> <span data-no-i18n>{cur.data.maker || '—'}</span></div>
                 <div><span>Дата:</span> {new Date().toLocaleDateString('uk-UA')} · <span>Лист:</span> {sw} × {sl} мм</div>
               </div>
               <div className="fl-paper-grid">
