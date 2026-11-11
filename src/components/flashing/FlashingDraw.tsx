@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Core, FElem, HEM_LEN, Hem, LabelReq, Pt, angOffset, coreHeads, dimOffset, placeLabels, textBox, corePts, joinCore, ptsToCore, splitCore } from './flashing';
 import NumIn from './NumIn';
+import { RAL_FS, RalArrow } from './FlashingSvg';
 
 type Pop = { kind: 'seg' | 'pt'; idx: number; x: number; y: number } | null;
 interface View { k: number; tx: number; ty: number }
@@ -282,7 +283,7 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
 
   const scr = (h: number): Pt => [Math.cos(h), -Math.sin(h)];             // напрям на екрані
   const scrN = (h: number, side: number): Pt => [-Math.sin(h) * side, -Math.cos(h) * side];   // ліва нормаль на екрані × side
-  // ---- підписи: розміри, кути, закатки, «колір» — без перетинів з лініями, точками і між собою ----
+  // ---- підписи: розміри, кути, закатки, стрілка RAL — без перетинів з лініями, точками і між собою ----
   const labels = (() => {
     type L = LabelReq & { t: string; cls: string; key: string };
     const out: L[] = [];
@@ -316,12 +317,14 @@ export default function FlashingDraw({ e, onChange, hi, setHi }:
     if (core.segs.length) {
       let m = 0; core.segs.forEach((q, i) => { if (q.len > core.segs[m].len) m = i; });
       const A = S(pts[m]), B = S(pts[m + 1]), n = scrN(heads[m], e.paint);
-      add('pm', 'колір', 'fd-paintmark', 9, (A[0] + B[0]) / 2, (A[1] + B[1]) / 2, n[0], n[1], dimOffset('колір', 9, n[0], n[1], 4));
+      add('pm', 'RAL', 'ral', RAL_FS, (A[0] + B[0]) / 2, (A[1] + B[1]) / 2, n[0], n[1], 18 + dimOffset('RAL', RAL_FS, n[0], n[1], 0));
     }
     const lines: [Pt, Pt][] = core.segs.map((_, i) => [S(pts[i]), S(pts[i + 1])]);
     [hemSG, hemEG].forEach(g => { if (g) lines.push([S(g.a), S(g.b)], [S(g.fold), S(g.core)]); });
     const pos = placeLabels(lines, pts.map(S), out);
-    return out.map((l, i) => <text key={l.key} x={pos[i][0]} y={pos[i][1]} className={l.cls} textAnchor="middle" dominantBaseline="central">{l.t}</text>);
+    return out.map((l, i) => l.cls === 'ral'
+      ? <RalArrow key={l.key} mx={l.ax} my={l.ay} nx={l.nx} ny={l.ny} lx={pos[i][0]} ly={pos[i][1]} color="var(--fl-ink)" />
+      : <text key={l.key} x={pos[i][0]} y={pos[i][1]} className={l.cls} textAnchor="middle" dominantBaseline="central">{l.t}</text>);
   })();
   const hemArc = (g: NonNullable<ReturnType<typeof hemGeo>>, key: string) => {
     const P = S(g.fold), Q = S(g.core), b = scr(Math.atan2(g.bulge[1], g.bulge[0]));

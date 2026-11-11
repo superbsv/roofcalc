@@ -1798,7 +1798,6 @@ tr:hover td { background: var(--clr-surface-2); }
 .fl-dim { font: 500 11px var(--font-mono, monospace); }
 .fl-dim-l { fill: var(--clr-brand); font-weight: 700; }
 .fl-ang { font: 10px var(--font-mono, monospace); opacity: .7; }
-.fl-paint-t { font: italic 9px var(--font-sans, sans-serif); fill: #888; }
 .fl-legend { font-size: .7rem; color: var(--clr-text-3); padding: 2px 0 4px; }
 .fl-paintmark { display: inline-block; width: 18px; height: 3px; background: var(--clr-brand); vertical-align: middle; border-radius: 2px; }
 .fl-metrics { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--clr-border); font-size: .8rem; color: var(--clr-text-2); }
@@ -1836,11 +1835,11 @@ g:hover > .fd-pt, .fd-pt.on { fill: var(--fl-ink); stroke: var(--fl-ink); }
 .fd-dim { font: 500 11px var(--font-mono, monospace); fill: var(--fl-ink); pointer-events: none; }
 .fd-dim.on { font-weight: 700; }
 .fd-hem-t { font-size: 10px; fill: var(--clr-text-2); }
-.fd-paintmark { font: italic 9px var(--font-sans, sans-serif); fill: var(--clr-text-3); pointer-events: none; letter-spacing: .02em; }
 .fd-ang { font: 10px var(--font-mono, monospace); fill: var(--clr-text-3); pointer-events: none; }
 .fd-prev { stroke: var(--clr-text-3); stroke-width: 1.2; stroke-dasharray: 4 3; }
 .fd-prev-pt { fill: var(--clr-text-3); }
 .fd-prev-t { font: 10px var(--font-mono, monospace); fill: var(--clr-text-2); }
+.fl-ral { font-family: var(--font-sans, sans-serif); letter-spacing: .04em; }
 .fd-hint { font-size: .66rem; color: var(--clr-text-3); padding: 2px 2px 0; }
 .fd-pop { width: 224px; padding: 8px; gap: 6px; }
 .fd-pop .kp-prompt-head { margin: -8px -8px 0; cursor: default; }

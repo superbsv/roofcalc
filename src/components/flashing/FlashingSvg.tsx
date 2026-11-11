@@ -5,6 +5,23 @@ import { FElem, angOffset, dimOffset, profileGeo } from './flashing';
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz';
 export const segLetter = (i: number) => LETTERS[i % 26] + (i >= 26 ? Math.floor(i / 26) : '');
 
+/** Фарбований бік: стрілка до лінії з підписом RAL. (mx,my) — середина сторони, (nx,ny) — нормаль у бік фарби, (lx,ly) — центр підпису */
+export const RAL_FS = 9;
+export function RalArrow({ mx, my, nx, ny, lx, ly, color }: { mx: number; my: number; nx: number; ny: number; lx: number; ly: number; color: string }) {
+  const w = 3 * RAL_FS * 0.62, h = RAL_FS;
+  const back = Math.abs(nx) * w / 2 + Math.abs(ny) * h / 2 + 2;
+  const tx = mx + nx * 3, ty = my + ny * 3;                         // вістря — біля лінії
+  const sx = lx - nx * back, sy = ly - ny * back;                   // хвіст — біля підпису
+  const px = -ny, py = nx, a = 4.5, b = 2.2;
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <line x1={sx} y1={sy} x2={tx + nx * a} y2={ty + ny * a} stroke={color} strokeWidth={1} />
+      <path d={`M${tx},${ty} L${tx + nx * a + px * b},${ty + ny * a + py * b} L${tx + nx * a - px * b},${ty + ny * a - py * b} Z`} fill={color} />
+      <text x={lx} y={ly} fill={color} fontSize={RAL_FS} fontWeight={600} textAnchor="middle" dominantBaseline="central" className="fl-ral" data-no-i18n>RAL</text>
+    </g>
+  );
+}
+
 export default function FlashingSvg({ e, w = 420, h = 300, hi = -1, onSeg, print = false }:
   { e: FElem; w?: number; h?: number; hi?: number; onSeg?: (i: number) => void; print?: boolean }) {
   const g0 = profileGeo(e);
@@ -52,12 +69,13 @@ export default function FlashingSvg({ e, w = 420, h = 300, hi = -1, onSeg, print
           <text key={'d' + i} x={tx} y={ty} className="fl-dim" textAnchor="middle" dominantBaseline="central" fill={ink} fontWeight={i === hi ? 700 : 500}>{t}</text>
         );
       })}
-      {/* фарбований бік — підпис «колір» біля найдовшої сторони */}
+      {/* фарбований бік — стрілка RAL біля найдовшої сторони */}
       {(() => {
         let m = 0; segs.forEach((q, i) => { if (Number(e.segs[i].len) > Number(e.segs[m].len)) m = i; });
         const q = segs[m]; if (!q) return null;
-        const [ax, ay] = P(q.a), [bx, by] = P(q.b), [nx, ny] = N(q.h, e.paint), d = dimOffset('колір', 9, nx, ny, 4);
-        return <text x={(ax + bx) / 2 + nx * d} y={(ay + by) / 2 + ny * d} className="fl-paint-t" textAnchor="middle" dominantBaseline="central">колір</text>;
+        const [ax, ay] = P(q.a), [bx, by] = P(q.b), [nx, ny] = N(q.h, e.paint), d = 18 + dimOffset('RAL', RAL_FS, nx, ny, 0);
+        const mx = (ax + bx) / 2, my = (ay + by) / 2;
+        return <RalArrow mx={mx} my={my} nx={nx} ny={ny} lx={mx + nx * d} ly={my + ny * d} color={ink} />;
       })()}
       {/* кути загинів — по бісектрисі всередині кута */}
       {bends.map((b, i) => {
