@@ -33,6 +33,7 @@ export default function FlashingDraw({ e, onChange = NOP, hi = -1, setHi = NOP, 
   const [anchor, setAnchor] = useState<Pt | null>(null);       // перша точка порожнього профілю
   const [cursor, setCursor] = useState<Pt | null>(null);
   const [snap, setSnap] = useState(true);
+  const [drawFrom, setDrawFrom] = useState<'end' | 'start'>('end');
   const [pop, setPop] = useState<Pop>(null);
   const [panning, setPanning] = useState(false);
   const undo = useRef<Pick<FElem, 'segs' | 'start' | 'paint'>[]>([]);
@@ -87,7 +88,7 @@ export default function FlashingDraw({ e, onChange = NOP, hi = -1, setHi = NOP, 
   };
 
   // ---- прив'язка: довжина кроком, кут кроком 5° відносно попередньої сторони ----
-  const lenStep = view.k >= 3 ? 1 : view.k >= 0.8 ? 5 : 10;
+  const lenStep = 1;   // довжина — кратно 1 мм
   const snapFrom = (from: Pt, raw: Pt, refHead: number | null, free: boolean): Pt => {
     const dx = raw[0] - from[0], dy = raw[1] - from[1];
     let L = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
@@ -160,16 +161,29 @@ export default function FlashingDraw({ e, onChange = NOP, hi = -1, setHi = NOP, 
   };
 
   // ---- малювання ----
-  const lastPt = pts[pts.length - 1];
-  const lastHead = core.segs.length ? heads[heads.length - 1] : null;
+  // креслимо від кінця або від початку профілю (кінець, з якого продовжують, перестає бути краєм — завальцювання там знімається)
+  const fromStart = drawFrom === 'start' && core.segs.length > 0;
+  const lastPt = fromStart ? pts[0] : pts[pts.length - 1];
+  const lastHead = core.segs.length ? (fromStart ? heads[0] + Math.PI : heads[heads.length - 1]) : null;
   const addPoint = (p: Pt) => {
     if (!pts.length) { setAnchor(p); setOrg(p); return; }
     if (Math.hypot(p[0] - lastPt[0], p[1] - lastPt[1]) < 0.5) return;
     pushUndo();
-    commitPts([...pts, p]);
+    if (fromStart) commitPts([p, ...pts], null, core.hemE);
+    else commitPts([...pts, p], core.hemS, null);
     setAnchor(null);
   };
-  const finishDraw = () => { setMode('edit'); setCursor(null); if (!core.segs.length) setAnchor(null); };
+  const finishDraw = () => { setMode('edit'); setDrawFrom('end'); setCursor(null); if (!core.segs.length) setAnchor(null); };
+  const continueFrom = (j: number) => {
+    setPop(null);
+    if (j === 0 && pts.length > 1) { setDrawFrom('start'); setMode('draw'); return; }
+    if (j < pts.length - 1) {
+      if (!window.confirm('Сторони після цієї точки буде видалено, креслення продовжиться звідси. Продовжити?')) return;
+      pushUndo();
+      commitPts(pts.slice(0, j + 1), core.hemS, null);
+    }
+    setDrawFrom('end'); setMode('draw');
+  };
   const restart = () => {
     if (e.segs.length && !window.confirm('Стерти профіль і накреслити заново?')) return;
     pushUndo(); onChange({ segs: [] }); setAnchor(null); setPop(null); setMode('draw');
@@ -248,7 +262,7 @@ export default function FlashingDraw({ e, onChange = NOP, hi = -1, setHi = NOP, 
   const onKey = (ev: React.KeyboardEvent) => {
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z') { ev.preventDefault(); doUndo(); return; }
     if (ev.key === 'Escape' || ev.key === 'Enter') { if (pop) setPop(null); else if (mode === 'draw') finishDraw(); }
-    if (ev.key === 'Backspace' && mode === 'draw' && pts.length) { ev.preventDefault(); delPoint(pts.length - 1); setMode('draw'); }
+    if (ev.key === 'Backspace' && mode === 'draw' && pts.length) { ev.preventDefault(); delPoint(fromStart ? 0 : pts.length - 1); setMode('draw'); }
   };
 
   // ---- геометрія для малювання ----
@@ -428,7 +442,7 @@ export default function FlashingDraw({ e, onChange = NOP, hi = -1, setHi = NOP, 
           </div>
         </>)}
         <div className="fd-pop-btns">
-          {j === last && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setPop(null); setMode('draw'); }}>✎ Продовжити звідси</button>}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => continueFrom(j)}>✎ Продовжити звідси</button>
           {pts.length > 1 && <button type="button" className="btn btn-ghost btn-sm fl-del" onClick={() => delPoint(j)}>Видалити точку</button>}
         </div>
       </div>
@@ -492,7 +506,10 @@ export default function FlashingDraw({ e, onChange = NOP, hi = -1, setHi = NOP, 
           {/* вершини */}
           {!still && pts.map((p, j) => {
             const P = S(p), end = j === 0 || j === pts.length - 1;
-            return <g key={'v' + j} onPointerDown={mode === 'edit' ? ev => startDrag(ev, j) : undefined} style={{ pointerEvents: mode === 'draw' ? 'none' : undefined, cursor: 'grab' }}>
+            // у режимі малювання клік по будь-якій точці — продовжити креслення з неї
+            const pick = mode === 'draw' && core.segs.length > 0 && !(j === pts.length - 1 && !fromStart) && !(j === 0 && fromStart);
+            return <g key={'v' + j} onPointerDown={mode === 'edit' ? ev => startDrag(ev, j) : pick ? ev => { ev.stopPropagation(); continueFrom(j); } : undefined}
+              style={{ pointerEvents: mode === 'draw' && !pick ? 'none' : undefined, cursor: mode === 'draw' ? 'pointer' : 'grab' }}>
               <circle cx={P[0]} cy={P[1]} r={13} fill="transparent" />
               <circle cx={P[0]} cy={P[1]} r={end ? 4.5 : 4} className={'fd-pt' + (end ? ' end' : '') + (pop?.kind === 'pt' && pop.idx === j ? ' on' : '')} />
             </g>;
@@ -501,7 +518,7 @@ export default function FlashingDraw({ e, onChange = NOP, hi = -1, setHi = NOP, 
         {!still && popBox}
         {!still && <div className="fd-hint">
           {mode === 'draw'
-            ? (pts.length ? 'Клік — наступна точка · подвійний клік / Enter / ПКМ — завершити · Backspace — прибрати останню · Shift — без прив\'язки' : 'Клікніть, де починається профіль')
+            ? (pts.length ? 'Клік — наступна точка · клік по точці профілю — продовжити з неї · подвійний клік / Enter / ПКМ — завершити · Backspace — прибрати останню · Shift — без прив\'язки' : 'Клікніть, де починається профіль')
             : 'Тягніть вершини · клік по стороні — довжина, завальцювати · по вершині — кут · колесо / два пальці — масштаб · тягніть фон — рух'}
         </div>}
       </div>
