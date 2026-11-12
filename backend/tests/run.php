@@ -206,6 +206,19 @@ foreach (array_combine([130, 106, 100, 150], require __DIR__ . '/../src/core/cat
     ok($base === $gBase && !$bad, $gm['name'] . ": база стандарту $gBase, нижні стандартні, недопустимих немає" . ($bad ? ' — ' . implode(', ', array_unique($bad)) : '') . ($base !== $gBase ? " (база $base)" : ''));
 }
 
+echo "Тайл: Класика/Ретро і Преміум/Елегант/Престиж/Модерн (таблиці заводу)\n";
+[$tA, $tB] = require __DIR__ . '/../src/core/catalog_data/tile.php';
+$tE = function ($t) { return new E(['type' => 'tile', 'name' => 'T', 'full_width' => 1180, 'useful_width' => 1100, 'length_overlap' => 150, 'wave_step' => 350,
+    'round_step' => 10, 'stamp_gap' => 0, 'min_length' => $t['min_length'], 'max_length' => $t['max_length'], 'forbidden_lengths' => $t['forbidden_lengths']],
+    ['polygon_points' => [[0, 0], [1000, 0], [1000, 1000], [0, 1000]], 'holes' => []]); };
+eq([$tE($tA)->fit(720), $tE($tA)->fit(725), $tE($tA)->fit(840), $tE($tA)->fit(4570), $tE($tA)->fit(4575)], [720, 850, 850, 4570, 4700], 'Класика: 720 так, 730–840 → 850, 4575 → 4700');
+eq([$tE($tB)->fit(700), $tE($tB)->fit(705), $tE($tB)->fit(760), $tE($tB)->fit(4900), $tE($tB)->fit(4905)], [700, 770, 770, 4900, 4970], 'Преміум: 700 так, 710–760 → 770, 4905 → 4970');
+$tr = $tE($tB); $rr = (new E(['type' => 'tile', 'name' => 'T', 'full_width' => 1180, 'useful_width' => 1100, 'length_overlap' => 150, 'wave_step' => 350,
+    'round_step' => 10, 'stamp_gap' => 0, 'min_length' => 420, 'max_length' => 6650, 'forbidden_lengths' => $tB['forbidden_lengths']],
+    ['polygon_points' => [[0, 0], [3000, 0], [3000, 9000], [0, 9000]], 'holes' => [], 'eave_overhang' => 50, 'ridge_gap' => 0]))->calculate();
+$low = array_filter($rr['placements'], function ($q) { return $q['row_index'] === 0; });
+ok($rr['std_base_mm'] === 70 && !array_filter($low, function ($q) { return ($q['length'] - 70) % 350 !== 0; }), 'Преміум: нижній лист завершений (350·n + 70): ' . implode(', ', array_unique(array_column($low, 'length'))));
+
 echo "Немає допустимого рішення\n";
 $tight = $calc([], ['max_length' => 440, 'min_length' => 400]);   // допустимі лише 400…440 (r 50…90)
 ok(isset($tight['tech_ok']), 'розрахунок не падає');

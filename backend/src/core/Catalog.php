@@ -26,6 +26,35 @@ class Catalog
         Database::ensureColumn('tenants', 'catalog_seeded', 'TINYINT NOT NULL DEFAULT 0');
         self::seedAll();
         self::seedGoodRoof();
+        self::seedTileRanges();
+    }
+
+    // Разово: завод «Тайл» — таблиці недопустимих довжин для вже наявних позицій (каталог ROOFKIT і всі кабінети).
+    // Виробник «Тайл» / «Tile», модель за назвою (Класика, Ретро / Преміум, Елегант, Престиж, Модерн).
+    // Ширини й нахлест не чіпаємо — лише діапазони, мін./макс. довжину, хвилю 350 і вимикаємо правило ±50 від штампа.
+    private static function seedTileRanges(): void
+    {
+        try {
+            if (Database::fetchOne("SELECT key_name FROM app_settings WHERE key_name = 'catalog_tile_v1'")) return;
+            $tables = require __DIR__ . '/catalog_data/tile.php';
+            $rows = Database::fetchAll("SELECT id, manufacturer, name, round_step FROM material_profiles
+                WHERE type = 'tile' AND (LOWER(manufacturer) LIKE '%тайл%' OR LOWER(manufacturer) LIKE '%tile%')");
+            $n = 0;
+            foreach ($rows as $r) {
+                if (!preg_match('/(^|[^\p{L}])(тайл|tile)([^\p{L}]|$)/iu', (string)$r['manufacturer'])) continue;
+                foreach ($tables as $t) {
+                    if (!preg_match($t['match'], (string)$r['name'])) continue;
+                    Database::query('UPDATE material_profiles SET forbidden_lengths = ?, min_length = ?, max_length = ?, wave_step = 350, stamp_gap = 0,
+                        round_step = IF(round_step IS NULL OR round_step = 0, 10, round_step) WHERE id = ?',
+                        [json_encode($t['forbidden_lengths']), $t['min_length'], $t['max_length'], (int)$r['id']]);
+                    $n++;
+                    break;
+                }
+            }
+            Database::query("INSERT INTO app_settings (key_name, value, type, description, updated_at) VALUES ('catalog_tile_v1', ?, 'string', 'Каталог: діапазони довжин заводу Тайл (оновлено позицій)', NOW())", [(string)$n]);
+        } catch (\Throwable $e) {
+            error_log('ROOFKIT Tile ranges: ' . $e->getMessage());
+        }
     }
 
     // Разово: металочерепиця Good Roof (Classic / Maxi / Premium / Retro-Roof) у каталог ROOFKIT

@@ -1879,3 +1879,5 @@ g:hover > .fd-pt, .fd-pt.on { fill: var(--fl-ink); stroke: var(--fl-ink); }
   .fl-paper-grid { grid-template-columns: 1fr; }
 }
 @media print { .fl-grid { display: block; } .page-header.no-print { display: none !important; } }
+
+.prod-factory { margin-bottom: 6px; font-size: .8rem; padding: 4px 8px; }

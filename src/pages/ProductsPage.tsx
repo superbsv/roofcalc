@@ -9,6 +9,7 @@ import { useAuth } from '../components/auth/AuthContext';
 import { useSections, catalogChanged, CATALOG_EVENT, MAT_DND } from '../components/catalog/CatalogNav';
 import LibraryPicker from '../components/catalog/LibraryPicker';
 import CatalogHistory from '../components/catalog/CatalogHistory';
+import { FACTORY_TABLES, factoryRanges } from '../components/catalog/factoryTables';
 import ManufacturerSelect, { useManufacturers, canonicalMf } from '../components/catalog/ManufacturerSelect';
 import { exportCatalog, importCatalog } from '../components/catalog/catalogIO';
 
@@ -599,6 +600,15 @@ export default function ProductsPage({ section, onSection }: { section?: number;
               </Row>
               <Row>
                 <Field label="Заборонені діапазони довжин" style={{ flex:2 }}>
+                  <select className="form-control prod-factory" value="" onChange={e => {
+                    const t = FACTORY_TABLES.find(x => x.id === e.target.value);
+                    if (!t) return;
+                    setForbiddenInput(JSON.stringify(factoryRanges(t)));
+                    setForm(p => ({ ...p, min_length: t.min, max_length: t.max, wave_step: 350, stamp_gap: 0 }));
+                  }}>
+                    <option value="">Заповнити з таблиці виробника…</option>
+                    {FACTORY_TABLES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                  </select>
                   <ForbiddenRanges value={forbiddenInput} onChange={setForbiddenInput} />
                 </Field>
               </Row>
