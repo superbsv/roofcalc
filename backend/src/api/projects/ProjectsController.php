@@ -222,6 +222,14 @@ class ProjectsController
                 }
                 self::insertRow('specification_items', $it);
             }
+            // креслення доборів, прив'язані до проекту, — теж копіюємо
+            try {
+                foreach (Database::fetchAll('SELECT * FROM flashings WHERE project_id = ? AND tenant_id = ?', [$id, $user['tid']]) as $fl) {
+                    foreach (['id', 'created_at', 'updated_at'] as $k) unset($fl[$k]);
+                    $fl['project_id'] = $newId; $fl['user_id'] = $user['sub'];
+                    self::insertRow('flashings', $fl);
+                }
+            } catch (\PDOException $e) { /* модуль доборів ще не відкривали — таблиці немає */ }
             $db->commit();
         } catch (\Throwable $e) {
             $db->rollBack();

@@ -21,6 +21,7 @@ import { CALC_TYPES, calcTypeInfo } from '../components/roof/calcTypes';
 import LibraryPicker from '../components/catalog/LibraryPicker';
 import { t } from '../i18n/i18n';
 import ManufacturerSelect from '../components/catalog/ManufacturerSelect';
+import ProjectFlashings from '../components/flashing/ProjectFlashings';
 import { specToPdf, specToExcel } from '../components/spec/specExport';
 import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter, templateNums } from '../components/roof/templates';
 import { materialLabel } from '../components/roof/materials';
@@ -28,7 +29,7 @@ import TemplateSketch from '../components/roof/TemplateSketch';
 import { useAuth } from '../components/auth/AuthContext';
 import type { SlopeForImage } from '../components/layout/slopeImage';
 
-interface Props { projectId: number; }
+interface Props { projectId: number; onOpenFlashing?: (id: number | null, projectId: number) => void; }
 
 type Step = 'order' | 'material' | 'slope' | 'layout' | 'spec';
 const STEPS: [Step, string][] = [
@@ -68,7 +69,7 @@ function Thumb({ pts, w = 46, h = 30 }: { pts: Point[]; w?: number; h?: number }
   return <svg width={w} height={h} aria-hidden="true"><polygon points={path} fill="none" stroke="var(--clr-brand)" strokeWidth="1.6" /></svg>;
 }
 
-export default function ProjectPage({ projectId }: Props) {
+export default function ProjectPage({ projectId, onOpenFlashing }: Props) {
   const theme = useTheme();
   const [project, setProject] = useState<Project | null>(null);
   const [slopes, setSlopes] = useState<Slope[]>([]);
@@ -975,7 +976,8 @@ export default function ProjectPage({ projectId }: Props) {
       {step === 'spec' && (
         <Specification project={project} settings={settings} slopes={slopes} material={material} items={specItems}
           projectId={projectId} onBack={() => goStep('slope')} onMaterial={() => setStep('material')}
-          onSaveSettings={patch => saveSettings(patch).then(() => undefined)} />
+          onSaveSettings={patch => saveSettings(patch).then(() => undefined)}
+          onOpenFlashing={onOpenFlashing ? id => onOpenFlashing(id, projectId) : undefined} />
       )}
 
       {/* Вікно шаблону: схема + розміри, м */}
@@ -1233,10 +1235,11 @@ function MaterialSketch({ wave }: { wave: boolean }) {
 }
 
 // ---------- Специфікація (структура КП 8.15, розділ 13.10 ТЗ) ----------
-function Specification({ project, settings, slopes, material, items, projectId, onBack, onMaterial, onSaveSettings }: {
+function Specification({ project, settings, slopes, material, items, projectId, onBack, onMaterial, onSaveSettings, onOpenFlashing }: {
   project: Project | null; settings: ProjectSettings; slopes: Slope[]; material?: MaterialProfile;
   items: SpecItem[]; projectId: number; onBack: () => void; onMaterial: () => void;
   onSaveSettings: (patch: Partial<ProjectSettings>) => Promise<void>;
+  onOpenFlashing?: (id: number | null) => void;
 }) {
   const paperRef = useRef<HTMLElement>(null);
   const [saving, setSaving] = useState<'' | 'pdf' | 'xlsx' | 'png' | 'jpg' | 'zip'>('');
@@ -1427,6 +1430,8 @@ function Specification({ project, settings, slopes, material, items, projectId, 
             </table>
           </>
         )}
+        {/* Добірні елементи з прив'язаних креслень доборів */}
+        <ProjectFlashings projectId={projectId} onOpen={onOpenFlashing} />
         {settings.spec_note && <div className="kp-paper-note"><b>Примітка:</b> <span data-no-i18n>{settings.spec_note}</span></div>}
         <div className="kp-paper-sign"><span>Менеджер:</span> {settings.responsible || project?.manager_name || '________________'}</div>
         {!items.length && <div className="alert alert-info">Специфікація порожня: розрахуйте хоча б один скат.</div>}

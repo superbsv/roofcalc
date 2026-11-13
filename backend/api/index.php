@@ -127,6 +127,7 @@ try {
         case $method==='GET' &&preg_match('#^/projects/(\d+)/specification$#',$uri,$m): (new SpecController)->index((int)$m[1]); break;
         case $method==='GET' &&$uri==='/flashings':            (new \RoofCalc\Api\Flashings\FlashingsController)->index(); break;
         case $method==='POST'&&$uri==='/flashings':            (new \RoofCalc\Api\Flashings\FlashingsController)->create(); break;
+        case $method==='POST'&&preg_match('#^/flashings/(\d+)/link$#',$uri,$m): (new \RoofCalc\Api\Flashings\FlashingsController)->link((int)$m[1]); break;
         case $method==='POST'&&$uri==='/flashings/recognize':  (new \RoofCalc\Api\Flashings\FlashingsController)->recognize(); break;
         case $method==='GET' &&preg_match('#^/flashings/(\d+)$#',$uri,$m): (new \RoofCalc\Api\Flashings\FlashingsController)->show((int)$m[1]); break;
         case $method==='PUT' &&preg_match('#^/flashings/(\d+)$#',$uri,$m): (new \RoofCalc\Api\Flashings\FlashingsController)->update((int)$m[1]); break;

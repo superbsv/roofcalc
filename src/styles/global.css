@@ -1881,3 +1881,16 @@ g:hover > .fd-pt, .fd-pt.on { fill: var(--fl-ink); stroke: var(--fl-ink); }
 @media print { .fl-grid { display: block; } .page-header.no-print { display: none !important; } }
 
 .prod-factory { margin-bottom: 6px; font-size: .8rem; padding: 4px 8px; }
+
+/* Креслення доборів у специфікації проекту */
+.kp-flash-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 14px 0 6px; padding: 8px 10px; border: 1px dashed var(--clr-border); border-radius: 8px; font-size: .8rem; }
+.kp-flash-ctl select { width: auto; padding: 3px 8px; font-size: .78rem; }
+.kp-flash-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border-radius: 12px; background: var(--clr-surface-2); border: 1px solid var(--clr-border); }
+.kp-flash-chip button { border: 0; background: none; cursor: pointer; color: var(--clr-text-3); padding: 0 3px; font-size: .8rem; }
+.kp-flash-chip button:hover { color: var(--clr-brand); }
+.kp-flash-name { font-weight: 400; text-transform: none; }
+.kp-flash-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.kp-paper { --fl-ink: #111; }
+.kp-paper .fd-ang { fill: #444; }
+.fl-proj { color: var(--clr-brand); }
+@media (max-width: 800px) { .kp-flash-grid { grid-template-columns: 1fr; } }

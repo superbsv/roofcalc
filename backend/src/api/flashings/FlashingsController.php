@@ -41,6 +41,25 @@ class FlashingsController
             updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             KEY idx_fl_tenant (tenant_id, id)
         ) DEFAULT CHARSET=utf8mb4");
+        // привʼязка креслення до проекту — добори друкуються в специфікації проекту
+        try {
+            if (!Database::fetchOne("SHOW COLUMNS FROM flashings LIKE 'project_id'")) {
+                Database::connection()->exec('ALTER TABLE flashings ADD COLUMN project_id INT NULL AFTER user_id, ADD KEY idx_fl_project (project_id)');
+            }
+        } catch (\Throwable $e) {
+            error_log('ROOFKIT flashings project_id: ' . $e->getMessage());
+        }
+    }
+
+    /** Проект кабінету (для привʼязки); null — відвʼязати */
+    private function projectId($v): ?int
+    {
+        $pid = (int)$v;
+        if ($pid <= 0) return null;
+        if (!Database::fetchOne('SELECT id FROM projects WHERE id = ? AND tenant_id = ?', [$pid, (int)$this->me['tid']])) {
+            $this->json(['error' => 'Проект не знайдено'], 404);
+        }
+        return $pid;
     }
 
     private function scope(): array
@@ -59,18 +78,40 @@ class FlashingsController
         return $r;
     }
 
+    // GET /flashings[?project_id=N] — список; з project_id — креслення проекту повністю (для специфікації),
+    // їх бачить кожен, хто працює з проектом у кабінеті
     public function index(): void
     {
+        $pid = (int)($_GET['project_id'] ?? 0);
+        if ($pid > 0) {
+            $this->projectId($pid);
+            $rows = Database::fetchAll(
+                'SELECT f.id, f.name, f.client_name, f.project_id, f.created_at, f.updated_at, f.data
+                 FROM flashings f WHERE f.tenant_id = ? AND f.project_id = ? ORDER BY f.id', [(int)$this->me['tid'], $pid]);
+            foreach ($rows as &$r) $r['data'] = json_decode($r['data'] ?? '{}', true) ?: new \stdClass();
+            $this->json(['items' => $rows]);
+        }
         [$w, $p] = $this->scope();
         $rows = Database::fetchAll(
-            "SELECT f.id, f.name, f.client_name, f.created_at, f.updated_at, u.name AS user_name, f.data
-             FROM flashings f LEFT JOIN users u ON u.id = f.user_id WHERE $w ORDER BY f.updated_at DESC, f.id DESC LIMIT 500", $p);
+            "SELECT f.id, f.name, f.client_name, f.project_id, pr.name AS project_name, f.created_at, f.updated_at, u.name AS user_name, f.data
+             FROM flashings f LEFT JOIN users u ON u.id = f.user_id LEFT JOIN projects pr ON pr.id = f.project_id
+             WHERE $w ORDER BY f.updated_at DESC, f.id DESC LIMIT 500", $p);
         foreach ($rows as &$r) {
             $d = json_decode($r['data'] ?? '{}', true) ?: [];
             $r['items_count'] = count($d['items'] ?? []);
             unset($r['data']);
         }
         $this->json(['items' => $rows]);
+    }
+
+    // POST /flashings/{id}/link { project_id: N | null } — привʼязати / відвʼязати від проекту
+    public function link(int $id): void
+    {
+        if (($this->me['role'] ?? '') === 'viewer') $this->json(['error' => 'Недостатньо прав'], 403);
+        $this->find($id);
+        $pid = $this->projectId($this->body()['project_id'] ?? null);
+        Database::query('UPDATE flashings SET project_id = ? WHERE id = ?', [$pid, $id]);
+        $this->json(['flashing' => $this->find($id)]);
     }
 
     public function show(int $id): void
@@ -92,9 +133,11 @@ class FlashingsController
     public function create(): void
     {
         if (($this->me['role'] ?? '') === 'viewer') $this->json(['error' => 'Недостатньо прав'], 403);
-        [$name, $client, $data] = $this->clean($this->body());
-        $id = Database::insert('INSERT INTO flashings (tenant_id, user_id, name, client_name, data) VALUES (?,?,?,?,?)',
-            [(int)$this->me['tid'], (int)$this->me['sub'], $name, $client, $data]);
+        $b = $this->body();
+        [$name, $client, $data] = $this->clean($b);
+        $pid = $this->projectId($b['project_id'] ?? null);
+        $id = Database::insert('INSERT INTO flashings (tenant_id, user_id, project_id, name, client_name, data) VALUES (?,?,?,?,?,?)',
+            [(int)$this->me['tid'], (int)$this->me['sub'], $pid, $name, $client, $data]);
         $this->json(['flashing' => $this->find((int)$id)], 201);
     }
 
@@ -102,8 +145,10 @@ class FlashingsController
     {
         if (($this->me['role'] ?? '') === 'viewer') $this->json(['error' => 'Недостатньо прав'], 403);
         $this->find($id);
-        [$name, $client, $data] = $this->clean($this->body());
+        $b = $this->body();
+        [$name, $client, $data] = $this->clean($b);
         Database::query('UPDATE flashings SET name = ?, client_name = ?, data = ? WHERE id = ?', [$name, $client, $data, $id]);
+        if (array_key_exists('project_id', $b)) Database::query('UPDATE flashings SET project_id = ? WHERE id = ?', [$this->projectId($b['project_id']), $id]);
         $this->json(['flashing' => $this->find($id)]);
     }
 

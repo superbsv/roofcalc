@@ -8,9 +8,10 @@ import { FDoc, FElem, FLASH_TEMPLATES, Nest, SketchEl, blankCalc, emptyDoc, from
 import FlashingDraw from '../components/flashing/FlashingDraw';
 import NumIn from '../components/flashing/NumIn';
 import { specToPdf } from '../components/spec/specExport';
+import { projectsApi } from '../api/client';
 
-interface ListRow { id: number; name: string; client_name?: string | null; updated_at: string; user_name?: string | null; items_count: number }
-interface Cur { id?: number; name: string; client_name: string; data: FDoc }
+interface ListRow { id: number; name: string; client_name?: string | null; updated_at: string; user_name?: string | null; items_count: number; project_id?: number | null; project_name?: string | null }
+interface Cur { id?: number; name: string; client_name: string; project_id: number | null; data: FDoc }
 
 const f1 = (v: number) => (Math.round(v * 10) / 10).toString();
 const f2 = (v: number) => v.toFixed(2);
@@ -127,7 +128,8 @@ async function shrinkImage(file: File): Promise<{ data: string; media: string }>
   } finally { URL.revokeObjectURL(url); }
 }
 
-export default function FlashingPage() {
+// openId — відкрити креслення; forProject — нове креслення, одразу прив'язане до проекту (з вкладки «Специфікація»)
+export default function FlashingPage({ openId, forProject, onOpenProject }: { openId?: number | null; forProject?: number; onOpenProject?: (id: number) => void } = {}) {
   const [list, setList] = useState<ListRow[]>([]);
   const [q, setQ] = useState('');
   const [cur, setCur] = useState<Cur | null>(null);
@@ -139,6 +141,9 @@ export default function FlashingPage() {
 
   const loadList = useCallback(() => { catApi('GET', '/flashings').then(d => setList(d.items || [])).catch(e => setMsg(e.message)); }, []);
   useEffect(() => { loadList(); }, [loadList]);
+  // Проекти кабінету — для прив'язки креслення (добори друкуються у специфікації проекту)
+  const [projects, setProjects] = useState<{ id: number; name: string; client_name?: string | null }[]>([]);
+  useEffect(() => { projectsApi.list({ limit: '100' }).then(r => setProjects(r.data || [])).catch(() => undefined); }, []);
 
   const guard = () => !dirty || window.confirm('Є незбережені зміни. Продовжити без збереження?');
   const open = async (id: number) => {
@@ -147,10 +152,22 @@ export default function FlashingPage() {
       const d = await catApi('GET', `/flashings/${id}`);
       const f = d.flashing;
       const data: FDoc = { ...emptyDoc(), items: [], ...(f.data || {}) };
-      setCur({ id: f.id, name: f.name, client_name: f.client_name || '', data }); setDirty(false); setMsg('');
+      setCur({ id: f.id, name: f.name, client_name: f.client_name || '', project_id: f.project_id ?? null, data }); setDirty(false); setMsg('');
     } catch (e: any) { setMsg(e.message); }
   };
-  const create = () => { if (!guard()) return; setCur({ name: 'Нове креслення', client_name: '', data: emptyDoc() }); setDirty(true); setMsg(''); };
+  const create = (pid: number | null = null) => {
+    if (!guard()) return;
+    const pr = pid ? projects.find(p => p.id === pid) : undefined;
+    setCur({ name: pr ? `Добори — ${pr.name}` : 'Нове креслення', client_name: pr?.client_name || '', project_id: pid, data: emptyDoc() }); // i18n-ignore (tpl)
+    setDirty(true); setMsg('');
+  };
+  // Перехід із проекту: відкрити креслення або створити нове для проекту
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    if (openId) { started.current = true; open(openId); }
+    else if (forProject && projects.length) { started.current = true; create(forProject); }
+  }, [openId, forProject, projects]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const patch = (p: Partial<Cur>) => { setCur(c => c && ({ ...c, ...p })); setDirty(true); };
   const patchDoc = (p: Partial<FDoc>) => { setCur(c => c && ({ ...c, data: { ...c.data, ...p } })); setDirty(true); };
@@ -186,7 +203,7 @@ export default function FlashingPage() {
     if (!cur) return;
     setBusy('save'); setMsg('');
     try {
-      const body = { name: cur.name, client_name: cur.client_name, data: cur.data };
+      const body = { name: cur.name, client_name: cur.client_name, project_id: cur.project_id, data: cur.data };
       const d = cur.id ? await catApi('PUT', `/flashings/${cur.id}`, body) : await catApi('POST', '/flashings', body);
       setCur(c => c && ({ ...c, id: d.flashing.id })); setDirty(false); setMsg('Збережено'); loadList();
     } catch (e: any) { setMsg(e.message); } finally { setBusy(''); }
@@ -205,7 +222,7 @@ export default function FlashingPage() {
     if (cur.id && !window.confirm(`Видалити креслення «${cur.name}»?`)) return; // i18n-ignore (tpl)
     try { if (cur.id) await catApi('DELETE', `/flashings/${cur.id}`); setCur(null); setDirty(false); loadList(); } catch (e: any) { setMsg(e.message); }
   };
-  const copy = () => { if (!cur) return; setCur({ name: cur.name + ' (копія)', client_name: cur.client_name, data: JSON.parse(JSON.stringify(cur.data)) }); setDirty(true); }; // i18n-ignore (tpl)
+  const copy = () => { if (!cur) return; setCur({ name: cur.name + ' (копія)', client_name: cur.client_name, project_id: cur.project_id, data: JSON.parse(JSON.stringify(cur.data)) }); setDirty(true); }; // i18n-ignore (tpl)
   const pdf = async () => {
     if (!paperRef.current || !cur) return;
     setBusy('pdf');
@@ -228,7 +245,7 @@ export default function FlashingPage() {
       <div className="page-header no-print">
         <div><h1 className="page-title">Креслення добірних елементів</h1>
           <p className="text-muted">Планки, коньки, ендови, примикання, відливи — сторони, кути, розгортка і бланк на гнуття</p></div>
-        <button className="btn btn-primary" onClick={create}>+ Нове креслення</button>
+        <button className="btn btn-primary" onClick={() => create()}>+ Нове креслення</button>
       </div>
 
       <div className="fl-grid">
@@ -240,6 +257,7 @@ export default function FlashingPage() {
               <button key={r.id} className={`cl-item${cur?.id === r.id ? ' on' : ''}`} onClick={() => open(r.id)}>
                 <div className="cl-item-top"><b data-no-i18n>{r.name}</b><span className="fl-cnt">{r.items_count}</span></div>
                 <div className="cl-item-sub"><span data-no-i18n>{r.client_name || '—'}</span> · {dateUa(r.updated_at)}{r.user_name ? <> · <span data-no-i18n>{r.user_name}</span></> : null}</div>
+                {r.project_name && <div className="cl-item-sub fl-proj">🔗 <span data-no-i18n>{r.project_name}</span></div>}
               </button>
             ))}
           </div>
@@ -256,6 +274,12 @@ export default function FlashingPage() {
               <div className="fl-doc-grid">
                 <label className="fl-wide"><span>Назва креслення</span><input className="form-control" value={cur.name} onChange={e => patch({ name: e.target.value })} data-no-i18n /></label>
                 <label><span>Клієнт / об'єкт</span><input className="form-control" value={cur.client_name} onChange={e => patch({ client_name: e.target.value })} data-no-i18n /></label>
+                <label title="Прив'язане креслення друкується у специфікації проекту"><span>Проект</span>
+                  <select className="form-control" value={cur.project_id ?? ''} onChange={e => patch({ project_id: e.target.value ? +e.target.value : null })}>
+                    <option value="">— не прив'язано —</option>
+                    {cur.project_id && !projects.some(p => p.id === cur.project_id) && <option value={cur.project_id} data-no-i18n>{list.find(r => r.id === cur.id)?.project_name || `#${cur.project_id}`}</option>}
+                    {projects.map(p => <option key={p.id} value={p.id} data-no-i18n>{p.name}</option>)}
+                  </select></label>
                 <label><span>Колір (RAL)</span><input className="form-control" value={cur.data.color || ''} onChange={e => patchDoc({ color: e.target.value })} data-no-i18n /></label>
                 <label><span>Покриття</span><input className="form-control" list="fl-coatings" value={cur.data.coating || ''} onChange={e => patchDoc({ coating: e.target.value })} data-no-i18n /></label>
                 <label><span>Товщина, мм</span><input className="form-control" list="fl-thick" inputMode="decimal" value={cur.data.thickness || ''} onChange={e => patchDoc({ thickness: e.target.value })} data-no-i18n /></label>
@@ -273,6 +297,7 @@ export default function FlashingPage() {
                 <button className="btn btn-secondary btn-sm" disabled={busy === 'pdf'} onClick={pdf}>{busy === 'pdf' ? 'Створення PDF…' : 'Зберегти PDF'}</button>
                 <button className="btn btn-ghost btn-sm" onClick={copy}>⧉ Копія креслення</button>
                 <button className="btn btn-ghost btn-sm fl-del" onClick={remove}>🗑 Видалити</button>
+                {cur.project_id && onOpenProject && <button className="btn btn-ghost btn-sm" onClick={() => { if (guard()) onOpenProject(cur.project_id!); }} title="Повернутися до проекту, до якого прив'язане креслення">← До проекту</button>}
                 {msg && <span className="fl-msg">{msg}</span>}
               </div>
             </div>

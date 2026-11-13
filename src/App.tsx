@@ -33,7 +33,7 @@ type Page =
   | { type: 'tenant' }
   | { type: 'leads' }
   | { type: 'history' }
-  | { type: 'flashings' };
+  | { type: 'flashings'; id?: number | null; projectId?: number };
 
 function Shell() {
   const { user, logout, loading, leaveImpersonation } = useAuth();
@@ -315,7 +315,8 @@ function Shell() {
         )}
         {view.type==='super' && user.is_superadmin && <SuperPage onOpenCabinet={() => navigate({type:'projects'})} />}
         {view.type==='projects' && <ProjectsPage onOpenProject={id => navigate({type:'project', id})} />}
-        {view.type==='project' && <ProjectPage projectId={(view as any).id} />}
+        {view.type==='project' && <ProjectPage projectId={(view as any).id}
+          onOpenFlashing={(id, projectId) => navigate({ type: 'flashings', id, projectId })} />}
         {view.type==='products' && <ProductsPage section={(view as any).section} onSection={id => navigate({type:'products', section:id})} />}
         {view.type==='users' && <AdminPage />}
         {view.type==='clients' && <ClientsPage onOpenProject={id => navigate({type:'project', id})} />}
@@ -325,7 +326,9 @@ function Shell() {
         {view.type==='tenant' && <TenantSettingsPage />}
         {view.type==='leads' && <LeadsPage />}
         {view.type==='history' && <HistoryPage />}
-        {view.type==='flashings' && <FlashingPage />}
+        {view.type==='flashings' && <FlashingPage key={`${(view as any).id ?? ''}-${(view as any).projectId ?? ''}`}
+          openId={(view as any).id} forProject={(view as any).projectId}
+          onOpenProject={id => navigate({ type: 'project', id } as any)} />}
       </main>
     </div>
   );

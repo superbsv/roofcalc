@@ -222,7 +222,7 @@ class History
                     $merge = $method === 'PUT' ? "c$cid" : null;
                     $slope = $cid;   // id клієнта — для назви
                 }
-            } elseif (preg_match('#^/flashings(?:/(\d+))?$#', $uri, $m)) {
+            } elseif (preg_match('#^/flashings(?:/(\d+))?(?:/link)?$#', $uri, $m)) {
                 $kind = 'flashing'; $fid = (int)($m[1] ?? 0); $slope = $fid;
                 $label = $method === 'POST' ? 'new_flashing' : ($method === 'DELETE' ? 'del_flashing' : 'edit_flashing');
                 if ($fid) $before = self::rows('flashings', [$fid]);
