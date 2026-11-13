@@ -14,6 +14,7 @@ import LayoutScheme from '../components/layout/LayoutScheme';
 import {
   Project, ProjectSettings, Slope, MaterialProfile, Point, EdgeType, CalcMode, AccessoryType,
   projectsApi, slopesApi, materialsApi, specApi, SpecItem, clientsApi, Client, downloadProjectFile, projectFileBlob,
+  tenantApi, TenantSettings,
 } from '../api/client';
 import { EDGE_TYPES, autoEdgeTypes, edgeColor, sideLengthMm, mirrorElement, setSideLength, HOLE_SHAPES, HoleShape, holeShape, holeValid } from '../components/roof/edges';
 import { useTheme } from '../components/theme/theme';
@@ -1242,6 +1243,9 @@ function Specification({ project, settings, slopes, material, items, projectId, 
   onOpenFlashing?: (id: number | null) => void;
 }) {
   const paperRef = useRef<HTMLElement>(null);
+  // Реквізити компанії для шапки (логотип, адреса, телефон, пошта, сайт)
+  const [firm, setFirm] = useState<TenantSettings | null>(null);
+  useEffect(() => { tenantApi.get().then(r => setFirm(r.tenant)).catch(() => setFirm(null)); }, []);
   const [saving, setSaving] = useState<'' | 'pdf' | 'xlsx' | 'png' | 'jpg' | 'zip'>('');
   const calcSlopes = () => slopes.filter(s => s.calc_result && !s.calc_result.errors?.length);
   // Схеми скатів — кожен скат окремим зображенням
@@ -1323,6 +1327,23 @@ function Specification({ project, settings, slopes, material, items, projectId, 
       </div>
 
       <article className="kp-paper" ref={paperRef}>
+        {/* Шапка: логотип і контакти компанії з «Налаштувань кабінету» */}
+        {firm && (firm.logo || firm.doc_address || firm.doc_phone || firm.doc_email || firm.doc_site) ? (
+          <div className="kp-letterhead">
+            {firm.logo && <img className="kp-lh-logo" src={firm.logo} alt="" />}
+            <div className="kp-lh-info" data-no-i18n>
+              <div className="kp-lh-name">{settings.company || firm.doc_company || firm.name}</div>
+              {firm.doc_address && <div>{firm.doc_address}</div>}
+              <div className="kp-lh-row">
+                {firm.doc_phone && <span>☎ {firm.doc_phone}</span>}
+                {firm.doc_email && <span>✉ {firm.doc_email}</span>}
+                {firm.doc_site && <span>🌐 {firm.doc_site.replace(/^https?:\/\//, '').replace(/\/$/, '')}</span>}
+              </div>
+            </div>
+          </div>
+        ) : firm && (
+          <div className="kp-lh-hint no-print" data-html2canvas-ignore>Логотип і контакти компанії в шапці специфікації — заповніть у «Налаштування кабінету».</div>
+        )}
         <div className="kp-paper-head">
           <div><span>Постачальник:</span> {settings.company || '—'}</div>
           <div><span>Замовник:</span> {project?.client_name || '—'}{project?.client_phone ? `, ${project.client_phone}` : ''}</div>
