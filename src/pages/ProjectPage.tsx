@@ -265,8 +265,10 @@ export default function ProjectPage({ projectId }: Props) {
     setSettings(s => ({ ...s, material_id: undefined }));
   });
 
-  // ---------- 2. Матеріал → «Далі»: застосувати до всіх скатів (експрес-розрахунок КП) ----------
-  const materialNext = () => run('apply', async () => {
+  // ---------- 2. Матеріал → «Далі» (або перехід на іншу вкладку): застосувати до всіх скатів ----------
+  // Новий матеріал / К / ПК / режим — скати одразу перераховуються, щоб розкладка і специфікація були за новим матеріалом.
+  const materialChanged = () => !!material && slopes.some(s => s.material_profile_id !== material.id);
+  const materialNext = (to: Step = 'slope') => run('apply', async () => {
     if (!material) return;
     const prevRound = (project?.settings as ProjectSettings | undefined)?.round_step ?? null;
     const st = await saveSettings({});
@@ -279,7 +281,15 @@ export default function ProjectPage({ projectId }: Props) {
     for (const s of slopes) {
       const same = !roundChanged && s.material_profile_id === body.material_profile_id && s.eave_overhang === body.eave_overhang
         && s.ridge_gap === body.ridge_gap && (s.calc_mode || 'order') === body.calc_mode;
-      updated.push(same ? s : { ...s, ...(await slopesApi.update(s.id, body)).slope });
+      if (same) { updated.push(s); continue; }
+      // інший матеріал — стик і зсув по вертикалі від старого листа вже не підходять
+      const b = s.material_profile_id !== body.material_profile_id ? { ...body, joint_y: null, v_shift: 0 } as Partial<Slope> : body;
+      let ns: Slope = { ...s, ...(await slopesApi.update(s.id, b)).slope };
+      if ((ns.polygon_points?.length || 0) >= 3) {
+        const r = await slopesApi.calculate(ns.id);
+        ns = { ...ns, calc_result: r.result };
+      }
+      updated.push(ns);
     }
     if (!updated.length) {
       const r = await slopesApi.create(projectId, newSlopeBody(1, st));
@@ -288,7 +298,9 @@ export default function ProjectPage({ projectId }: Props) {
     setSlopes(updated);
     setActiveId(cur => (cur && updated.some(s => s.id === cur) ? cur : updated[0].id));
     setEditorRev(r => r + 1);
-    setStep('slope');
+    if (to === 'layout' && updated.some(s => s.id === activeId && (s.polygon_points?.length || 0) >= 3)) setStep('layout');
+    else if (to === 'spec') { setStep('slope'); await openSpec(); }
+    else setStep(to === 'order' ? 'order' : 'slope');
   });
 
   function newSlopeBody(n: number, st: ProjectSettings = settings): Partial<Slope> {
@@ -516,6 +528,8 @@ export default function ProjectPage({ projectId }: Props) {
   const goStep = (s: Step) => {
     if (s === 'material' && !settings.calc_type) return;
     if ((s === 'slope' || s === 'layout') && !settings.material_id) return;
+    // пішли з вкладки «Матеріал», змінивши матеріал, — спершу застосувати його і перерахувати скати
+    if (step === 'material' && s !== 'material' && materialChanged()) { materialNext(s); return; }
     if (s === 'layout') { showLayout(); return; }
     if (s === 'spec') { openSpec(); return; }
     if (s === 'slope') setEditorRev(x => x + 1);
@@ -670,7 +684,7 @@ export default function ProjectPage({ projectId }: Props) {
                 )}
               </div>
             )}
-            <button className="btn btn-primary" onClick={materialNext} disabled={!material || !!busy || !ct.ready || !!matEdit}>
+            <button className="btn btn-primary" onClick={() => materialNext()} disabled={!material || !!busy || !ct.ready || !!matEdit}>
               {busy === 'apply' ? 'Застосовую…' : 'Далі →'}
             </button>
           </div>
