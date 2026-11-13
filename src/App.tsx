@@ -17,7 +17,6 @@ import BrandMark, { BrandWordmark } from './components/brand/BrandMark';
 import { ThemeToggle } from './components/theme/theme';
 import LangSwitch from './i18n/LangSwitch';
 import TrigCalc from './components/tools/TrigCalc';
-import GutterCalc from './components/tools/GutterCalc';
 import CatalogNav from './components/catalog/CatalogNav';
 
 type Page =
@@ -40,7 +39,6 @@ function Shell() {
   const [page, setPage] = useState<Page>({ type: 'projects' });
   const [productsOpen, setProductsOpen] = useState(false);
   const [trigOpen, setTrigOpen] = useState(false);
-  const [gutOpen, setGutOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Закриваємо сайдбар при зміні сторінки
@@ -115,9 +113,6 @@ function Shell() {
           <a href="/" onClick={e=>{e.preventDefault();setTrigOpen(true);}} title="Калькулятор тригонометричний: сторони, кути і площа трикутника">
             Калькулятор
           </a>
-          <a href="/" onClick={e=>{e.preventDefault();setGutOpen(true);}} title="Калькулятор водостоку: жолоби, труби, кронштейни">
-            Водостік
-          </a>
           <a href="/" className={view.type==='flashings'?'active':''} onClick={e=>{e.preventDefault();navigate({type:'flashings'});}} title="Креслення добірних елементів: планки, коньки, ендови, примикання">
             Добори
           </a>
@@ -127,7 +122,6 @@ function Shell() {
           )}
         </nav>
         {trigOpen && <TrigCalc onClose={() => setTrigOpen(false)} />}
-        {gutOpen && <GutterCalc onClose={() => setGutOpen(false)} />}
 
         <div className="header-right">
           <LangSwitch />
@@ -176,13 +170,6 @@ function Shell() {
             </svg>,
             trigOpen,
             () => { setTrigOpen(true); setSidebarOpen(false); }
-          )}
-          {navItem('Калькулятор водостоку',
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18v3a2 2 0 01-2 2H5a2 2 0 01-2-2V6z M15 11v7a2 2 0 002 2h2"/>
-            </svg>,
-            gutOpen,
-            () => { setGutOpen(true); setSidebarOpen(false); }
           )}
           {navItem('Креслення добірних елементів',
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
