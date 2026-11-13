@@ -190,6 +190,7 @@ class History
             $before = []; $kind = ''; $label = null; $merge = null; $proj = null; $slope = null;
             if ($method === 'POST' && $uri === '/projects') { $kind = 'project'; $label = 'new_project'; }
             elseif ($method === 'POST' && $uri === '/projects/import') { $kind = 'project'; $label = 'import'; }
+            elseif ($method === 'POST' && preg_match('#^/projects/(\d+)/copy$#', $uri)) { $kind = 'project'; $label = 'copy_project'; }
             elseif (preg_match('#^/projects/(\d+)$#', $uri, $m) && $method === 'PUT') {
                 $proj = (int)$m[1]; $kind = 'project'; $label = 'edit_project'; $merge = "p$proj";
                 $before = self::rows('projects', [$proj]);
@@ -264,6 +265,7 @@ class History
             $firstNew = function (string $t) use ($created) { foreach ($created as [$tt, $id]) if ($tt === $t) return $id; return 0; };
             switch ($c['label']) {
                 case 'new_project': $n = self::nameOf('projects', $firstNew('projects')); $l = "Створено проект «{$n}»"; break;
+                case 'copy_project': $n = self::nameOf('projects', $firstNew('projects')); $l = "Скопійовано проект «{$n}»"; break;
                 case 'import':      $n = self::nameOf('projects', $firstNew('projects')); $l = "Відкрито файл: проект «{$n}»"; break;
                 case 'edit_project': $l = "Змінено проект «{$pn}»"; break;
                 case 'del_project': $l = "Видалено проект «{$pn}»"; break;

@@ -175,6 +175,7 @@ export const projectsApi = {
   create:(body: Partial<Project>)   => post<{ project: Project }>('/projects', body),
   update:(id: number, body: Partial<Project>) => put<{ project: Project }>(`/projects/${id}`, body),
   delete:(id: number)               => del<{}>(`/projects/${id}`),
+  copy:(id: number, name?: string)  => post<{ project: Project }>(`/projects/${id}/copy`, { name }),
   calculateAll:(id: number)         => post<{ skipped?: string[] }>(`/projects/${id}/calculate-all`, {}),
   share: (token: string)            => get<{project:Project;slopes:Slope[];specification:SpecItem[]}>(`/projects/share/${token}`),
 };

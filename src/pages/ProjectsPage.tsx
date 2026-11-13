@@ -85,6 +85,17 @@ export default function ProjectsPage({ onOpenProject }: Props) {
     } catch (e: any) { setError(e.message); }
   };
 
+  // Копія проекту з усіма скатами, розкладкою і специфікацією — з'являється першою в списку
+  const copyProject = async (p: Project, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const name = window.prompt('Назва копії проекту:', `${p.name} (копія)`); // i18n-ignore (tpl)
+    if (name === null) return;
+    try {
+      const r = await projectsApi.copy(p.id, name.trim() || undefined);
+      setProjects(prev => [r.project, ...prev]);
+    } catch (err: any) { setError(err.message); }
+  };
+
   const fmt = (d: string) => new Date(d).toLocaleDateString('uk-UA');
 
   return (
@@ -161,6 +172,8 @@ export default function ProjectsPage({ onOpenProject }: Props) {
                     <td>
                       <button className="btn btn-ghost btn-sm btn-icon" title="Зберегти файл проекту на комп'ютер"
                         onClick={e => { e.stopPropagation(); downloadProjectFile(p.id, p.name).catch(err => setError(err.message)); }}>⭳</button>
+                      <button className="btn btn-ghost btn-sm btn-icon" title="Копіювати проект (усі скати, розкладка і специфікація)"
+                        onClick={e => copyProject(p, e)}>⧉</button>
                       <button
                         className="btn btn-ghost btn-sm btn-icon"
                         style={{color:'var(--clr-error)'}}

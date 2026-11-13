@@ -167,6 +167,78 @@ class ProjectsController
         $this->json(['project' => $project], 201);
     }
 
+    // POST /api/projects/{id}/copy — копія проекту: усі скати (з розкладкою, правками листів) і специфікація.
+    // Нова назва «… (копія)», новий номер замовлення, статус «чернетка», без посилання для клієнта.
+    public function copy(int $id): void
+    {
+        $user = $this->requireAuth();
+        if (($user['role'] ?? '') === 'viewer') $this->error('Недостатньо прав', 403);
+        $src = $this->findProject($id, $user);
+        $body = $this->body();
+
+        $tenant = Database::fetchOne('SELECT * FROM tenants WHERE id = ?', [$user['tid']]);
+        $lim = $tenant ? Plans::limits($tenant) : ['projects_month' => null];
+        if (!empty($lim['projects_month'])) {
+            $cnt = (int)Database::fetchOne(
+                "SELECT COUNT(*) c FROM projects WHERE tenant_id = ? AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')", [$user['tid']]
+            )['c'];
+            if ($cnt >= (int)$lim['projects_month']) {
+                $this->error('Вичерпано ліміт тарифу: ' . $lim['projects_month'] . ' розрахунків на місяць. Змініть тариф або зверніться в підтримку ROOFKIT', 402);
+            }
+        }
+
+        $settings = json_decode((string)($src['settings'] ?? ''), true) ?: [];
+        if ($tenant) {
+            $settings['order_no'] = (string)(int)$tenant['next_order_no'];
+            Database::query('UPDATE tenants SET next_order_no = next_order_no + 1 WHERE id = ?', [$user['tid']]);
+        }
+        $name = trim((string)($body['name'] ?? '')) ?: $src['name'] . ' (копія)';
+
+        $row = $src;
+        foreach (['id', 'share_token', 'share_expires_at', 'created_at', 'updated_at'] as $k) unset($row[$k]);
+        $row['name'] = mb_substr($name, 0, 255);
+        $row['status'] = 'draft';
+        $row['user_id'] = $user['sub'];
+        $row['tenant_id'] = $user['tid'];
+        $row['settings'] = json_encode($settings, JSON_UNESCAPED_UNICODE);
+
+        $db = Database::connection();
+        $db->beginTransaction();
+        try {
+            $newId = (int)self::insertRow('projects', $row);
+            $map = [];
+            foreach (Database::fetchAll('SELECT * FROM slopes WHERE project_id = ? ORDER BY sort_order, id', [$id]) as $sl) {
+                $old = (int)$sl['id'];
+                foreach (['id', 'created_at', 'updated_at'] as $k) unset($sl[$k]);
+                $sl['project_id'] = $newId;
+                $map[$old] = (int)self::insertRow('slopes', $sl);
+            }
+            foreach (Database::fetchAll('SELECT * FROM specification_items WHERE project_id = ? ORDER BY id', [$id]) as $it) {
+                unset($it['id']);
+                $it['project_id'] = $newId;
+                if (!empty($it['slope_id'])) {
+                    if (!isset($map[(int)$it['slope_id']])) continue;
+                    $it['slope_id'] = $map[(int)$it['slope_id']];
+                }
+                self::insertRow('specification_items', $it);
+            }
+            $db->commit();
+        } catch (\Throwable $e) {
+            $db->rollBack();
+            $em = $e->getMessage();
+            $this->error("Не вдалося скопіювати проект: {$em}", 500);
+        }
+
+        $this->log($user['sub'], 'project.copy', 'project', $newId);
+        $project = self::decodeProject(Database::fetchOne('SELECT * FROM projects WHERE id = ?', [$newId]));
+        $this->json(['project' => $project], 201);
+    }
+
+    private static function insertRow(string $table, array $row)
+    {
+        return Database::insert('INSERT INTO `' . $table . '` (`' . implode('`,`', array_keys($row)) . '`) VALUES (' . implode(',', array_fill(0, count($row), '?')) . ')', array_values($row));
+    }
+
     // GET /api/projects/{id}
     public function show(int $id): void
     {

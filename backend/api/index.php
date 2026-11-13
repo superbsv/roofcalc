@@ -115,6 +115,7 @@ try {
         case $method==='POST'&&$uri==='/projects/import':      (new ProjectsController)->fileImport(); break;
         case $method==='DELETE'&&preg_match('#^/projects/(\d+)$#',$uri,$m): (new ProjectsController)->delete((int)$m[1]); break;
         case $method==='POST'&&preg_match('#^/projects/(\d+)/calculate-all$#',$uri,$m): (new ProjectsController)->calculateAll((int)$m[1]); break;
+        case $method==='POST'&&preg_match('#^/projects/(\d+)/copy$#',$uri,$m): (new ProjectsController)->copy((int)$m[1]); break;
         case $method==='GET' &&preg_match('#^/projects/share/([a-zA-Z0-9_-]+)$#',$uri,$m): (new ProjectsController)->share($m[1]); break;
         case $method==='GET' &&preg_match('#^/projects/(\d+)/slopes$#',$uri,$m): (new SlopesController)->index((int)$m[1]); break;
         case $method==='POST'&&preg_match('#^/projects/(\d+)/slopes$#',$uri,$m): (new SlopesController)->create((int)$m[1]); break;
