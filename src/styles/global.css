@@ -965,6 +965,9 @@ tr:hover td { background: var(--clr-surface-2); }
 
   /* --- Login --- */
   .login-card { padding: var(--sp-6); }
+  /* вхід і реєстрація з телефона: поля 16px — без автозбільшення сторінки і гортання вбік */
+  .login-card .form-control, .login-card input, .login-card select { font-size: 16px; }
+  .login-page { overflow-x: hidden; }
 
   /* --- Project Page — скати зверху --- */
   .slope-list { flex-direction: row; overflow-x: auto; padding-bottom: var(--sp-2); }
