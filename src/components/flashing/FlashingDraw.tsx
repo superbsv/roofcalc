@@ -346,11 +346,52 @@ export default function FlashingDraw({ e, onChange = NOP, hi = -1, setHi = NOP, 
       const bb = textBox('RAL', RAL_FS), tw = bb.w + 8, sx = n[0] >= 0 ? 1 : -1;
       // напрям виноски — навскіс від лінії (нормаль + трохи вгору)
       let lx = n[0] + sx * 0.5, ly = n[1] - 0.5; const ll = Math.hypot(lx, ly); lx /= ll; ly /= ll;
-      out.push({ key: 'pm', t: 'RAL', cls: 'fd-ral', kind: 'ral', ax: P[0] + sx * tw / 2, ay: P[1] - RAL_FS / 2 - 2, nx: lx, ny: ly, d: 30, w: tw, h: bb.h + 4, tw, sx, A: P });
+      out.push({ key: 'pm', t: 'RAL', cls: 'fd-ral', kind: 'ral', ax: P[0] + sx * tw / 2, ay: P[1] - RAL_FS / 2 - 2, nx: lx, ny: ly, d: 46, w: tw, h: bb.h + 4, tw, sx, A: P, B: n });
     }
     const lines: [Pt, Pt][] = core.segs.map((_, i) => [S(pts[i]), S(pts[i + 1])]);
     [hemSG, hemEG].forEach(g => { if (g) lines.push([S(g.a), S(g.b)], [S(g.fold), S(g.core)]); });
-    const pos = placeLabels(lines, still ? [] : pts.map(S), out);
+    // спершу кути й розміри; потім RAL — з урахуванням розмірних і виносних ліній, щоб виноска на них не залазила
+    const main = out.filter(l => l.kind !== 'ral'), ral = out.filter(l => l.kind === 'ral');
+    const posMain = placeLabels(lines, still ? [] : pts.map(S), main);
+    const obst: [Pt, Pt][] = [...lines];
+    main.forEach((l, i) => {
+      const [x, y] = posMain[i];
+      // рамка вже поставленого підпису
+      const hw = l.w / 2 + 2, hh = l.h / 2 + 2;
+      obst.push([[x - hw, y - hh], [x + hw, y - hh]], [[x + hw, y - hh], [x + hw, y + hh]], [[x + hw, y + hh], [x - hw, y + hh]], [[x - hw, y + hh], [x - hw, y - hh]]);
+      if (l.kind !== 'dim') return;
+      const A = l.A!, B = l.B!;
+      const tn = (x - (A[0] + B[0]) / 2) * l.nx + (y - (A[1] + B[1]) / 2) * l.ny, dl = Math.max(6, tn - FS / 2 - 2) + 3;
+      const A2: Pt = [A[0] + l.nx * dl, A[1] + l.ny * dl], B2: Pt = [B[0] + l.nx * dl, B[1] + l.ny * dl];
+      obst.push([A, A2], [B, B2], [A2, B2]);
+    });
+    const posRal = ral.map(r => {
+      // шукаємо місце: відстань і напрям виноски (навскіс у обидва боки), поки підпис і сама виноска нічого не перетинають
+      const P = r.A!, seg = (a: Pt, b: Pt, c: Pt, d: Pt) => {
+        const o = (p: Pt, q: Pt, t: Pt) => Math.sign((q[0] - p[0]) * (t[1] - p[1]) - (q[1] - p[1]) * (t[0] - p[0]));
+        return o(a, b, c) !== o(a, b, d) && o(c, d, a) !== o(c, d, b);
+      };
+      // оцінка: перетин підпису з будь-чим — неприпустимо; перетин виноски — штраф; вихід за полотно — неприпустимо
+      let best: { x: number; y: number; sx: number; sc: number } | null = null;
+      for (const d of [46, 56, 66, 78, 92, 110]) for (const sw of [1, -1]) {
+        const sx = r.sx! * sw, n0 = r.B!;
+        let lx = n0[0] + sx * 0.5, ly = n0[1] - 0.5; const ll = Math.hypot(lx, ly) || 1; lx /= ll; ly /= ll;
+        const x = P[0] + sx * r.tw! / 2 + lx * d, y = P[1] - RAL_FS / 2 - 2 + ly * d;
+        if (x - r.w / 2 < 2 || x + r.w / 2 > W - 2 || y - r.h / 2 < 2 || y + r.h / 2 > H - 2) continue;
+        const Q: Pt = [x - sx * r.tw! / 2, y + RAL_FS / 2 + 2];
+        const box: [Pt, Pt][] = [[[x - r.w / 2, y - r.h / 2], [x + r.w / 2, y + r.h / 2]], [[x + r.w / 2, y - r.h / 2], [x - r.w / 2, y + r.h / 2]]];
+        if (obst.some(o => box.some(b => seg(b[0], b[1], o[0], o[1])))) continue;
+        const pEnd: Pt = [P[0] + (Q[0] - P[0]) * 0.08, P[1] + (Q[1] - P[1]) * 0.08];   // біля вістря дотик до своєї лінії — нормально
+        const cross = obst.filter(o => seg(pEnd, Q, o[0], o[1])).length;
+        const sc = cross * 1000 + d + (sw < 0 ? 5 : 0);
+        if (!best || sc < best.sc) best = { x, y, sx, sc };
+      }
+      return best || { x: r.ax + r.nx * 46, y: r.ay + r.ny * 46, sx: r.sx! };
+    });
+    let ri = 0, mi = 0;
+    const pos: Pt[] = out.map(l => l.kind === 'ral' ? [posRal[ri].x, posRal[ri].y] as Pt : posMain[mi++]);
+    ri = 0;
+    out.forEach(l => { if (l.kind === 'ral') l.sx = posRal[ri++].sx; });
     const arrow = (tip: Pt, dx: number, dy: number, k: string) => {   // (dx, dy) — від вістря назад
       const a = 6, b = 1.8;
       return <path key={k} d={`M${tip[0]},${tip[1]} L${tip[0] + dx * a - dy * b},${tip[1] + dy * a + dx * b} L${tip[0] + dx * a + dy * b},${tip[1] + dy * a - dx * b} Z`} className="fd-arw" />;

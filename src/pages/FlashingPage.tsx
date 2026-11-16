@@ -367,7 +367,6 @@ export default function FlashingPage({ openId, forProject, onOpenProject }: { op
               </table>
               <div className="kp-paper-line">Листів металу {sw} × {sl} мм: <b>{nest.sheets}</b> · <span>відходи</span> {f1(nest.wastePct)}%</div>
               <div className="fl-paper-nest"><NestView nest={nest} items={items} sw={sw} print /></div>
-              <div className="kp-paper-line fl-paper-legend">Помаранчева лінія на кресленні — фарбована сторона.</div>
               {cur.data.note && <div className="kp-paper-note"><b>Примітка:</b> <span data-no-i18n>{cur.data.note}</span></div>}
             </article>
           </div>
