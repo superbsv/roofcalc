@@ -197,8 +197,11 @@ class CatalogController
     // ---------- Імпорт / експорт ----------
     public const IO_FIELDS = [
         'full_width', 'useful_width', 'min_length', 'max_length', 'max_std_length', 'module_origin', 'stamp_gap', 'wave_step', 'round_step', 'cut_step',
-        'length_overlap', 'min_slope_angle', 'lock_type', 'min_joint_distance', 'join_overlap', 'price_per_m2', 'is_active',
+        'length_overlap', 'min_slope_angle', 'lock_type', 'min_joint_distance', 'join_overlap', 'price_per_m2', 'is_active', 'wave_height',
     ];
+    // Тип замку фальца: у файлі можна писати словами
+    private const LOCK_WORDS = ['стоячий' => 'standing', 'standing' => 'standing', 'лежачий' => 'lying', 'lying' => 'lying',
+        'подвійний' => 'double', 'двойной' => 'double', 'double' => 'double', 'клік' => 'click', 'клик' => 'click', 'click' => 'click'];
 
     // GET /catalog/export — усі позиції каталогу (кабінет — свій, панель платформи — каталог ROOFKIT)
     public function export(): void
@@ -250,7 +253,12 @@ class CatalogController
             foreach (self::IO_FIELDS as $f) {
                 if (!array_key_exists($f, $r) || trim((string)$r[$f]) === '') continue;
                 $v = str_replace([',', ' '], ['.', ''], trim((string)$r[$f]));
-                if ($f === 'lock_type') { $vals[$f] = mb_substr(trim((string)$r[$f]), 0, 30); continue; }
+                if ($f === 'lock_type') {
+                    $lw = mb_strtolower(trim((string)$r[$f])); $code = null;
+                    foreach (self::LOCK_WORDS as $w => $c) if (mb_strpos($lw, $w) !== false) { $code = $c; break; }
+                    $vals[$f] = $code ?? mb_substr(trim((string)$r[$f]), 0, 30);
+                    continue;
+                }
                 if (!is_numeric($v)) { $errors[] = "Рядок {$line} «{$name}»: «{$f}» має бути числом"; continue 2; }
                 $vals[$f] = in_array($f, ['min_slope_angle', 'price_per_m2'], true) ? (float)$v : (int)round((float)$v);
             }
@@ -260,6 +268,18 @@ class CatalogController
                     if (preg_match('/(\d+)\s*[-–]\s*(\d+)/', $part, $m) && (int)$m[2] > (int)$m[1]) $ranges[] = [(int)$m[1], (int)$m[2]];
                 }
                 $vals['forbidden_lengths'] = json_encode($ranges);
+            } elseif (($std1 = (int)preg_replace('/\D/', '', (string)($r['std_first'] ?? ''))) > 0 && ($vals['wave_step'] ?? 0) > 0) {
+                // Таблиця довжин металочерепиці з трьох чисел (форма для постачальників): перший завершений лист,
+                // «різати можна до +мм» і крок хвилі → недопустимі від (завершений + можна + 1) до (наступний завершений − 1)
+                $w = (int)$vals['wave_step'];
+                $rec = (int)preg_replace('/\D/', '', (string)($r['rec_extra'] ?? ''));
+                if ($rec <= 0 || $rec >= $w) $rec = $w - (int)($vals['length_overlap'] ?? 130);
+                $top = (int)($vals['max_length'] ?? 0) ?: 8000;
+                $ranges = [];
+                for ($sd = $std1; $sd <= $top; $sd += $w) if ($sd + $rec + 1 <= $sd + $w - 1) $ranges[] = [$sd + $rec + 1, $sd + $w - 1];
+                $vals['forbidden_lengths'] = json_encode($ranges);
+                if (empty($vals['min_length'])) $vals['min_length'] = $std1;
+                if (!array_key_exists('stamp_gap', $vals)) $vals['stamp_gap'] = 0;   // правило ±50 від штампа не потрібне — є таблиця
             }
             if (isset($vals['full_width'], $vals['useful_width'])) $vals['side_overlap'] = max(0, $vals['full_width'] - $vals['useful_width']);
             if ($existing) {

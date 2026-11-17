@@ -22,6 +22,9 @@ export const COLS: [string, string, string[]][] = [
   ['lock_type', 'Тип замку', ['Тип замка', 'Lock type']], // i18n-ignore
   ['min_joint_distance', 'Мін. відстань між стиками, мм', ['Мин. расстояние между стыками, мм', 'Min joint distance, mm']], // i18n-ignore
   ['join_overlap', 'Перекриття в стику, мм', ['Перекрытие в стыке, мм', 'Joint overlap, mm']], // i18n-ignore
+  ['wave_height', 'Висота хвилі / профілю, мм', ['Высота волны / профиля, мм', 'Wave / profile height, mm']], // i18n-ignore
+  ['std_first', 'Перший завершений лист, мм', ['Первый завершённый лист, мм', 'First complete sheet, mm']], // i18n-ignore
+  ['rec_extra', 'Різати можна до (від завершеного), +мм', ['Резать можно до (от завершённого), +мм', 'Cut allowed up to (from complete), +mm']], // i18n-ignore
   ['forbidden_lengths', 'Заборонені довжини (від-до; …)', ['Запрещённые длины (от-до; …)', 'Forbidden lengths (from-to; …)']], // i18n-ignore
   ['price_per_m2', 'Ціна за м²', ['Цена за м²', 'Price per m²']], // i18n-ignore
   ['is_active', 'Активний (1/0)', ['Активный (1/0)', 'Active (1/0)']], // i18n-ignore
@@ -43,7 +46,8 @@ export async function importCatalog(file: File): Promise<{ created: number; upda
   const XLSX = await import('xlsx');
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array' });
-  const ws = wb.Sheets[wb.SheetNames[0]];
+  // аркуш «Каталог» (форма для постачальників), інакше — перший
+  const ws = wb.Sheets[wb.SheetNames.find(n => /^(каталог|catalog)$/i.test(n.trim())) || wb.SheetNames[0]];
   const raw = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '', raw: false });
   const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
   const map = new Map<string, string>();
