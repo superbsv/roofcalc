@@ -80,6 +80,9 @@ export default function FlashingDraw({ e, onChange = NOP, hi = -1, setHi = NOP, 
   }, [pts, W, H, still]);
   const fitted = useRef(false);
   useEffect(() => { if (!fitted.current && W > 0) { fitted.current = true; fit(W); } }, [W, fit]);
+  // у бланку (still) креслення завжди по центру — перевміщуємо при кожній зміні профілю
+  const shapeKey = still ? JSON.stringify([e.segs, e.start]) : '';
+  useEffect(() => { if (still && W > 0) fit(W); }, [shapeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const S = (p: Pt): Pt => [view.tx + p[0] * view.k, view.ty - p[1] * view.k];
   const toWorld = (cx: number, cy: number): Pt => {
