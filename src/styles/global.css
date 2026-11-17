@@ -1829,3 +1829,16 @@ g:hover > .fd-pt, .fd-pt.on { fill: var(--fl-ink); stroke: var(--fl-ink); }
 .kp-paper .fd-ang { fill: #444; }
 .fl-proj { color: var(--clr-brand); }
 @media (max-width: 800px) { .kp-flash-grid { grid-template-columns: 1fr; } }
+
+/* Список проектів — щільно, кожен проект в один рядок */
+.prj-table { font-size: .8rem; table-layout: auto; }
+.prj-table th { padding: 6px 8px; font-size: .64rem; white-space: nowrap; }
+.prj-table td { padding: 4px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; vertical-align: middle; }
+.prj-table tbody tr { cursor: pointer; }
+.prj-table tbody tr:hover td { background: var(--clr-surface-2); }
+.prj-table .prj-no { width: 1%; color: var(--clr-text-3); font-variant-numeric: tabular-nums; text-align: right; }
+.prj-table .prj-name { font-weight: 600; max-width: 320px; }
+.prj-table .prj-sub { color: var(--clr-text-3); font-size: .74rem; }
+.prj-table .badge { font-size: .64rem; padding: 1px 7px; }
+.prj-table .prj-acts { width: 1%; text-align: right; max-width: none; }
+.prj-table .prj-acts .btn-icon { width: 24px; height: 24px; min-height: 0; padding: 0; font-size: .8rem; }

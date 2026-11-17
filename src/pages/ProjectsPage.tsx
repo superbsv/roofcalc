@@ -129,13 +129,15 @@ export default function ProjectsPage({ onOpenProject }: Props) {
       {/* Projects table */}
       <div className="card" style={{padding:0,overflow:'hidden'}}>
         <div className="table-wrap">
-          <table>
+          <table className="prj-table">
             <thead>
               <tr>
+                <th className="prj-no">№</th>
                 <th>Назва проекту</th>
                 <th>Клієнт</th>
                 <th>Об'єкт</th>
                 <th>Тип розрахунку</th>
+                <th>Менеджер</th>
                 <th>Статус</th>
                 <th>Оновлено</th>
                 <th></th>
@@ -143,33 +145,27 @@ export default function ProjectsPage({ onOpenProject }: Props) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} style={{textAlign:'center',padding:'32px',color:'var(--clr-text-3)'}}>
+                <tr><td colSpan={9} style={{textAlign:'center',padding:'32px',color:'var(--clr-text-3)'}}>
                   Завантаження…
                 </td></tr>
               ) : !projects.length ? (
-                <tr><td colSpan={7} style={{textAlign:'center',padding:'32px',color:'var(--clr-text-3)'}}>
+                <tr><td colSpan={9} style={{textAlign:'center',padding:'32px',color:'var(--clr-text-3)'}}>
                   Проектів поки немає. Натисніть «Створити розрахунок»
                 </td></tr>
               ) : projects.map(p => {
                 const [statusLabel, statusClass] = STATUS_LABELS[p.status] || ['', 'badge-gray'];
+                const od = p.settings?.order_date ? p.settings.order_date.split('-').reverse().join('.') : '';
                 return (
-                  <tr key={p.id} style={{cursor:'pointer'}} onClick={() => onOpenProject(p.id)}>
-                    <td>
-                      <div style={{fontWeight:600}}>{p.name}</div>
-                      {p.settings?.order_no && <div className="text-xs text-muted">№{p.settings.order_no}{p.settings.order_date ? ` від ${p.settings.order_date.split('-').reverse().join('.')}` : ''}</div>}
-                      {p.manager_name && <div className="text-xs text-muted">{p.manager_name}</div>}
-                    </td>
-                    <td>
-                      <div>{p.client_name || '—'}</div>
-                      {p.client_phone && <div className="text-xs text-muted">{p.client_phone}</div>}
-                    </td>
-                    <td style={{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                      {p.object_address || '—'}
-                    </td>
+                  <tr key={p.id} onClick={() => onOpenProject(p.id)}>
+                    <td className="prj-no" title={od ? `від ${od}` : undefined}>{p.settings?.order_no || '—'}</td>{/* i18n-ignore (tpl) */}
+                    <td className="prj-name" title={p.name}>{p.name}</td>
+                    <td title={p.client_phone || undefined}>{p.client_name || '—'}{p.client_phone && <span className="prj-sub"> · {p.client_phone}</span>}</td>
+                    <td title={p.object_address || undefined}>{p.object_address || '—'}</td>
                     <td>{calcTypeInfo(p.settings?.calc_type)?.label || ROOF_TYPES.find(t => t.value === p.roof_type)?.label || '—'}</td>
+                    <td className="prj-sub">{p.manager_name || '—'}</td>
                     <td><span className={`badge ${statusClass}`}>{statusLabel}</span></td>
-                    <td className="text-muted text-xs">{fmt(p.updated_at)}</td>
-                    <td>
+                    <td className="prj-sub">{fmt(p.updated_at)}</td>
+                    <td className="prj-acts">
                       <button className="btn btn-ghost btn-sm btn-icon" title="Зберегти файл проекту на комп'ютер"
                         onClick={e => { e.stopPropagation(); downloadProjectFile(p.id, p.name).catch(err => setError(err.message)); }}>⭳</button>
                       <button className="btn btn-ghost btn-sm btn-icon" title="Копіювати проект (усі скати, розкладка і специфікація)"
