@@ -318,7 +318,7 @@ export default function FlashingDraw({ e, onChange = NOP, hi = -1, setHi = NOP, 
       const bl = Math.hypot(bx, by);
       if (bl < 1e-6) { bx = -u1[1]; by = u1[0]; } else { bx /= bl; by /= bl; }
       const t = r1(q.ang) + '°', bb = textBox(t, 10);
-      out.push({ key: 'a' + i, t, cls: 'fd-ang', kind: 'ang', ax: at[0], ay: at[1], nx: bx, ny: by, d: angOffset(t, 10, q.ang), w: bb.w, h: bb.h });
+      out.push({ key: 'a' + i, t, cls: 'fd-ang', kind: 'ang', ax: at[0], ay: at[1], nx: bx, ny: by, d: angOffset(t, 10, q.ang), w: bb.w, h: bb.h, tanK: 3 });
     });
     // розмір: текст уздовж розмірної лінії, із зовнішнього боку
     const dim = (key: string, A: Pt, B: Pt, n: Pt, t: string, cls: string, dl0: number) => {
@@ -354,8 +354,19 @@ export default function FlashingDraw({ e, onChange = NOP, hi = -1, setHi = NOP, 
     const lines: [Pt, Pt][] = core.segs.map((_, i) => [S(pts[i]), S(pts[i + 1])]);
     [hemSG, hemEG].forEach(g => { if (g) lines.push([S(g.a), S(g.b)], [S(g.fold), S(g.core)]); });
     // спершу кути й розміри; потім RAL — з урахуванням розмірних і виносних ліній, щоб виноска на них не залазила
-    const main = out.filter(l => l.kind !== 'ral'), ral = out.filter(l => l.kind === 'ral');
-    const posMain = placeLabels(lines, still ? [] : pts.map(S), main);
+    // спершу розміри, потім кути — кут обходить і підписи розмірів, і їхні розмірні / виносні лінії
+    const dimsL = out.filter(l => l.kind === 'dim'), angsL = out.filter(l => l.kind === 'ang'), ral = out.filter(l => l.kind === 'ral');
+    const ptsS = still ? [] : pts.map(S);
+    const posDims = placeLabels(lines, ptsS, dimsL);
+    const dimObst: [Pt, Pt][] = [];
+    dimsL.forEach((l, i) => {
+      const [x, y] = posDims[i], A = l.A!, B = l.B!;
+      const tn = (x - (A[0] + B[0]) / 2) * l.nx + (y - (A[1] + B[1]) / 2) * l.ny, dl = Math.max(6, tn - FS / 2 - 2) + 3;
+      const A2: Pt = [A[0] + l.nx * dl, A[1] + l.ny * dl], B2: Pt = [B[0] + l.nx * dl, B[1] + l.ny * dl];
+      dimObst.push([A, A2], [B, B2], [A2, B2]);
+    });
+    const posAngs = placeLabels([...lines, ...dimObst], ptsS, angsL, dimsL.map((l, i) => ({ x: posDims[i][0], y: posDims[i][1], w: l.w, h: l.h })));
+    const main = [...dimsL, ...angsL], posMain = [...posDims, ...posAngs];
     const obst: [Pt, Pt][] = [...lines];
     main.forEach((l, i) => {
       const [x, y] = posMain[i];
@@ -391,8 +402,8 @@ export default function FlashingDraw({ e, onChange = NOP, hi = -1, setHi = NOP, 
       }
       return best || { x: r.ax + r.nx * 46, y: r.ay + r.ny * 46, sx: r.sx! };
     });
-    let ri = 0, mi = 0;
-    const pos: Pt[] = out.map(l => l.kind === 'ral' ? [posRal[ri].x, posRal[ri].y] as Pt : posMain[mi++]);
+    let ri = 0;
+    const pos: Pt[] = out.map(l => l.kind === 'ral' ? [posRal[ri++].x, posRal[ri - 1].y] as Pt : posMain[main.indexOf(l)]);
     ri = 0;
     out.forEach(l => { if (l.kind === 'ral') l.sx = posRal[ri++].sx; });
     const arrow = (tip: Pt, dx: number, dy: number, k: string) => {   // (dx, dy) — від вістря назад

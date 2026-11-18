@@ -283,9 +283,9 @@ export const angOffset = (t: string, fs: number, ang: number, gap = 4) => {
 
 /** Розставити підписи без перетинів: кожен підпис зсувається вздовж свого напрямку (nx, ny),
  *  доки не перестане торкатися ліній, точок і вже поставлених підписів. Координати — екранні. */
-export interface LabelReq { ax: number; ay: number; nx: number; ny: number; d: number; w: number; h: number }
-export function placeLabels(lines: [Pt, Pt][], points: Pt[], reqs: LabelReq[]): Pt[] {
-  const placed: { x: number; y: number; w: number; h: number }[] = [];
+export interface LabelReq { ax: number; ay: number; nx: number; ny: number; d: number; w: number; h: number; tanK?: number }   // tanK — ціна зсуву вздовж (кути — 3: тримаються бісектриси)
+export function placeLabels(lines: [Pt, Pt][], points: Pt[], reqs: LabelReq[], pre: { x: number; y: number; w: number; h: number }[] = []): Pt[] {
+  const placed: { x: number; y: number; w: number; h: number }[] = [...pre];
   const hitsLine = (x: number, y: number, w: number, h: number) => lines.some(([a, b]) => {
     const dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy || 1;
     const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / L2));
@@ -294,13 +294,25 @@ export function placeLabels(lines: [Pt, Pt][], points: Pt[], reqs: LabelReq[]): 
     return Math.abs(x - px) < w / 2 + 3 && Math.abs(y - py) < h / 2 + 3;
   });
   const hitsPt = (x: number, y: number, w: number, h: number) => points.some(p => Math.abs(x - p[0]) < w / 2 + 6 && Math.abs(y - p[1]) < h / 2 + 6);
-  const hitsLbl = (x: number, y: number, w: number, h: number) => placed.some(q => Math.abs(x - q.x) < (w + q.w) / 2 + 3 && Math.abs(y - q.y) < (h + q.h) / 2 + 2);
+  // Кандидати: далі від лінії (крок 4 px) і трохи вздовж неї (±6, ±12, ±18, ±24 px) — від найближчого.
+  // Нема вільного місця — беремо той, де найменше накладань (підпис на підпис — найгірше).
+  const lblOverlap = (x: number, y: number, w: number, h: number) => placed.reduce((a, q) => {
+    const ox = (w + q.w) / 2 + 3 - Math.abs(x - q.x), oy = (h + q.h) / 2 + 2 - Math.abs(y - q.y);
+    return a + (ox > 0 && oy > 0 ? ox * oy : 0);
+  }, 0);
+  const TAN = [0, 6, -6, 12, -12, 18, -18, 24, -24];
   return reqs.map(r => {
-    let best: Pt = [r.ax + r.nx * r.d, r.ay + r.ny * r.d];
-    for (let k = 0; k < 16; k++) {
-      const d = r.d + k * 4, x = r.ax + r.nx * d, y = r.ay + r.ny * d;
-      if (k === 0) best = [x, y];
-      if (!hitsLine(x, y, r.w, r.h) && !hitsPt(x, y, r.w, r.h) && !hitsLbl(x, y, r.w, r.h)) { best = [x, y]; break; }
+    const tx = -r.ny, ty = r.nx, tk = r.tanK ?? 1;
+    // усі кандидати за «ціною»: відстань від базового місця + зсув уздовж (для кутів — дорожчий, щоб кут лишався на бісектрисі)
+    const cand: { x: number; y: number; c: number }[] = [];
+    for (let k = 0; k < 16; k++) for (const t of TAN) cand.push({ x: r.ax + r.nx * (r.d + k * 4) + tx * t, y: r.ay + r.ny * (r.d + k * 4) + ty * t, c: k * 4 + Math.abs(t) * tk });
+    cand.sort((p, q) => p.c - q.c);
+    let best: Pt = [cand[0].x, cand[0].y], bestSc = Infinity;
+    for (const { x, y, c } of cand) {
+      const ov = lblOverlap(x, y, r.w, r.h), hl = hitsLine(x, y, r.w, r.h), hp = hitsPt(x, y, r.w, r.h);
+      if (!ov && !hl && !hp) { best = [x, y]; break; }
+      const sc = ov * 10 + (hl ? 400 : 0) + (hp ? 200 : 0) + c;
+      if (sc < bestSc) { bestSc = sc; best = [x, y]; }
     }
     placed.push({ x: best[0], y: best[1], w: r.w, h: r.h });
     return best;
