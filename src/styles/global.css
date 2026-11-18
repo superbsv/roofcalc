@@ -1867,3 +1867,21 @@ g:hover > .fd-pt, .fd-pt.on { fill: var(--fl-ink); stroke: var(--fl-ink); }
   .kp-paper tr, .kp-paper img { break-inside: avoid; page-break-inside: avoid; }
   .kp-paper thead { display: table-header-group; }
 }
+
+/* ===== Документи для друку (специфікація, бланк доборів): чорний насичений текст — чітко на ч/б принтері ===== */
+.kp-paper, .fl-paper { color: #000; font-weight: 500; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.kp-paper *, .fl-paper * { color: #000 !important; }
+.kp-paper b, .kp-paper strong, .kp-paper dd, .kp-paper .kp-paper-h, .kp-paper .tr-total td, .kp-paper .kp-lh-name,
+.fl-paper b, .fl-paper strong { font-weight: 700; }
+.kp-paper .kp-table th, .fl-paper .kp-table th { background: #E6E6E6; font-weight: 700; }
+.kp-paper .kp-table th, .kp-paper .kp-table td, .fl-paper .kp-table th, .fl-paper .kp-table td { border-color: #555 !important; }
+.kp-paper .kp-table tr:last-child td { border-bottom-color: #555; }
+.kp-paper .kp-paper-table .tr-total td { background: #EFEFEF; }
+.kp-paper .kp-letterhead { border-bottom-color: #000; }
+.kp-paper .kp-scheme-img { border-color: #888; }
+.kp-paper .fl-paper-item, .fl-paper .fl-paper-item { border-color: #888; }
+.kp-paper .kp-sp-m, .kp-paper .kp-delivery-note, .kp-paper .kp-scheme-params, .kp-paper .fl-paper-meta { font-weight: 500; }
+.kp-paper svg text, .fl-paper svg text { fill: #000; }
+.kp-paper, .fl-paper { --fl-ink: #000; }
+.kp-paper .fd-ang, .fl-paper .fd-ang { fill: #000; }
+.kp-paper .kp-paper-warn { color: #000 !important; border-color: #000; }
