@@ -1859,3 +1859,11 @@ g:hover > .fd-pt, .fd-pt.on { fill: var(--fl-ink); stroke: var(--fl-ink); }
 .kp-scheme-params b { color: #0F172A; }
 .kp-sp-m { color: #64748B; font-size: .9em; }
 @media (max-width: 700px) { .kp-scheme-params { grid-template-columns: 1fr; } }
+
+/* Друк специфікації: блоки не розриваються, заголовки не лишаються самі внизу сторінки */
+@media print {
+  .kp-paper-h, .kp-keep, .kp-scheme-h { break-after: avoid; page-break-after: avoid; }
+  .kp-scheme, .fl-paper-item, .kp-letterhead, .kp-paper-params, .kp-scheme-params { break-inside: avoid; page-break-inside: avoid; }
+  .kp-paper tr, .kp-paper img { break-inside: avoid; page-break-inside: avoid; }
+  .kp-paper thead { display: table-header-group; }
+}

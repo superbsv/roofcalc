@@ -68,8 +68,11 @@ export function FlashingBlock({ f }: { f: Linked }) {
   const tot = items.reduce((a, e) => { const c = blankCalc(e, sw, sl); return { qty: a.qty + (e.qty || 0), runM: a.runM + c.runM }; }, { qty: 0, runM: 0 });
   return (
     <>
-      <h3 className="kp-paper-h">ДОБІРНІ ЕЛЕМЕНТИ <span className="kp-flash-name" data-no-i18n>— {f.name}</span></h3>
-      {meta && <div className="kp-paper-line" data-no-i18n>{meta}</div>}
+      {/* заголовок + перший ряд креслень — разом, щоб при друку заголовок не відривався */}
+      <div className="kp-keep">
+        <h3 className="kp-paper-h">ДОБІРНІ ЕЛЕМЕНТИ <span className="kp-flash-name" data-no-i18n>— {f.name}</span></h3>
+        {meta && <div className="kp-paper-line" data-no-i18n>{meta}</div>}
+      </div>
       <div className="fl-paper-grid kp-flash-grid">
         {items.map((e, i) => {
           const c = blankCalc(e, sw, sl);

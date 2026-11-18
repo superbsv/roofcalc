@@ -33,13 +33,14 @@ export default function SpecSchemes({ slopes, orderNo, orderDate }: { slopes: Sl
   if (!slopes.length) return null;
   return (
     <>
-      <h3 className="kp-paper-h">СХЕМИ РОЗКРОЮ</h3>
       {slopes.map((s, n) => {
         const r: any = s.calc_result || {};
         const pts = s.polygon_points || [];
         const sides = pts.map((a, i) => [sideLetter(i), m3(sideLengthMm(a, pts[(i + 1) % pts.length]))]);
         return (
           <section key={s.id} className="kp-scheme">
+            {/* заголовок розділу — всередині першого блоку, щоб при друку не лишався сам унизу сторінки */}
+            {n === 0 && <h3 className="kp-paper-h">СХЕМИ РОЗКРОЮ</h3>}
             <div className="kp-scheme-h"><b><span>Скат</span> {n + 1}.</b> <span data-no-i18n>{s.name} — S = {f2(r.slope_area_m2)} m² · {r.total_sheets ?? 0}</span> <span>шт</span></div>
             {imgs[s.id] ? <img className="kp-scheme-img" src={imgs[s.id]!} alt="" />
               : imgs[s.id] === null ? <div className="kp-paper-line">Скат ще не розраховано.</div>

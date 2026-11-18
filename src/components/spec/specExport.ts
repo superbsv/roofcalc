@@ -25,7 +25,7 @@ export async function specToPdf(paper: HTMLElement, name: string, asBlob = false
     const cuts = new Set<number>();
     // можна різати під рядком таблиці / блоком; під заголовком розділу — ні (заголовок переноситься разом із блоком)
     clone.querySelectorAll('tr, .kp-paper > *, .kp-lens > *, .kp-paper-line').forEach(el => {
-      if (el.matches('h2, h3, .kp-scheme-h')) return;
+      if (el.matches('h2, h3, .kp-scheme-h, .kp-keep')) return;
       cuts.add(Math.round(el.getBoundingClientRect().bottom - top0));
     });
     const scale = 2;
