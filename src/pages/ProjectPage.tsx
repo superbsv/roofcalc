@@ -1273,6 +1273,15 @@ function Specification({ project, settings, slopes, material, items, projectId, 
     } catch (e: any) { alert(e.message || String(e)); }
     finally { setSaving(''); }
   };
+  // Ручне редагування документа перед друком / PDF / Excel / архівом: текст специфікації правиться
+  // прямо на аркуші. Правки — лише в цьому документі (розрахунок не змінюється); «Скинути» повертає як було.
+  const [editDoc, setEditDoc] = useState(false);
+  const [docKey, setDocKey] = useState(0);
+  const [edited, setEdited] = useState(false);
+  const resetDoc = () => {
+    if (edited && !window.confirm('Скинути всі ручні правки специфікації?')) return;
+    setEdited(false); setEditDoc(false); setDocKey(k => k + 1);
+  };
   const save = async (kind: 'pdf' | 'xlsx') => {
     if (!paperRef.current) return;
     setSaving(kind);
@@ -1316,6 +1325,9 @@ function Specification({ project, settings, slopes, material, items, projectId, 
           <button className="btn btn-secondary btn-sm" onClick={onMaterial}>Вих. дані</button>
         </div>
         <div className="kp-tools">
+          <button className={`btn btn-sm ${editDoc ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setEditDoc(v => !v)}
+            title="Виправити будь-який текст чи число прямо в специфікації перед друком / PDF / Excel">{editDoc ? '✓ Готово' : '✎ Редагувати'}</button>
+          {edited && <button className="btn btn-ghost btn-sm" onClick={resetDoc} title="Повернути специфікацію як розраховано">↺ Скинути правки</button>}
           <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>🖨 Друк</button>
           <button className="btn btn-primary btn-sm" disabled={!!saving} onClick={() => save('pdf')}>{saving === 'pdf' ? 'Створення PDF…' : 'Зберегти PDF'}</button>
           <button className="btn btn-secondary btn-sm" disabled={!!saving} onClick={() => save('xlsx')}>{saving === 'xlsx' ? 'Створення…' : 'Зберегти Excel'}</button>
@@ -1326,7 +1338,10 @@ function Specification({ project, settings, slopes, material, items, projectId, 
         </div>
       </div>
 
-      <article className="kp-paper" ref={paperRef}>
+      {editDoc && <div className="kp-edit-hint no-print">✎ Режим редагування: клацніть по будь-якому тексту чи числу в специфікації і виправте його. Правки потраплять у друк, PDF, Excel і архів; сам розрахунок не змінюється. Після виходу з «Специфікації» правки скидаються.</div>}
+      <article key={docKey} className={`kp-paper${editDoc ? ' kp-paper-edit' : ''}`} ref={paperRef}
+        contentEditable={editDoc} suppressContentEditableWarning spellCheck={false}
+        onInput={() => setEdited(true)}>
         {/* Шапка: логотип і контакти компанії з «Налаштувань кабінету» */}
         {firm && (firm.logo || firm.doc_address || firm.doc_phone || firm.doc_email || firm.doc_site) ? (
           <div className="kp-letterhead">

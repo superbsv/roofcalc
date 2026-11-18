@@ -1842,3 +1842,10 @@ g:hover > .fd-pt, .fd-pt.on { fill: var(--fl-ink); stroke: var(--fl-ink); }
 .prj-table .badge { font-size: .64rem; padding: 1px 7px; }
 .prj-table .prj-acts { width: 1%; text-align: right; max-width: none; }
 .prj-table .prj-acts .btn-icon { width: 24px; height: 24px; min-height: 0; padding: 0; font-size: .8rem; }
+
+/* Ручне редагування специфікації */
+.kp-paper-edit { outline: 2px dashed var(--clr-brand); outline-offset: 4px; cursor: text; }
+.kp-paper-edit td:hover, .kp-paper-edit dd:hover, .kp-paper-edit div:hover > span:hover { background: rgba(249,115,22,.08); }
+.kp-paper-edit [contenteditable]:focus { outline: none; }
+.kp-edit-hint { max-width: 900px; margin: 0 auto 8px; padding: 6px 10px; font-size: .76rem; border-radius: 6px; background: var(--clr-brand-pale, #fff7ed); color: var(--clr-text-2); border: 1px solid var(--clr-brand); }
+@media print { .kp-paper-edit { outline: none; } }

@@ -257,6 +257,24 @@ class AccessoryCalc
             ];
         }
 
+        // Фальц / клік-фальц: саморіз 4,2×25 (цинк) кожні 20 см уздовж загального погонажу листів
+        if ($type === 'falts') {
+            $running = (float)($this->calcResult['running_m'] ?? 0);
+            if ($running <= 0) return null;
+            $step = 0.2;
+            $qty  = (int)ceil($running / $step - 1e-9);
+            return [
+                'code'     => 'screw_42x25_zn',
+                'name'     => 'Саморіз 4,2×25 (цинк)',
+                'unit'     => 'шт',
+                'quantity' => $qty,
+                'price'    => 0,
+                'total'    => 0,
+                'calc_rule'=> 'linear',
+                'note'     => sprintf('1 шт / 20 см × %.2f п.м. листів', $running),
+            ];
+        }
+
         // Норма: 8 саморізів на 1 м² повної площі матеріалу (повна ширина × погонні метри листів)
         $norm  = 8;
         $area  = (float)($this->calcResult['total_full_area_m2'] ?? $this->calcResult['order_area_m2'] ?? 0);
