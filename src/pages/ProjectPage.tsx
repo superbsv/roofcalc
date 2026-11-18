@@ -271,8 +271,20 @@ export default function ProjectPage({ projectId, onOpenFlashing }: Props) {
 
   // ---------- 2. Матеріал → «Далі» (або перехід на іншу вкладку): застосувати до всіх скатів ----------
   // Новий матеріал / К / ПК / режим — скати одразу перераховуються, щоб розкладка і специфікація були за новим матеріалом.
-  const materialChanged = () => !!material && slopes.some(s => s.material_profile_id !== material.id);
+  // «Відбиток» вкладки «Матеріал»: усе, що впливає на розрахунок (матеріал, його параметри в картці, К, ПК,
+  // округлення, режим…). Змінився, поки були на вкладці, — при виході перераховуємо всі скати.
+  const INFO_KEYS = ['order_no', 'order_date', 'company', 'responsible', 'extra_items', 'spec_note', 'currency', 'discount', 'vat', 'vat_included'];
+  const matSig = () => {
+    const st: Record<string, unknown> = { ...settings };
+    INFO_KEYS.forEach(k => delete st[k]);
+    return JSON.stringify({ st, m: materials.find(m => m.id === settings.material_id) || null });
+  };
+  const sigRef = useRef<string>('');
+  useEffect(() => { if (step === 'material') sigRef.current = matSig(); }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
+  const matTouched = () => step === 'material' && !!sigRef.current && sigRef.current !== matSig();
+  const materialChanged = () => !!material && (slopes.some(s => s.material_profile_id !== material.id) || matTouched());
   const materialNext = (to: Step = 'slope') => run('apply', async () => {
+    const force = matTouched();   // будь-яка зміна на вкладці — перерахувати всі скати
     if (!material) return;
     const prevRound = (project?.settings as ProjectSettings | undefined)?.round_step ?? null;
     const st = await saveSettings({});
@@ -283,7 +295,7 @@ export default function ProjectPage({ projectId, onOpenFlashing }: Props) {
     };
     const updated: Slope[] = [];
     for (const s of slopes) {
-      const same = !roundChanged && s.material_profile_id === body.material_profile_id && s.eave_overhang === body.eave_overhang
+      const same = !force && !roundChanged && s.material_profile_id === body.material_profile_id && s.eave_overhang === body.eave_overhang
         && s.ridge_gap === body.ridge_gap && (s.calc_mode || 'order') === body.calc_mode;
       if (same) { updated.push(s); continue; }
       // інший матеріал — стик і зсув по вертикалі від старого листа вже не підходять
@@ -302,6 +314,7 @@ export default function ProjectPage({ projectId, onOpenFlashing }: Props) {
     setSlopes(updated);
     setActiveId(cur => (cur && updated.some(s => s.id === cur) ? cur : updated[0].id));
     setEditorRev(r => r + 1);
+    sigRef.current = '';
     if (to === 'layout' && updated.some(s => s.id === activeId && (s.polygon_points?.length || 0) >= 3)) setStep('layout');
     else if (to === 'spec') { setStep('slope'); await openSpec(); }
     else setStep(to === 'order' ? 'order' : 'slope');
