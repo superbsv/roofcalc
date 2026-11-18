@@ -24,7 +24,6 @@ import { t } from '../i18n/i18n';
 import ManufacturerSelect from '../components/catalog/ManufacturerSelect';
 import ProjectFlashings, { FlashingBlock, Linked as LinkedFlashing } from '../components/flashing/ProjectFlashings';
 import SpecSchemes from '../components/spec/SpecSchemes';
-import { blankCalc } from '../components/flashing/flashing';
 import { specToPdf, specToExcel } from '../components/spec/specExport';
 import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter, templateNums } from '../components/roof/templates';
 import { materialLabel } from '../components/roof/materials';
@@ -1291,10 +1290,6 @@ function Specification({ project, settings, slopes, material, items, projectId, 
   // Ручне редагування документа перед друком / PDF / Excel / архівом: текст специфікації правиться
   // прямо на аркуші. Правки — лише в цьому документі (розрахунок не змінюється); «Скинути» повертає як було.
   const [flash, setFlash] = useState<LinkedFlashing[]>([]);   // прив'язані креслення доборів
-  const flashRows = flash.flatMap(f => (f.data.items || []).map(e => {
-    const c = blankCalc(e, f.data.sheet_width || 1250, f.data.sheet_length || 2000);
-    return { key: f.id + ':' + e.id, name: e.name, note: `заготовка ${Math.round(c.girth * 10) / 10} мм · L ${e.length} мм`, qty: e.qty || 0 }; // i18n-ignore (tpl)
-  }));
   const [editDoc, setEditDoc] = useState(false);
   const [docKey, setDocKey] = useState(0);
   const [edited, setEdited] = useState(false);
@@ -1464,16 +1459,12 @@ function Specification({ project, settings, slopes, material, items, projectId, 
           </>
         )}
 
-        {/* Один перелік: саморізи і добірні елементи з прив'язаних креслень */}
-        <h3 className="kp-paper-h">{flashRows.length ? 'КОМПЛЕКТУЮЧІ ТА ДОБІРНІ ЕЛЕМЕНТИ — ЗАГАЛЬНА КІЛЬКІСТЬ' : 'САМОРІЗИ — ЗАГАЛЬНА КІЛЬКІСТЬ'}</h3>
+        <h3 className="kp-paper-h">САМОРІЗИ — ЗАГАЛЬНА КІЛЬКІСТЬ</h3>
         <table className="kp-table kp-paper-table">
           <thead><tr><th>Найменування</th><th>Од.</th><th>Кількість</th></tr></thead>
           <tbody>
             {accItems.map(i => (
               <tr key={i.name + i.unit}><td>{i.name}</td><td>{i.unit}</td><td>{Number(i.quantity).toFixed(i.unit === 'шт' ? 0 : 2)}</td></tr>
-            ))}
-            {flashRows.map(r => (
-              <tr key={r.key}><td><span data-no-i18n>{r.name}</span> <span className="kp-sp-m" data-no-i18n>({r.note})</span></td><td>шт</td><td>{r.qty}</td></tr>
             ))}
           </tbody>
         </table>
