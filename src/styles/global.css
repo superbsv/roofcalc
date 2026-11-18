@@ -1850,3 +1850,12 @@ g:hover > .fd-pt, .fd-pt.on { fill: var(--fl-ink); stroke: var(--fl-ink); }
 .kp-paper-edit [contenteditable]:focus { outline: none; }
 .kp-edit-hint { max-width: 900px; margin: 0 auto 8px; padding: 6px 10px; font-size: .76rem; border-radius: 6px; background: var(--clr-brand-pale, #fff7ed); color: var(--clr-text-2); border: 1px solid var(--clr-brand); }
 @media print { .kp-paper-edit { outline: none; } }
+
+/* Специфікація: схеми скатів з параметрами */
+.kp-scheme { margin: 10px 0 16px; break-inside: avoid; }
+.kp-scheme-h { font-size: .82rem; margin-bottom: 4px; }
+.kp-scheme-img { width: 100%; height: auto; border: 1px solid #E2E8F0; }
+.kp-scheme-params { display: grid; grid-template-columns: 0.8fr 1.6fr 1.6fr; gap: 2px 18px; font-size: .72rem; line-height: 1.55; color: #334155; margin-top: 6px; }
+.kp-scheme-params b { color: #0F172A; }
+.kp-sp-m { color: #64748B; font-size: .9em; }
+@media (max-width: 700px) { .kp-scheme-params { grid-template-columns: 1fr; } }

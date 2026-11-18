@@ -22,7 +22,9 @@ import { CALC_TYPES, calcTypeInfo } from '../components/roof/calcTypes';
 import LibraryPicker from '../components/catalog/LibraryPicker';
 import { t } from '../i18n/i18n';
 import ManufacturerSelect from '../components/catalog/ManufacturerSelect';
-import ProjectFlashings from '../components/flashing/ProjectFlashings';
+import ProjectFlashings, { FlashingBlock, Linked as LinkedFlashing } from '../components/flashing/ProjectFlashings';
+import SpecSchemes from '../components/spec/SpecSchemes';
+import { blankCalc } from '../components/flashing/flashing';
 import { specToPdf, specToExcel } from '../components/spec/specExport';
 import { TEMPLATES, Template, buildTemplate, templateIconPoints, sideLetter, templateNums } from '../components/roof/templates';
 import { materialLabel } from '../components/roof/materials';
@@ -1275,6 +1277,11 @@ function Specification({ project, settings, slopes, material, items, projectId, 
   };
   // Ручне редагування документа перед друком / PDF / Excel / архівом: текст специфікації правиться
   // прямо на аркуші. Правки — лише в цьому документі (розрахунок не змінюється); «Скинути» повертає як було.
+  const [flash, setFlash] = useState<LinkedFlashing[]>([]);   // прив'язані креслення доборів
+  const flashRows = flash.flatMap(f => (f.data.items || []).map(e => {
+    const c = blankCalc(e, f.data.sheet_width || 1250, f.data.sheet_length || 2000);
+    return { key: f.id + ':' + e.id, name: e.name, note: `заготовка ${Math.round(c.girth * 10) / 10} мм · L ${e.length} мм`, qty: e.qty || 0 }; // i18n-ignore (tpl)
+  }));
   const [editDoc, setEditDoc] = useState(false);
   const [docKey, setDocKey] = useState(0);
   const [edited, setEdited] = useState(false);
@@ -1444,15 +1451,20 @@ function Specification({ project, settings, slopes, material, items, projectId, 
           </>
         )}
 
-        <h3 className="kp-paper-h">САМОРІЗИ — ЗАГАЛЬНА КІЛЬКІСТЬ</h3>
+        {/* Один перелік: саморізи і добірні елементи з прив'язаних креслень */}
+        <h3 className="kp-paper-h">{flashRows.length ? 'КОМПЛЕКТУЮЧІ ТА ДОБІРНІ ЕЛЕМЕНТИ — ЗАГАЛЬНА КІЛЬКІСТЬ' : 'САМОРІЗИ — ЗАГАЛЬНА КІЛЬКІСТЬ'}</h3>
         <table className="kp-table kp-paper-table">
           <thead><tr><th>Найменування</th><th>Од.</th><th>Кількість</th></tr></thead>
           <tbody>
             {accItems.map(i => (
               <tr key={i.name + i.unit}><td>{i.name}</td><td>{i.unit}</td><td>{Number(i.quantity).toFixed(i.unit === 'шт' ? 0 : 2)}</td></tr>
             ))}
+            {flashRows.map(r => (
+              <tr key={r.key}><td><span data-no-i18n>{r.name}</span> <span className="kp-sp-m" data-no-i18n>({r.note})</span></td><td>шт</td><td>{r.qty}</td></tr>
+            ))}
           </tbody>
         </table>
+        <ProjectFlashings projectId={projectId} onOpen={onOpenFlashing} onLoaded={setFlash} blocks={false} />
         {(settings.extra_items || []).length > 0 && (
           <>
             <h3 className="kp-paper-h">ДОДАТКОВІ ПОЗИЦІЇ</h3>
@@ -1466,8 +1478,9 @@ function Specification({ project, settings, slopes, material, items, projectId, 
             </table>
           </>
         )}
-        {/* Добірні елементи з прив'язаних креслень доборів */}
-        <ProjectFlashings projectId={projectId} onOpen={onOpenFlashing} />
+        {/* Схеми скатів з параметрами, далі креслення доборів — одним переліком */}
+        <SpecSchemes slopes={calc} orderNo={settings.order_no} orderDate={settings.order_date} />
+        {flash.filter(f => f.data.items?.length).map(f => <FlashingBlock key={f.id} f={f} />)}
         {settings.spec_note && <div className="kp-paper-note"><b>Примітка:</b> <span data-no-i18n>{settings.spec_note}</span></div>}
         <div className="kp-paper-sign"><span>Менеджер:</span> {settings.responsible || project?.manager_name || '________________'}</div>
         {!items.length && <div className="alert alert-info">Специфікація порожня: розрахуйте хоча б один скат.</div>}

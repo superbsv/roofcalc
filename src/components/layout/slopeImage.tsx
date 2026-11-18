@@ -88,6 +88,30 @@ async function schemeImage(sl: SlopeForImage, pal: Record<string, string>): Prom
   }
 }
 
+/** Схема одного ската для специфікації: PNG (data URL) — друкується і йде в PDF; null — скат не розраховано */
+export async function slopeSchemePng(sl: SlopeForImage, width = 1400): Promise<string | null> {
+  const img = await schemeImage(sl, lightPalette());
+  if (!img) return null;
+  const h = Math.round(width * img.height / img.width);
+  const cv = document.createElement('canvas');
+  cv.width = width; cv.height = h;
+  const ctx = cv.getContext('2d')!;
+  ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, width, h);
+  ctx.drawImage(img, 0, 0, width, h);
+  // обрізаємо порожнє поле знизу і згори: залишаємо рядки, де є темні лінії / підписи (сітка світла — не рахується)
+  const data = ctx.getImageData(0, 0, width, h).data;
+  const dark = (y: number) => { for (let x = 0; x < width; x += 2) { const i = (y * width + x) * 4; if (data[i] + data[i + 1] + data[i + 2] < 450) return true; } return false; };
+  let top = 0, bot = h - 1;
+  while (top < h && !dark(top)) top++;
+  while (bot > top && !dark(bot)) bot--;
+  const pad = 24; top = Math.max(0, top - pad); bot = Math.min(h - 1, bot + pad);
+  if (bot - top < 40) return cv.toDataURL('image/png');
+  const out = document.createElement('canvas');
+  out.width = width; out.height = bot - top + 1;
+  out.getContext('2d')!.drawImage(cv, 0, top, width, out.height, 0, 0, width, out.height);
+  return out.toDataURL('image/png');
+}
+
 interface Block { sl: SlopeForImage; img: HTMLImageElement | null; h: number; sides: string[] }
 
 /** Зображення скатів (Blob): кілька скатів — один під одним */

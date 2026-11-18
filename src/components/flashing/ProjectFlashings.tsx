@@ -8,14 +8,17 @@ import { catApi } from '../catalog/CatalogNav';
 import FlashingDraw from './FlashingDraw';
 import { FDoc, FElem, blankCalc, emptyDoc } from './flashing';
 
-interface Linked { id: number; name: string; client_name?: string | null; data: FDoc }
+export interface Linked { id: number; name: string; client_name?: string | null; data: FDoc }
 interface Row { id: number; name: string; project_id?: number | null; project_name?: string | null }
 
 const f1 = (v: number) => (Math.round(v * 10) / 10).toString();
 const f2 = (v: number) => v.toFixed(2);
 
-export default function ProjectFlashings({ projectId, onOpen }: { projectId: number; onOpen?: (id: number | null) => void }) {
-  const [linked, setLinked] = useState<Linked[]>([]);
+// onLoaded — прив'язані креслення наверх (специфікація показує їх у загальному переліку і серед схем);
+// blocks=false — лише панель керування, без креслень
+export default function ProjectFlashings({ projectId, onOpen, onLoaded, blocks = true }: { projectId: number; onOpen?: (id: number | null) => void; onLoaded?: (l: Linked[]) => void; blocks?: boolean }) {
+  const [linked, setLinkedRaw] = useState<Linked[]>([]);
+  const setLinked = useCallback((l: Linked[]) => { setLinkedRaw(l); onLoaded?.(l); }, [onLoaded]);
   const [free, setFree] = useState<Row[]>([]);
   const [msg, setMsg] = useState('');
 
@@ -24,7 +27,7 @@ export default function ProjectFlashings({ projectId, onOpen }: { projectId: num
       .then(d => setLinked((d.items || []).map((r: any) => ({ ...r, data: { ...emptyDoc(), items: [], ...(r.data || {}) } }))))
       .catch(e => setMsg(e.message));
     catApi('GET', '/flashings').then(d => setFree((d.items || []).filter((r: Row) => !r.project_id))).catch(() => undefined);
-  }, [projectId]);
+  }, [projectId, setLinked]);
   useEffect(() => { load(); }, [load]);
 
   const link = async (id: number, pid: number | null) => {
@@ -53,12 +56,12 @@ export default function ProjectFlashings({ projectId, onOpen }: { projectId: num
         {msg && <span className="fl-warn">{msg}</span>}
       </div>
 
-      {linked.filter(f => f.data.items?.length).map(f => <FlashingBlock key={f.id} f={f} />)}
+      {blocks && linked.filter(f => f.data.items?.length).map(f => <FlashingBlock key={f.id} f={f} />)}
     </>
   );
 }
 
-function FlashingBlock({ f }: { f: Linked }) {
+export function FlashingBlock({ f }: { f: Linked }) {
   const d = f.data, sw = d.sheet_width || 1250, sl = d.sheet_length || 2000;
   const items: FElem[] = d.items || [];
   const meta = [d.color && `RAL ${String(d.color).replace(/^RAL\s*/i, '')}`, d.coating, d.thickness && `${d.thickness} мм`, d.maker].filter(Boolean).join(' · ');
