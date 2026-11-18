@@ -14,9 +14,20 @@ export async function specToPdf(paper: HTMLElement, name: string, asBlob = false
   Object.assign(clone.style, { width: W + 'px', maxWidth: W + 'px', boxShadow: 'none', border: '0', borderRadius: '0', margin: '0', position: 'fixed', left: '-10000px', top: '0' });
   document.body.appendChild(clone);
   try {
+    // елементи, яких немає в PDF (кнопки, підказки), прибираємо одразу — інакше html2canvas викине їх уже після
+    // замірів, усе нижче зсунеться вгору і розриви сторінок потраплять не туди
+    clone.querySelectorAll('[data-html2canvas-ignore], .no-print').forEach(el => el.remove());
+    // схеми скатів і логотип — картинки: чекаємо, поки завантажаться, інакше висоти блоків ще нульові
+    // і розрив сторінки потрапляє посеред схеми
+    await Promise.all(Array.from(clone.querySelectorAll('img')).map(im => im.complete && im.naturalHeight ? null
+      : new Promise(r => { im.addEventListener('load', r, { once: true }); im.addEventListener('error', r, { once: true }); setTimeout(r, 3000); })));
     const top0 = clone.getBoundingClientRect().top;
     const cuts = new Set<number>();
-    clone.querySelectorAll('tr, .kp-paper > *, .kp-lens > *, .kp-paper-line').forEach(el => cuts.add(Math.round(el.getBoundingClientRect().bottom - top0)));
+    // можна різати під рядком таблиці / блоком; під заголовком розділу — ні (заголовок переноситься разом із блоком)
+    clone.querySelectorAll('tr, .kp-paper > *, .kp-lens > *, .kp-paper-line').forEach(el => {
+      if (el.matches('h2, h3, .kp-scheme-h')) return;
+      cuts.add(Math.round(el.getBoundingClientRect().bottom - top0));
+    });
     const scale = 2;
     // html2canvas міряє базову лінію шрифту через <img> без класу; глобальне «img { display: block }» ламає замір —
     // і текст у PDF зсувається вниз до лінії таблиці. На час знімка повертаємо таким img звичайне розміщення.
