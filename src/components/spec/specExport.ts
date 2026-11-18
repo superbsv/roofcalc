@@ -18,7 +18,14 @@ export async function specToPdf(paper: HTMLElement, name: string, asBlob = false
     const cuts = new Set<number>();
     clone.querySelectorAll('tr, .kp-paper > *, .kp-lens > *, .kp-paper-line').forEach(el => cuts.add(Math.round(el.getBoundingClientRect().bottom - top0)));
     const scale = 2;
-    const canvas = await html2canvas(clone, { scale, backgroundColor: '#FFFFFF', useCORS: true, logging: false });
+    // html2canvas міряє базову лінію шрифту через <img> без класу; глобальне «img { display: block }» ламає замір —
+    // і текст у PDF зсувається вниз до лінії таблиці. На час знімка повертаємо таким img звичайне розміщення.
+    const fix = document.createElement('style');
+    fix.textContent = 'img:not([class]){display:inline!important}';
+    document.head.appendChild(fix);
+    let canvas: HTMLCanvasElement;
+    try { canvas = await html2canvas(clone, { scale, backgroundColor: '#FFFFFF', useCORS: true, logging: false }); }
+    finally { fix.remove(); }
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight(), margin = 10;
     const pxPerMm = canvas.width / (pw - margin * 2);                   // пікселі полотна на мм
